@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 )
 
 // Formatter renders results as they arrive and writes a trailer at the end.

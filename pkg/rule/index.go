@@ -1,7 +1,7 @@
 package rule
 
 import (
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
 // Index resolves references from the service block to component declarations,

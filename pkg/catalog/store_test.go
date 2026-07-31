@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/catalog"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
 func TestCompare(t *testing.T) {

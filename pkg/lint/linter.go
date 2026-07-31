@@ -6,10 +6,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/catalog"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/diag"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
 // Status is the outcome of linting one file.

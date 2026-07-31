@@ -25,7 +25,7 @@ time: the component catalogs are compiled into the binary.
 ## Install
 
 ```sh
-go install github.com/minuk-dev/otel-collector-config-linter/cmd/otelcol-config-lint@latest
+go install github.com/minuk-dev/otelcol-config-lint/cmd/otelcol-config-lint@latest
 ```
 
 ## Usage
@@ -135,7 +135,7 @@ installing or cloning anything:
 
 ```sh
 otelcol-config-lint -catalog-location \
-  https://raw.githubusercontent.com/minuk-dev/otel-collector-config-linter/main/catalogs/{{.Version}}.yaml \
+  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs/{{.Version}}.yaml \
   config.yaml
 ```
 

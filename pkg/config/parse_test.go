@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
 const sample = `

@@ -18,7 +18,7 @@ public schema registry:
 
 ```sh
 otelcol-config-lint -catalog-location \
-  https://raw.githubusercontent.com/minuk-dev/otel-collector-config-linter/main/catalogs/{{.Version}}.yaml \
+  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs/{{.Version}}.yaml \
   -collector-version v0.157.0 config.yaml
 ```
 

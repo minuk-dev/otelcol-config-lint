@@ -3,8 +3,8 @@ package lint
 import (
 	"sync"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/catalog"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
 // VersionIndex answers which collector releases ship a component type, by

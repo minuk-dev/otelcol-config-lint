@@ -7,9 +7,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/catalog"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 )
 
 // Rule is a single check run against a parsed config.

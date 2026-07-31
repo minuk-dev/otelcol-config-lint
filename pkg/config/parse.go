@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 )
 
 // File is a parsed collector config.

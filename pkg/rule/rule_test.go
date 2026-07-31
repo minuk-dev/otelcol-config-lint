@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/catalog"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/diag"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
 // testCatalog is a hand-built stand-in for a generated catalog, so rule tests

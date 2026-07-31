@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/catalog"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/diag"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/lint"
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
 // Version is the linter's own version, set at build time with -ldflags.

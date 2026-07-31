@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/minuk-dev/otel-collector-config-linter/internal/cli"
+	"github.com/minuk-dev/otelcol-config-lint/internal/cli"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minuk-dev/otel-collector-config-linter/catalogs"
+	"github.com/minuk-dev/otelcol-config-lint/catalogs"
 )
 
 // extensions are the catalog file suffixes, in preference order.

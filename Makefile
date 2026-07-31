@@ -1,6 +1,6 @@
 BINARY  := bin/otelcol-config-lint
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -X github.com/minuk-dev/otel-collector-config-linter/internal/cli.Version=$(VERSION)
+LDFLAGS := -X github.com/minuk-dev/otelcol-config-lint/internal/cli.Version=$(VERSION)
 
 # Releases to regenerate catalogs for, e.g. make catalogs VERSIONS=v0.158.0
 VERSIONS ?= $(shell ls catalogs/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$$//' | paste -sd, -)

@@ -13,7 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otel-collector-config-linter/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
 // Catalog is the component inventory of one collector release.

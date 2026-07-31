@@ -1,4 +1,4 @@
-module github.com/minuk-dev/otel-collector-config-linter
+module github.com/minuk-dev/otelcol-config-lint
 
 go 1.25.4
 
