@@ -1,0 +1,19 @@
+# Field schema for the debug exporter.
+# Source: opentelemetry-collector/exporter/debugexporter/config.go
+kind: exporter
+type: debug
+fields:
+  type: map
+  children:
+    verbosity:
+      type: string
+      enum: [basic, normal, detailed]
+      doc: how much of each payload is written to the collector log
+    sampling_initial:
+      type: int
+      doc: messages logged per second before sampling kicks in
+    sampling_thereafter:
+      type: int
+      doc: log one in every N messages after the initial burst
+    use_internal_logger:
+      type: bool

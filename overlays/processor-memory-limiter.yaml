@@ -1,0 +1,24 @@
+# Field schema for the memory_limiter processor.
+# Source: opentelemetry-collector/internal/memorylimiter/config.go
+kind: processor
+type: memory_limiter
+fields:
+  type: map
+  required:
+    - check_interval
+  children:
+    check_interval:
+      type: duration
+      doc: how often memory use is measured; 1s is the usual value
+    limit_mib:
+      type: int
+      doc: hard limit in MiB; above it the processor starts refusing data
+    spike_limit_mib:
+      type: int
+      doc: headroom in MiB reserved for allocation spikes
+    limit_percentage:
+      type: int
+      doc: hard limit as a percentage of total memory, for containers
+    spike_limit_percentage:
+      type: int
+      doc: spike headroom as a percentage of total memory

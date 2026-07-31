@@ -1,0 +1,65 @@
+# Field schema for the OTLP gRPC exporter.
+# Source: opentelemetry-collector/exporter/otlpexporter/config.go
+kind: exporter
+type: otlp
+fields:
+  type: map
+  required:
+    - endpoint
+  children:
+    endpoint: {type: string, doc: "host:port of the OTLP gRPC endpoint"}
+    compression: {type: string, enum: [gzip, snappy, zstd, zlib, deflate, lz4, none, ""]}
+    headers: {type: map, open: true, doc: extra gRPC metadata sent with every request}
+    balancer_name: {type: string, enum: [round_robin, pick_first]}
+    authority: {type: string}
+    timeout: {type: duration}
+    wait_for_ready: {type: bool}
+    read_buffer_size: {type: int}
+    write_buffer_size: {type: int}
+    tls:
+      type: map
+      children:
+        insecure: {type: bool, doc: send in plaintext; only for local testing}
+        insecure_skip_verify: {type: bool, doc: accept any server certificate}
+        server_name_override: {type: string}
+        ca_file: {type: string}
+        ca_pem: {type: string}
+        cert_file: {type: string}
+        cert_pem: {type: string}
+        key_file: {type: string}
+        key_pem: {type: string}
+        min_version: {type: string}
+        max_version: {type: string}
+        cipher_suites: {type: list, children: {item: {type: string}}}
+        reload_interval: {type: duration}
+        include_system_ca_certs_pool: {type: bool}
+    keepalive:
+      type: map
+      children:
+        time: {type: duration}
+        timeout: {type: duration}
+        permit_without_stream: {type: bool}
+    auth:
+      type: map
+      children:
+        authenticator: {type: string}
+    sending_queue:
+      type: map
+      open: true
+      children:
+        enabled: {type: bool}
+        num_consumers: {type: int}
+        queue_size: {type: int}
+        sizer: {type: string, enum: [requests, items, bytes]}
+        storage: {type: string, doc: id of a storage extension for a persistent queue}
+        blocking: {type: bool}
+        wait_for_result: {type: bool}
+    retry_on_failure:
+      type: map
+      children:
+        enabled: {type: bool}
+        initial_interval: {type: duration}
+        randomization_factor: {type: float}
+        multiplier: {type: float}
+        max_interval: {type: duration}
+        max_elapsed_time: {type: duration}

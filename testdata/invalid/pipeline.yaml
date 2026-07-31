@@ -1,0 +1,18 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+exporters:
+  debug:
+connectors:
+  spanmetrics:
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug, spanmetrics]  # nothing consumes the connector output
+    tracez:                            # invalid-pipeline-key
+      receivers: [otlp]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]                # empty-pipeline: no exporters

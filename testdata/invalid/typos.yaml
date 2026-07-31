@@ -1,0 +1,23 @@
+# Every finding here is intentional; the linter's tests assert on them.
+recievers:            # unknown-top-level-key
+  otlp:
+
+receivers:
+  prometheusreceiver: # unknown-component: the type is "prometheus"
+    config: {}
+
+processors:
+  batch:
+    timeout: 5        # invalid-value: not a duration
+    send_batch_siz: 1 # unknown-field
+
+exporters:
+  debug:
+    verbosity: chatty # invalid-value: not in the enum
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]     # undefined-reference
+      processors: [batch]
+      exporters: [debug]
