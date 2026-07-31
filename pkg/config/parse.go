@@ -107,8 +107,9 @@ type Entry struct {
 // Pos converts a YAML node into a diagnostic position within the file.
 func (f *File) Pos(n *yaml.Node) diag.Position {
 	if n == nil {
-		return diag.Position{File: f.Path}
+		return diag.Position{File: f.Path, Line: 0, Column: 0}
 	}
+
 	return diag.Position{File: f.Path, Line: n.Line, Column: n.Column}
 }
 
@@ -118,11 +119,13 @@ func (f *File) Component(k Kind, id ID) (Component, bool) {
 	if s == nil {
 		return Component{}, false
 	}
+
 	for _, c := range s.Components {
 		if c.ID == id {
 			return c, true
 		}
 	}
+
 	return Component{}, false
 }
 
@@ -130,8 +133,9 @@ func (f *File) Component(k Kind, id ID) (Component, bool) {
 func ParseFile(path string) (*File, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read config: %w", err)
 	}
+
 	return Parse(path, src)
 }
 
@@ -141,7 +145,9 @@ func ParseFile(path string) (*File, error) {
 // diagnostic instead of a hard failure.
 func Parse(path string, src []byte) (*File, error) {
 	var doc yaml.Node
-	if err := yaml.Unmarshal(src, &doc); err != nil {
+
+	err := yaml.Unmarshal(src, &doc)
+	if err != nil {
 		return nil, syntaxError(path, err)
 	}
 
@@ -149,24 +155,29 @@ func Parse(path string, src []byte) (*File, error) {
 	if len(doc.Content) == 0 {
 		return f, nil // empty document
 	}
+
 	root := doc.Content[0]
 	if root.Kind != yaml.MappingNode {
 		return nil, &SyntaxError{Path: path, Line: root.Line, Column: root.Column,
 			Msg: "config root must be a mapping"}
 	}
+
 	f.Root = root
 
 	f.DuplicateKeys = collectDuplicates(root, "")
 	for _, e := range entries(root, "") {
+		kind, isSection := SectionKind(e.Key)
+
 		switch {
-		case SectionKind[e.Key] != "":
-			f.Sections[SectionKind[e.Key]] = parseSection(SectionKind[e.Key], e)
+		case isSection:
+			f.Sections[kind] = parseSection(kind, e)
 		case e.Key == "service":
 			f.Service = parseService(e)
 		default:
 			f.Unknown = append(f.Unknown, e)
 		}
 	}
+
 	return f, nil
 }
 
@@ -177,6 +188,7 @@ func parseSection(k Kind, e Entry) *Section {
 			ID: ParseID(c.Key), Kind: k, KeyNode: c.KeyNode, ValueNode: c.Node,
 		})
 	}
+
 	return s
 }
 
@@ -198,11 +210,13 @@ func parseService(e Entry) *Service {
 			s.Unknown = append(s.Unknown, sub)
 		}
 	}
+
 	return s
 }
 
 func parsePipeline(e Entry) Pipeline {
 	signal, name, _ := strings.Cut(e.Key, "/")
+
 	p := Pipeline{
 		Key: e.Key, Signal: Signal(signal), Name: name,
 		KeyNode: e.KeyNode, Node: e.Node,
@@ -219,6 +233,7 @@ func parsePipeline(e Entry) Pipeline {
 			p.Unknown = append(p.Unknown, sub)
 		}
 	}
+
 	return p
 }
 
@@ -227,19 +242,26 @@ func refs(n *yaml.Node, path string) []Ref {
 	if n == nil || n.Kind != yaml.SequenceNode {
 		return nil
 	}
+
 	out := make([]Ref, 0, len(n.Content))
 	for i, item := range n.Content {
 		if item.Kind != yaml.ScalarNode {
 			continue
 		}
+
 		out = append(out, Ref{
 			ID:   ParseID(item.Value),
 			Node: item,
 			Path: fmt.Sprintf("%s[%d]", path, i),
 		})
 	}
+
 	return out
 }
+
+// mappingStride is the step between keys in a yaml.Node mapping, whose Content
+// alternates key, value, key, value.
+const mappingStride = 2
 
 // entries walks a mapping node's key/value pairs. A nil or non-mapping node
 // yields nothing, so callers do not have to guard every access.
@@ -247,11 +269,13 @@ func entries(n *yaml.Node, parentPath string) []Entry {
 	if n == nil || n.Kind != yaml.MappingNode {
 		return nil
 	}
-	out := make([]Entry, 0, len(n.Content)/2)
-	for i := 0; i+1 < len(n.Content); i += 2 {
+
+	out := make([]Entry, 0, len(n.Content)/mappingStride)
+	for i := 0; i+1 < len(n.Content); i += mappingStride {
 		k, v := n.Content[i], n.Content[i+1]
 		out = append(out, Entry{Key: k.Value, KeyNode: k, Node: v, Path: join(parentPath, k.Value)})
 	}
+
 	return out
 }
 
@@ -260,6 +284,7 @@ func entries(n *yaml.Node, parentPath string) []Entry {
 // one and it is the earlier value that silently disappears.
 func collectDuplicates(n *yaml.Node, path string) []Entry {
 	var out []Entry
+
 	switch n.Kind {
 	case yaml.MappingNode:
 		seen := map[string]bool{}
@@ -267,6 +292,7 @@ func collectDuplicates(n *yaml.Node, path string) []Entry {
 			if seen[e.Key] {
 				out = append(out, e)
 			}
+
 			seen[e.Key] = true
 			out = append(out, collectDuplicates(e.Node, e.Path)...)
 		}
@@ -274,7 +300,10 @@ func collectDuplicates(n *yaml.Node, path string) []Entry {
 		for i, item := range n.Content {
 			out = append(out, collectDuplicates(item, fmt.Sprintf("%s[%d]", path, i))...)
 		}
+	default:
+		// Scalars, aliases and the document node have no keys of their own.
 	}
+
 	return out
 }
 
@@ -282,6 +311,7 @@ func join(parent, key string) string {
 	if parent == "" {
 		return key
 	}
+
 	return parent + "." + key
 }
 
@@ -294,6 +324,7 @@ type SyntaxError struct {
 
 func (e *SyntaxError) Error() string {
 	p := diag.Position{File: e.Path, Line: e.Line, Column: e.Column}
+
 	return p.String() + ": " + e.Msg
 }
 
@@ -311,18 +342,24 @@ func (e *SyntaxError) Diagnostic() diag.Diagnostic {
 // number that yaml.v3 only reports inside the message text.
 func syntaxError(path string, err error) error {
 	var te *yaml.TypeError
+
 	msg := err.Error()
 	if errors.As(err, &te) && len(te.Errors) > 0 {
 		msg = te.Errors[0]
 	}
+
 	msg = strings.TrimPrefix(msg, "yaml: ")
 	line := 0
+
 	if rest, ok := strings.CutPrefix(msg, "line "); ok {
-		if num, tail, found := strings.Cut(rest, ":"); found {
-			if _, e := fmt.Sscanf(num, "%d", &line); e == nil {
+		num, tail, found := strings.Cut(rest, ":")
+		if found {
+			_, convErr := fmt.Sscanf(num, "%d", &line)
+			if convErr == nil {
 				msg = strings.TrimSpace(tail)
 			}
 		}
 	}
+
 	return &SyntaxError{Path: path, Line: line, Msg: msg}
 }

@@ -16,6 +16,8 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -34,6 +36,30 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
+// Exit codes: the command either produced catalogs or it did not.
+const (
+	exitFailure = 1
+	exitUsage   = 2
+)
+
+// dirPerm is the mode new directories are created with.
+const dirPerm = 0o750
+
+// Limits and sentinel errors for the harvest.
+const (
+	// maxMetadataBytes bounds how much of a metadata.yaml is read.
+	maxMetadataBytes = 1 << 20
+	// downloadTimeout bounds a single source archive download.
+	downloadTimeout = 5 * time.Minute
+)
+
+var (
+	// errBadStatus reports an upstream archive answering with an unusable status.
+	errBadStatus = errors.New("unexpected status")
+	// errIncompleteOverlay reports an overlay missing its kind or type.
+	errIncompleteOverlay = errors.New("kind and type are required")
+)
+
 // source is one upstream repository to harvest components from.
 type source struct {
 	// name is the distribution label recorded in the catalog.
@@ -44,11 +70,26 @@ type source struct {
 	module string
 }
 
-var sources = []source{
-	{name: "core", repo: "open-telemetry/opentelemetry-collector",
-		module: "go.opentelemetry.io/collector"},
-	{name: "contrib", repo: "open-telemetry/opentelemetry-collector-contrib",
-		module: "github.com/open-telemetry/opentelemetry-collector-contrib"},
+// sources lists the upstream repositories a catalog is harvested from.
+func sources() []source {
+	return []source{
+		{
+			name:   "core",
+			repo:   "open-telemetry/opentelemetry-collector",
+			module: "go.opentelemetry.io/collector",
+		},
+		{
+			name:   "contrib",
+			repo:   "open-telemetry/opentelemetry-collector-contrib",
+			module: "github.com/open-telemetry/opentelemetry-collector-contrib",
+		},
+	}
+}
+
+// logf reports progress. schemagen is a developer command whose output is the
+// point, but it goes through one helper so nothing calls fmt.Print* directly.
+func logf(format string, args ...any) {
+	_, _ = fmt.Fprintf(os.Stdout, format, args...)
 }
 
 func main() {
@@ -58,17 +99,21 @@ func main() {
 	formats := flag.String("formats", "yaml,json", "catalog formats to write")
 	cache := flag.String("cache", filepath.Join(os.TempDir(), "otelcol-config-lint-schemagen"),
 		"directory to cache downloaded archives in")
-	timeout := flag.Duration("timeout", 5*time.Minute, "per-download timeout")
+	timeout := flag.Duration("timeout", downloadTimeout, "per-download timeout")
+
 	flag.Parse()
 
 	if *versions == "" {
-		fmt.Fprintln(os.Stderr, "schemagen: -version is required")
+		_, _ = fmt.Fprintln(os.Stderr, "schemagen: -version is required")
+
 		flag.Usage()
-		os.Exit(2)
+		os.Exit(exitUsage)
 	}
-	if err := run(splitList(*versions), *out, *overlays, *cache, splitList(*formats), *timeout); err != nil {
+
+	err := run(splitList(*versions), *out, *overlays, *cache, splitList(*formats), *timeout)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "schemagen:", err)
-		os.Exit(1)
+		os.Exit(exitFailure)
 	}
 }
 
@@ -77,27 +122,41 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return err
+
+	err = os.MkdirAll(outDir, dirPerm)
+	if err != nil {
+		return fmt.Errorf("create output directory: %w", err)
 	}
-	client := &http.Client{Timeout: timeout}
+
+	client := &http.Client{
+		Timeout:       timeout,
+		Transport:     nil,
+		CheckRedirect: nil,
+		Jar:           nil,
+	}
 
 	for _, v := range versions {
 		v = catalog.Normalize(v)
+
 		cat, err := build(client, v, cacheDir)
 		if err != nil {
 			return fmt.Errorf("%s: %w", v, err)
 		}
+
 		applyOverlays(cat, loaded)
 
 		for _, format := range formats {
 			dest := filepath.Join(outDir, v+"."+format)
-			if err := write(dest, cat, catalog.Format(format)); err != nil {
+
+			err := write(dest, cat, catalog.Format(format))
+			if err != nil {
 				return err
 			}
-			fmt.Printf("wrote %s (%d components)\n", dest, cat.Count())
+
+			logf("wrote %s (%d components)\n", dest, cat.Count())
 		}
 	}
+
 	return nil
 }
 
@@ -105,12 +164,14 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 func write(dest string, cat *catalog.Catalog, format catalog.Format) error {
 	f, err := os.Create(dest)
 	if err != nil {
-		return err
+		return fmt.Errorf("create %s: %w", dest, err)
 	}
+
 	err = cat.Write(f, format)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
+
 	return err
 }
 
@@ -121,58 +182,83 @@ func build(client *http.Client, version, cacheDir string) (*catalog.Catalog, err
 		Sources:          map[string]string{},
 		Components:       map[config.Kind]map[string]*catalog.Component{},
 	}
-	for _, src := range sources {
+	for _, src := range sources() {
 		archive, err := fetch(client, src, version, cacheDir)
 		if err != nil {
 			return nil, err
 		}
+
 		n, err := harvest(cat, src, archive)
 		if err != nil {
 			return nil, err
 		}
+
 		cat.Distributions = append(cat.Distributions, src.name)
 		cat.Sources[src.name] = src.module
-		fmt.Printf("  %s: %d components\n", src.name, n)
+		logf("  %s: %d components\n", src.name, n)
 	}
+
 	return cat, nil
 }
 
 // fetch downloads a source archive, caching it so regenerating several versions
 // does not re-download what is already on disk.
 func fetch(client *http.Client, src source, version, cacheDir string) (string, error) {
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", err
+	mkErr := os.MkdirAll(cacheDir, dirPerm)
+	if mkErr != nil {
+		return "", fmt.Errorf("create cache directory: %w", mkErr)
 	}
+
 	dest := filepath.Join(cacheDir, strings.ReplaceAll(src.repo, "/", "_")+"-"+version+".tar.gz")
-	if info, err := os.Stat(dest); err == nil && info.Size() > 0 {
+
+	info, err := os.Stat(dest)
+	if err == nil && info.Size() > 0 {
 		return dest, nil
 	}
 
 	url := fmt.Sprintf("https://codeload.github.com/%s/tar.gz/refs/tags/%s", src.repo, version)
-	fmt.Printf("  downloading %s\n", url)
-	resp, err := client.Get(url)
+	logf("  downloading %s\n", url)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("build request for %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch %s: %w", url, err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET %s: %s", url, resp.Status)
+		return "", fmt.Errorf("GET %s: %w %s", url, errBadStatus, resp.Status)
 	}
 
 	tmp := dest + ".part"
+
 	f, err := os.Create(tmp)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create %s: %w", tmp, err)
 	}
+
 	_, err = io.Copy(f, resp.Body)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
+
 	if err != nil {
-		os.Remove(tmp)
-		return "", err
+		_ = os.Remove(tmp)
+
+		return "", fmt.Errorf("download %s: %w", url, err)
 	}
-	return dest, os.Rename(tmp, dest)
+
+	err = os.Rename(tmp, dest)
+	if err != nil {
+		return "", fmt.Errorf("finish download of %s: %w", url, err)
+	}
+
+	return dest, nil
 }
 
 // metadata is the subset of an upstream metadata.yaml the catalog needs.
@@ -180,7 +266,7 @@ type metadata struct {
 	Type string `yaml:"type"`
 	// DeprecatedType is the legacy name a renamed component is still
 	// registered under, which existing configs keep using.
-	DeprecatedType string `yaml:"deprecated_type"`
+	DeprecatedType string `yaml:"deprecated_type"` //nolint:tagliatelle // upstream metadata.yaml is snake_case
 	Parent         string `yaml:"parent"`
 	Status         struct {
 		Class string `yaml:"class"`
@@ -201,81 +287,112 @@ type metadata struct {
 func harvest(cat *catalog.Catalog, src source, archive string) (int, error) {
 	f, err := os.Open(archive)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("open %s: %w", archive, err)
 	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
+
+	defer func() { _ = f.Close() }()
+
+	unzipped, err := gzip.NewReader(f)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read %s: %w", archive, err)
 	}
-	defer gz.Close()
+
+	defer func() { _ = unzipped.Close() }()
 
 	count := 0
-	tr := tar.NewReader(gz)
+	archiveReader := tar.NewReader(unzipped)
+
 	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
+		hdr, err := archiveReader.Next()
+		if errors.Is(err, io.EOF) {
 			break
 		}
+
 		if err != nil {
-			return count, err
+			return count, fmt.Errorf("read %s: %w", archive, err)
 		}
+
 		if hdr.Typeflag != tar.TypeReg || path.Base(hdr.Name) != "metadata.yaml" {
 			continue
 		}
-		raw, err := io.ReadAll(io.LimitReader(tr, 1<<20))
-		if err != nil {
-			return count, err
-		}
-		var md metadata
-		if err := yaml.Unmarshal(raw, &md); err != nil {
-			continue // a few metadata files are templates, not component metadata
-		}
-		comp, kind, ok := convert(md, src, hdr.Name)
-		if !ok {
-			continue
-		}
-		if cat.Components[kind] == nil {
-			cat.Components[kind] = map[string]*catalog.Component{}
-		}
-		if _, dup := cat.Components[kind][comp.Type]; dup {
-			continue
-		}
-		cat.Components[kind][comp.Type] = comp
-		count++
 
-		// A renamed component stays configurable under its old name, so the
-		// catalog carries both and marks the legacy one deprecated.
-		if comp.Alias == "" {
+		raw, err := io.ReadAll(io.LimitReader(archiveReader, maxMetadataBytes))
+		if err != nil {
+			return count, fmt.Errorf("read %s from %s: %w", hdr.Name, archive, err)
+		}
+
+		var meta metadata
+
+		// A few metadata files are templates rather than component metadata.
+		if yaml.Unmarshal(raw, &meta) != nil {
 			continue
 		}
-		if _, dup := cat.Components[kind][comp.Alias]; dup {
-			continue
-		}
-		alias := *comp
-		alias.Type = comp.Alias
-		alias.Alias = ""
-		alias.AliasOf = comp.Type
-		alias.Deprecated = "renamed to " + strconv.Quote(comp.Type) + " upstream; the old name still resolves for now"
-		cat.Components[kind][comp.Alias] = &alias
-		count++
+
+		count += add(cat, meta, src, hdr.Name)
 	}
+
 	return count, nil
 }
 
-// classKind maps an upstream status.class to a linter component kind. Classes
-// outside this set (cmd, pkg, scraper, ...) are not configurable components.
-var classKind = map[string]config.Kind{
-	"receiver":  config.KindReceiver,
-	"processor": config.KindProcessor,
-	"exporter":  config.KindExporter,
-	"extension": config.KindExtension,
-	"connector": config.KindConnector,
+// entriesWithAlias is how many catalog entries a renamed component produces:
+// its current name and the legacy one.
+const entriesWithAlias = 2
+
+// add records a component and, when it was renamed upstream, its legacy name.
+// It returns how many catalog entries it created.
+func add(cat *catalog.Catalog, meta metadata, src source, tarPath string) int {
+	comp, kind, ok := convert(meta, src, tarPath)
+	if !ok {
+		return 0
+	}
+
+	if cat.Components[kind] == nil {
+		cat.Components[kind] = map[string]*catalog.Component{}
+	}
+
+	if _, dup := cat.Components[kind][comp.Type]; dup {
+		return 0
+	}
+
+	cat.Components[kind][comp.Type] = comp
+
+	// A renamed component stays configurable under its old name, so the
+	// catalog carries both and marks the legacy one deprecated.
+	if comp.Alias == "" {
+		return 1
+	}
+
+	if _, dup := cat.Components[kind][comp.Alias]; dup {
+		return 1
+	}
+
+	alias := *comp
+	alias.Type = comp.Alias
+	alias.Alias = ""
+	alias.AliasOf = comp.Type
+	alias.Deprecated = "renamed to " + strconv.Quote(comp.Type) +
+		" upstream; the old name still resolves for now"
+	cat.Components[kind][comp.Alias] = &alias
+
+	return entriesWithAlias
 }
 
-func convert(md metadata, src source, tarPath string) (*catalog.Component, config.Kind, bool) {
-	kind, ok := classKind[md.Status.Class]
-	if !ok || md.Type == "" || md.Parent != "" {
+// classKind maps an upstream status.class to a linter component kind, and
+// reports whether the class is a configurable component at all. Classes outside
+// this set (cmd, pkg, scraper, ...) are not.
+func classKind(class string) (config.Kind, bool) {
+	for _, k := range config.Kinds() {
+		if string(k) == class {
+			return k, true
+		}
+	}
+
+	return "", false
+}
+
+func convert(meta metadata, src source, tarPath string) (*catalog.Component, config.Kind, bool) {
+	kind, ok := classKind(meta.Status.Class)
+	if !ok || meta.Type == "" || meta.Parent != "" {
 		// A parent means this is a sub-component such as a hostmetrics
 		// scraper, which is configured inside its parent rather than declared
 		// on its own.
@@ -283,10 +400,10 @@ func convert(md metadata, src source, tarPath string) (*catalog.Component, confi
 	}
 
 	comp := &catalog.Component{
-		Type:          md.Type,
-		Alias:         md.DeprecatedType,
+		Type:          meta.Type,
+		Alias:         meta.DeprecatedType,
 		Stability:     map[string]catalog.Stability{},
-		Distributions: md.Status.Distributions,
+		Distributions: meta.Status.Distributions,
 		Module:        modulePath(src, tarPath),
 	}
 	if len(comp.Distributions) == 0 {
@@ -294,7 +411,8 @@ func convert(md metadata, src source, tarPath string) (*catalog.Component, confi
 	}
 
 	signals := map[config.Signal]bool{}
-	for level, entries := range md.Status.Stability {
+
+	for level, entries := range meta.Status.Stability {
 		for _, entry := range entries {
 			comp.Stability[entry] = catalog.Stability(level)
 			switch {
@@ -310,24 +428,29 @@ func convert(md metadata, src source, tarPath string) (*catalog.Component, confi
 			}
 		}
 	}
-	for _, s := range config.Signals {
+
+	for _, s := range config.Signals() {
 		if signals[s] {
 			comp.Signals = append(comp.Signals, s)
 		}
 	}
+
 	sort.Slice(comp.Pairs, func(i, j int) bool {
 		if comp.Pairs[i].From != comp.Pairs[j].From {
 			return comp.Pairs[i].From < comp.Pairs[j].From
 		}
+
 		return comp.Pairs[i].To < comp.Pairs[j].To
 	})
 
-	for _, dep := range md.Status.Deprecation {
+	for _, dep := range meta.Status.Deprecation {
 		if dep.Migration != "" {
 			comp.Deprecated = dep.Migration
+
 			break
 		}
 	}
+
 	return comp, kind, true
 }
 
@@ -341,6 +464,7 @@ func modulePath(src source, tarPath string) string {
 	} else {
 		return src.module
 	}
+
 	return src.module + "/" + dir
 }
 
@@ -356,34 +480,46 @@ type overlay struct {
 
 func loadOverlays(dir string) ([]overlay, error) {
 	var out []overlay
+
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil // overlays are optional
 			}
+
 			return err
 		}
+
 		if d.IsDir() || (filepath.Ext(p) != ".yaml" && filepath.Ext(p) != ".yml") {
 			return nil
 		}
-		raw, err := os.ReadFile(p)
+
+		raw, err := os.ReadFile(p) //nolint:gosec // the overlay directory is a build input, not user data
 		if err != nil {
-			return err
+			return fmt.Errorf("read overlay %s: %w", p, err)
 		}
+
 		var o overlay
-		if err := yaml.Unmarshal(raw, &o); err != nil {
+
+		err = yaml.Unmarshal(raw, &o)
+		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
+
 		if o.Type == "" || o.Kind == "" {
-			return fmt.Errorf("%s: kind and type are required", p)
+			return fmt.Errorf("%s: %w", p, errIncompleteOverlay)
 		}
+
 		out = append(out, o)
+
 		return nil
 	})
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load overlays: %w", err)
 	}
-	fmt.Printf("loaded %d field overlay(s)\n", len(out))
+
+	logf("loaded %d field overlay(s)\n", len(out))
+
 	return out, nil
 }
 
@@ -392,23 +528,28 @@ func applyOverlays(cat *catalog.Catalog, overlays []overlay) {
 		if o.MinVersion != "" && catalog.Compare(cat.CollectorVersion, o.MinVersion) < 0 {
 			continue
 		}
+
 		if o.MaxVersion != "" && catalog.Compare(cat.CollectorVersion, o.MaxVersion) > 0 {
 			continue
 		}
+
 		comp, ok := cat.Lookup(o.Kind, o.Type)
 		if !ok {
 			continue // the component does not exist in this release
 		}
+
 		comp.Fields = o.Fields
 	}
 }
 
 func splitList(s string) []string {
 	var out []string
-	for _, part := range strings.Split(s, ",") {
+
+	for part := range strings.SplitSeq(s, ",") {
 		if part = strings.TrimSpace(part); part != "" {
 			out = append(out, part)
 		}
 	}
+
 	return out
 }

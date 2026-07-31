@@ -3,6 +3,7 @@ package lint
 import (
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,9 +14,30 @@ import (
 // Formatter renders results as they arrive and writes a trailer at the end.
 type Formatter interface {
 	// Result renders one file's outcome.
-	Result(Result) error
+	Result(result Result) error
 	// Finish writes any trailing output, such as a summary.
-	Finish(Summary) error
+	Finish(summary Summary) error
+}
+
+// writef writes formatted output, wrapping the failure with context. Every
+// formatter goes through it so a broken pipe reads the same everywhere.
+func writef(w io.Writer, format string, args ...any) error {
+	_, err := fmt.Fprintf(w, format, args...)
+	if err != nil {
+		return fmt.Errorf("write output: %w", err)
+	}
+
+	return nil
+}
+
+// writeString writes a literal, wrapping the failure with context.
+func writeString(w io.Writer, s string) error {
+	_, err := io.WriteString(w, s)
+	if err != nil {
+		return fmt.Errorf("write output: %w", err)
+	}
+
+	return nil
 }
 
 // FormatterOptions configures the built-in formatters.
@@ -35,17 +57,20 @@ func NewFormatter(name string, w io.Writer, opts FormatterOptions) (Formatter, e
 	case "", "text":
 		return &textFormatter{w: w, opts: opts}, nil
 	case "json":
-		return &jsonFormatter{w: w, opts: opts}, nil
+		return &jsonFormatter{w: w, opts: opts, rep: jsonReport{Files: nil, Summary: Summary{}}}, nil
 	case "junit":
-		return &junitFormatter{w: w, opts: opts}, nil
+		return &junitFormatter{w: w, opts: opts, cases: nil}, nil
 	case "tap":
-		return &tapFormatter{w: w, opts: opts}, nil
+		return &tapFormatter{w: w, opts: opts, lines: nil, n: 0}, nil
 	case "github":
 		return &githubFormatter{w: w, opts: opts}, nil
 	default:
-		return nil, fmt.Errorf("unknown output format %q (want text, json, junit, tap or github)", name)
+		return nil, fmt.Errorf("%w %q (want text, json, junit, tap or github)", ErrUnknownFormat, name)
 	}
 }
+
+// ErrUnknownFormat reports an output format the linter cannot produce.
+var ErrUnknownFormat = errors.New("unknown output format")
 
 // ANSI colour codes, used only when output is a terminal.
 const (
@@ -63,43 +88,67 @@ type textFormatter struct {
 	opts FormatterOptions
 }
 
-func (f *textFormatter) color(code, s string) string {
-	if !f.opts.Color {
-		return s
-	}
-	return code + s + ansiReset
-}
-
 func (f *textFormatter) Result(r Result) error {
 	switch r.Status {
 	case Error:
-		_, err := fmt.Fprintf(f.w, "%s: %s %s\n", r.Path, f.color(ansiRed, "error:"), r.Message())
+		err := writef(f.w, "%s: %s %s\n", r.Path, f.color(ansiRed, "error:"), r.Message())
+
 		return err
 	case Skipped:
 		if !f.opts.Verbose {
 			return nil
 		}
-		_, err := fmt.Fprintf(f.w, "%s: %s\n", r.Path, f.color(ansiDim, "skipped"))
+
+		err := writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, "skipped"))
+
 		return err
+	case Invalid:
+		// Diagnostics are printed below.
 	case Valid:
 		if len(r.Diagnostics) == 0 {
 			if !f.opts.Verbose {
 				return nil
 			}
-			_, err := fmt.Fprintf(f.w, "%s: %s\n", r.Path, f.color(ansiGreen, "valid"))
+
+			err := writef(f.w, "%s: %s\n", r.Path, f.color(ansiGreen, "valid"))
+
 			return err
 		}
 	}
+
 	for _, d := range r.Diagnostics {
-		if err := f.diagnostic(d); err != nil {
+		err := f.diagnostic(d)
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
+}
+
+func (f *textFormatter) Finish(s Summary) error {
+	if !f.opts.Summary {
+		return nil
+	}
+
+	total := s.Valid + s.Invalid + s.Errors + s.Skipped
+
+	return writef(f.w,
+		"Summary: %d file(s) checked, %d valid, %d invalid, %d error(s), %d skipped (%d warning(s), %d info)\n",
+		total, s.Valid, s.Invalid, s.Errors, s.Skipped, s.Warnings, s.Infos)
+}
+
+func (f *textFormatter) color(code, s string) string {
+	if !f.opts.Color {
+		return s
+	}
+
+	return code + s + ansiReset
 }
 
 func (f *textFormatter) diagnostic(d diag.Diagnostic) error {
 	var code string
+
 	switch d.Severity {
 	case diag.Error:
 		code = ansiRed
@@ -108,6 +157,7 @@ func (f *textFormatter) diagnostic(d diag.Diagnostic) error {
 	default:
 		code = ansiBlue
 	}
+
 	_, err := fmt.Fprintf(f.w, "%s: %s %s %s\n",
 		f.color(ansiBold, d.Position.String()),
 		f.color(code, string(d.Severity)+":"),
@@ -115,19 +165,9 @@ func (f *textFormatter) diagnostic(d diag.Diagnostic) error {
 		f.color(ansiDim, "["+d.Rule+"]"),
 	)
 	if err == nil && d.Hint != "" {
-		_, err = fmt.Fprintf(f.w, "    %s %s\n", f.color(ansiDim, "hint:"), d.Hint)
+		err = writef(f.w, "    %s %s\n", f.color(ansiDim, "hint:"), d.Hint)
 	}
-	return err
-}
 
-func (f *textFormatter) Finish(s Summary) error {
-	if !f.opts.Summary {
-		return nil
-	}
-	total := s.Valid + s.Invalid + s.Errors + s.Skipped
-	_, err := fmt.Fprintf(f.w,
-		"Summary: %d file(s) checked, %d valid, %d invalid, %d error(s), %d skipped (%d warning(s), %d info)\n",
-		total, s.Valid, s.Invalid, s.Errors, s.Skipped, s.Warnings, s.Infos)
 	return err
 }
 
@@ -153,9 +193,11 @@ func (f *jsonFormatter) Result(r Result) error {
 	if r.Status == Valid && len(r.Diagnostics) == 0 && !f.opts.Verbose {
 		return nil
 	}
+
 	f.rep.Files = append(f.rep.Files, jsonFile{
 		Filename: r.Path, Status: r.Status, Message: r.Message(), Diagnostics: r.Diagnostics,
 	})
+
 	return nil
 }
 
@@ -164,9 +206,16 @@ func (f *jsonFormatter) Finish(s Summary) error {
 	if f.rep.Files == nil {
 		f.rep.Files = []jsonFile{}
 	}
+
 	enc := json.NewEncoder(f.w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(f.rep)
+
+	err := enc.Encode(f.rep)
+	if err != nil {
+		return fmt.Errorf("encode json report: %w", err)
+	}
+
+	return nil
 }
 
 type junitFormatter struct {
@@ -198,41 +247,52 @@ type junitFailure struct {
 }
 
 func (f *junitFormatter) Result(r Result) error {
-	c := junitCase{Name: r.Path, ClassName: "otelcol-config-lint"}
+	c := junitCase{Name: r.Path, ClassName: "otelcol-config-lint", Failures: nil, Error: nil}
 	if r.Status == Error {
-		c.Error = &junitFailure{Message: r.Message(), Type: "error"}
+		c.Error = &junitFailure{Message: r.Message(), Type: "error", Text: ""}
 	}
+
 	for _, d := range r.Diagnostics {
 		if d.Severity != diag.Error {
 			continue
 		}
+
 		c.Failures = append(c.Failures, junitFailure{
 			Message: d.Message, Type: d.Rule,
 			Text: d.Position.String() + ": " + d.Message,
 		})
 	}
+
 	f.cases = append(f.cases, c)
+
 	return nil
 }
 
 func (f *junitFormatter) Finish(s Summary) error {
 	suite := junitSuite{
+		XMLName:  xml.Name{Space: "", Local: "testsuite"},
 		Name:     "otelcol-config-lint",
 		Tests:    len(f.cases),
 		Failures: s.Invalid,
 		Errors:   s.Errors,
 		Cases:    f.cases,
 	}
-	if _, err := io.WriteString(f.w, xml.Header); err != nil {
+
+	err := writeString(f.w, xml.Header)
+	if err != nil {
 		return err
 	}
+
 	enc := xml.NewEncoder(f.w)
+
 	enc.Indent("", "  ")
-	if err := enc.Encode(suite); err != nil {
-		return err
+
+	err = enc.Encode(suite)
+	if err != nil {
+		return fmt.Errorf("encode junit report: %w", err)
 	}
-	_, err := io.WriteString(f.w, "\n")
-	return err
+
+	return writeString(f.w, "\n")
 }
 
 type tapFormatter struct {
@@ -244,27 +304,33 @@ type tapFormatter struct {
 
 func (f *tapFormatter) Result(r Result) error {
 	f.n++
+
 	status := "ok"
 	if r.Status == Invalid || r.Status == Error {
 		status = "not ok"
 	}
+
 	line := fmt.Sprintf("%s %d - %s", status, f.n, r.Path)
 	if r.Status == Skipped {
 		line += " # SKIP"
 	}
+
 	f.lines = append(f.lines, line)
 	if r.Status == Error {
 		f.lines = append(f.lines, "# "+r.Message())
 	}
+
 	for _, d := range r.Diagnostics {
 		f.lines = append(f.lines, fmt.Sprintf("# %s: %s: %s [%s]",
 			d.Position.String(), d.Severity, d.Message, d.Rule))
 	}
+
 	return nil
 }
 
 func (f *tapFormatter) Finish(Summary) error {
-	_, err := fmt.Fprintf(f.w, "1..%d\n%s\n", f.n, strings.Join(f.lines, "\n"))
+	err := writef(f.w, "1..%d\n%s\n", f.n, strings.Join(f.lines, "\n"))
+
 	return err
 }
 
@@ -277,26 +343,35 @@ type githubFormatter struct {
 
 func (f *githubFormatter) Result(r Result) error {
 	if r.Status == Error {
-		_, err := fmt.Fprintf(f.w, "::error file=%s::%s\n", r.Path, escapeGitHub(r.Message()))
+		err := writef(f.w, "::error file=%s::%s\n", r.Path, escapeGitHub(r.Message()))
+
 		return err
 	}
+
 	for _, d := range r.Diagnostics {
 		level := "notice"
+
 		switch d.Severity {
 		case diag.Error:
 			level = "error"
 		case diag.Warning:
 			level = "warning"
+		case diag.Info, diag.Off:
+			// Anything that is not an error or a warning is a notice.
 		}
+
 		msg := d.Message + " [" + d.Rule + "]"
 		if d.Hint != "" {
 			msg += "\nhint: " + d.Hint
 		}
-		if _, err := fmt.Fprintf(f.w, "::%s file=%s,line=%d,col=%d::%s\n",
-			level, d.Position.File, d.Position.Line, d.Position.Column, escapeGitHub(msg)); err != nil {
+
+		err := writef(f.w, "::%s file=%s,line=%d,col=%d::%s\n",
+			level, d.Position.File, d.Position.Line, d.Position.Column, escapeGitHub(msg))
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -304,7 +379,9 @@ func (f *githubFormatter) Finish(s Summary) error {
 	if !f.opts.Summary {
 		return nil
 	}
-	_, err := fmt.Fprintf(f.w, "::notice::%d valid, %d invalid, %d error(s)\n", s.Valid, s.Invalid, s.Errors)
+
+	err := writef(f.w, "::notice::%d valid, %d invalid, %d error(s)\n", s.Valid, s.Invalid, s.Errors)
+
 	return err
 }
 

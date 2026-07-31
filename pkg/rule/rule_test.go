@@ -1,6 +1,7 @@
 package rule_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -60,28 +61,26 @@ func testCatalog() *catalog.Catalog {
 // check runs every rule over src and returns the names of the rules that fired.
 func check(t *testing.T, src string) []string {
 	t.Helper()
+
 	f, err := config.Parse("test.yaml", []byte(src))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
+
 	ctx := rule.Context{File: f, Catalog: testCatalog(), Index: rule.NewIndex(f)}
+
 	var fired []string
+
 	for _, r := range rule.All() {
 		if len(rule.Run(r, ctx, r.Severity())) > 0 {
 			fired = append(fired, r.Name())
 		}
 	}
+
 	return fired
 }
 
-func fired(rules []string, name string) bool {
-	for _, r := range rules {
-		if r == name {
-			return true
-		}
-	}
-	return false
-}
+func fired(rules []string, name string) bool { return slices.Contains(rules, name) }
 
 // clean is a config that every rule should be happy with.
 const clean = `
@@ -109,12 +108,16 @@ service:
 `
 
 func TestCleanConfigIsQuiet(t *testing.T) {
+	t.Parallel()
+
 	if got := check(t, clean); len(got) > 0 {
 		t.Errorf("expected no findings, got %v", got)
 	}
 }
 
 func TestRules(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		src  string
@@ -387,6 +390,8 @@ service:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := check(t, tt.src)
 			if !fired(got, tt.want) {
 				t.Errorf("rule %q did not fire; fired: %v", tt.want, got)
@@ -396,6 +401,8 @@ service:
 }
 
 func TestEnvExpansionSkipsValueChecks(t *testing.T) {
+	t.Parallel()
+
 	src := `
 receivers: {otlp: }
 exporters:
@@ -412,6 +419,8 @@ service:
 }
 
 func TestOpenMapAcceptsAnyKey(t *testing.T) {
+	t.Parallel()
+
 	src := `
 receivers: {otlp: }
 exporters:
@@ -429,6 +438,8 @@ service:
 }
 
 func TestStrictPromotesUnknownFieldToError(t *testing.T) {
+	t.Parallel()
+
 	src := `
 receivers: {otlp: }
 exporters:
@@ -438,15 +449,19 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [debug]}
 `
+
 	f, err := config.Parse("test.yaml", []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	r, ok := rule.Lookup("unknown-field")
 	if !ok {
 		t.Fatal("unknown-field rule is not registered")
 	}
+
 	ctx := rule.Context{File: f, Catalog: testCatalog(), Index: rule.NewIndex(f), Strict: true}
+
 	found := rule.Run(r, ctx, r.Severity())
 	if len(found) != 1 || found[0].Severity != diag.Error {
 		t.Fatalf("want one error, got %+v", found)
@@ -454,11 +469,15 @@ service:
 }
 
 func TestDisabledRuleProducesNothing(t *testing.T) {
+	t.Parallel()
+
 	f, err := config.Parse("test.yaml", []byte("receivers:\n  otlp:\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	r, _ := rule.Lookup("service-required")
+
 	ctx := rule.Context{File: f, Catalog: testCatalog(), Index: rule.NewIndex(f)}
 	if found := rule.Run(r, ctx, diag.Off); len(found) != 0 {
 		t.Errorf("a rule set to off must not report: %+v", found)
@@ -466,13 +485,17 @@ func TestDisabledRuleProducesNothing(t *testing.T) {
 }
 
 func TestEveryRuleIsDocumented(t *testing.T) {
+	t.Parallel()
+
 	for _, r := range rule.All() {
 		if r.Description() == "" {
 			t.Errorf("rule %q has no description", r.Name())
 		}
+
 		if strings.ToLower(r.Name()) != r.Name() {
 			t.Errorf("rule %q should be lowercase kebab-case", r.Name())
 		}
+
 		switch r.Severity() {
 		case diag.Error, diag.Warning, diag.Info:
 		default:

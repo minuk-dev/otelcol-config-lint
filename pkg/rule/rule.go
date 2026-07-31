@@ -3,7 +3,8 @@ package rule
 
 import (
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +67,7 @@ func (c *Context) Report(f Finding) {
 	if f.Severity != "" && c.severity != diag.Off {
 		sev = f.Severity
 	}
+
 	*c.out = append(*c.out, diag.Diagnostic{
 		Rule:     c.rule.Name(),
 		Severity: sev,
@@ -87,39 +89,40 @@ func Run(r Rule, ctx Context, severity diag.Severity) diag.Diagnostics {
 	if severity == diag.Off {
 		return nil
 	}
+
 	var out diag.Diagnostics
+
 	ctx.rule, ctx.severity, ctx.out = r, severity, &out
 	r.Check(&ctx)
+
 	return out
 }
 
-var registry = map[string]Rule{}
-
-// Register adds a rule to the global registry. It panics on a duplicate name,
-// which can only be a programming error.
-func Register(rules ...Rule) {
-	for _, r := range rules {
-		if _, dup := registry[r.Name()]; dup {
-			panic("rule registered twice: " + r.Name())
-		}
-		registry[r.Name()] = r
-	}
-}
-
-// All returns every registered rule, sorted by name.
+// All returns every built-in rule, sorted by name. The set is built on each
+// call rather than registered into package state, so nothing depends on
+// initialisation order and callers can safely keep or filter the result.
 func All() []Rule {
-	out := make([]Rule, 0, len(registry))
-	for _, r := range registry {
-		out = append(out, r)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
-	return out
+	rules := slices.Concat(
+		structureRules(),
+		referenceRules(),
+		componentRules(),
+		fieldRules(),
+		practiceRules(),
+	)
+	slices.SortFunc(rules, func(a, b Rule) int { return strings.Compare(a.Name(), b.Name()) })
+
+	return rules
 }
 
-// Lookup returns a registered rule by name.
+// Lookup returns a built-in rule by name.
 func Lookup(name string) (Rule, bool) {
-	r, ok := registry[name]
-	return r, ok
+	for _, r := range All() {
+		if r.Name() == name {
+			return r, true
+		}
+	}
+
+	return nil, false
 }
 
 // base is the common implementation detail of every built-in rule.

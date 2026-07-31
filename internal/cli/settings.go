@@ -39,18 +39,25 @@ func loadSettings(path string) (*settings, error) {
 	if path == "" {
 		path = DefaultSettingsFile
 	}
+
 	src, err := os.ReadFile(path)
 	if err != nil {
 		if !required && errors.Is(err, fs.ErrNotExist) {
-			return &settings{}, nil
+			return &settings{}, nil //nolint:exhaustruct // an absent file means every option keeps its default
 		}
-		return nil, err
+
+		return nil, fmt.Errorf("read settings: %w", err)
 	}
+
 	var s settings
+
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
-	if err := dec.Decode(&s); err != nil && !errors.Is(err, io.EOF) {
+
+	err = dec.Decode(&s)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+
 	return &s, nil
 }

@@ -1,0 +1,105 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - wsl # superseded by wsl_v5, which stays on
+  settings:
+    depguard:
+      rules:
+        main:
+          files:
+            - "!**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/minuk-dev/otelcol-config-lint
+            - gopkg.in/yaml.v3
+        test:
+          files:
+            - "**/*_test.go"
+          allow:
+            - $gostd
+            - github.com/minuk-dev/otelcol-config-lint
+            - gopkg.in/yaml.v3
+    exhaustive:
+      # Switches over the internal enums end in a default case on purpose.
+      default-signifies-exhaustive: true
+    exhaustruct:
+      exclude:
+        # Diagnostics and findings carry optional Hint/Severity fields; filling
+        # them in everywhere would say nothing.
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/diag\.Diagnostic'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Finding'
+        # Option and result structs are meant to be partially set, with the
+        # zero value carrying the default behaviour.
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|FormatterOptions|Result|Summary)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/catalog\.(Store|Catalog|Component|Field)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'
+        # The parser fills these in as it walks the document.
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/config\..+'
+        - 'net/http\.Client'
+    gosec:
+      excludes:
+        - G304 # opening a file the user named on the command line is the point
+    ireturn:
+      allow:
+        - error
+        - stdlib
+        - generic
+        - empty
+        - anon
+        - Rule$
+        - Formatter$
+    varnamelen:
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-chan-recv-ok: true
+      ignore-names:
+        # Receivers and idiomatic short names for tightly scoped values.
+        - a # comparison operands
+        - b
+        - c # catalog, component, context
+        - d # diagnostic
+        - e # entry
+        - f # file, formatter, field
+        - i # loop index
+        - k # kind
+        - l # linter
+        - n # node, count
+        - o # options
+        - p # pipeline, position
+        - r # rule, reader, result
+        - ra # pre-release operands
+        - rb
+        - s # severity, section, store
+        - v # value, version
+        - w # writer, walker
+        - id
+        - in # table-driven test input
+        - tt # table-driven test case
+    cyclop:
+      max-complexity: 15 # default 10 is too strict for the config walkers
+    funlen:
+      ignore-comments: true
+    lll:
+      line-length: 120
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - funlen
+          - maintidx
+          # Fixtures contain deliberate typos and duplicate keys, because that
+          # is exactly what the rules under test are meant to catch.
+          - misspell
+          - dupword
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/minuk-dev/otelcol-config-lint)

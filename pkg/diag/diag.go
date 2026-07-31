@@ -2,6 +2,7 @@
 package diag
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -21,6 +22,9 @@ const (
 	Off Severity = "off"
 )
 
+// ErrUnknownSeverity reports a severity name outside the four levels.
+var ErrUnknownSeverity = errors.New("unknown severity")
+
 // ParseSeverity converts a textual severity into its typed form.
 func ParseSeverity(s string) (Severity, error) {
 	switch Severity(strings.ToLower(strings.TrimSpace(s))) {
@@ -33,9 +37,12 @@ func ParseSeverity(s string) (Severity, error) {
 	case Off:
 		return Off, nil
 	default:
-		return "", fmt.Errorf("unknown severity %q (want error, warning, info or off)", s)
+		return "", fmt.Errorf("%w %q (want error, warning, info or off)", ErrUnknownSeverity, s)
 	}
 }
+
+// AtLeast reports whether s is at least as serious as floor.
+func (s Severity) AtLeast(floor Severity) bool { return s.rank() <= floor.rank() }
 
 // rank orders severities from most to least serious. Off sorts last.
 func (s Severity) rank() int {
@@ -45,14 +52,18 @@ func (s Severity) rank() int {
 	case Warning:
 		return 1
 	case Info:
-		return 2
+		return rankInfo
 	default:
-		return 3
+		return rankOff
 	}
 }
 
-// AtLeast reports whether s is at least as serious as min.
-func (s Severity) AtLeast(min Severity) bool { return s.rank() <= min.rank() }
+// Ranks below Warning. Error and Warning are 0 and 1, and Off sorts last so a
+// disabled rule never satisfies AtLeast.
+const (
+	rankInfo = 2
+	rankOff  = 3
+)
 
 // Position is a location inside a config file. Lines and columns are 1-based;
 // a zero Line means the diagnostic could not be anchored to a specific node.
@@ -98,12 +109,15 @@ func (d Diagnostics) Sort() {
 		if a.Position.File != b.Position.File {
 			return a.Position.File < b.Position.File
 		}
+
 		if a.Position.Line != b.Position.Line {
 			return a.Position.Line < b.Position.Line
 		}
+
 		if a.Position.Column != b.Position.Column {
 			return a.Position.Column < b.Position.Column
 		}
+
 		return a.Rule < b.Rule
 	})
 }
@@ -111,11 +125,13 @@ func (d Diagnostics) Sort() {
 // Count returns the number of diagnostics with the given severity.
 func (d Diagnostics) Count(s Severity) int {
 	n := 0
+
 	for _, x := range d {
 		if x.Severity == s {
 			n++
 		}
 	}
+
 	return n
 }
 

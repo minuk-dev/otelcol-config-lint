@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -10,8 +11,9 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 )
 
-func init() {
-	Register(
+// structureRules check the shape of the document itself.
+func structureRules() []Rule {
+	return []Rule{
 		unknownTopLevelKey{base{"unknown-top-level-key",
 			"top-level keys other than the component sections and service are rejected by the collector",
 			diag.Error}},
@@ -29,7 +31,7 @@ func init() {
 			"a mapping key declared twice silently discards the first value", diag.Error}},
 		wrongNodeType{base{"wrong-node-type",
 			"component sections must be mappings and pipeline slots must be lists", diag.Error}},
-	)
+	}
 }
 
 type unknownTopLevelKey struct{ base }
@@ -55,15 +57,19 @@ func (r serviceRequired) Check(ctx *Context) {
 			Message: "config has no service block, so nothing will run",
 			Hint:    "add a service.pipelines section wiring the declared components together",
 		})
+
 		return
 	}
+
 	if svc.PipelinesNode == nil {
 		ctx.Report(Finding{
 			Node: svc.KeyNode, Path: "service",
 			Message: "service has no pipelines, so no telemetry will be processed",
 		})
+
 		return
 	}
+
 	if len(svc.Pipelines) == 0 {
 		ctx.Report(Finding{
 			Node: svc.PipelinesNode, Path: "service.pipelines",
@@ -88,14 +94,16 @@ func (r unknownServiceKey) Check(ctx *Context) {
 type invalidPipelineKey struct{ base }
 
 func (r invalidPipelineKey) Check(ctx *Context) {
-	valid := make([]string, 0, len(config.Signals))
-	for _, s := range config.Signals {
+	valid := make([]string, 0, len(config.Signals()))
+	for _, s := range config.Signals() {
 		valid = append(valid, string(s))
 	}
+
 	for _, p := range ctx.File.Service.Pipelines {
 		if isSignal(p.Signal) {
 			continue
 		}
+
 		ctx.Report(Finding{
 			Node: p.KeyNode, Path: "service.pipelines." + p.Key,
 			Message: "pipeline " + quote(p.Key) + " does not name a known signal",
@@ -116,6 +124,7 @@ func (r emptyPipeline) Check(ctx *Context) {
 				Message: "pipeline " + quote(p.Key) + " has no receivers",
 			})
 		}
+
 		if len(p.Exporters) == 0 {
 			ctx.Report(Finding{
 				Node: nodeOr(p.ExportersNode, p.KeyNode), Path: path + ".exporters",
@@ -154,11 +163,12 @@ func (r duplicateKey) Check(ctx *Context) {
 type wrongNodeType struct{ base }
 
 func (r wrongNodeType) Check(ctx *Context) {
-	for _, kind := range config.Kinds {
+	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
 		if sec == nil || isNull(sec.Node) || sec.Node.Kind == yaml.MappingNode {
 			continue
 		}
+
 		ctx.Report(Finding{
 			Node: sec.Node, Path: kind.Section(),
 			Message: kind.Section() + " must be a mapping of component id to settings, got " + nodeKind(sec.Node),
@@ -172,6 +182,7 @@ func (r wrongNodeType) Check(ctx *Context) {
 			Message: "service.extensions must be a list, got " + nodeKind(svc.ExtensionsNode),
 		})
 	}
+
 	for _, p := range svc.Pipelines {
 		for _, slot := range []struct {
 			name string
@@ -184,6 +195,7 @@ func (r wrongNodeType) Check(ctx *Context) {
 			if slot.node == nil || isNull(slot.node) || slot.node.Kind == yaml.SequenceNode {
 				continue
 			}
+
 			ctx.Report(Finding{
 				Node: slot.node, Path: "service.pipelines." + p.Key + "." + slot.name,
 				Message: slot.name + " must be a list, got " + nodeKind(slot.node),
@@ -193,14 +205,7 @@ func (r wrongNodeType) Check(ctx *Context) {
 	}
 }
 
-func isSignal(s config.Signal) bool {
-	for _, x := range config.Signals {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
+func isSignal(s config.Signal) bool { return slices.Contains(config.Signals(), s) }
 
 func isNull(n *yaml.Node) bool {
 	return n == nil || n.Tag == "!!null"
@@ -210,6 +215,7 @@ func nodeOr(n, fallback *yaml.Node) *yaml.Node {
 	if n != nil {
 		return n
 	}
+
 	return fallback
 }
 
@@ -235,6 +241,7 @@ func suggest(got string, candidates []string) string {
 	if best, ok := bestMatch(got, candidates); ok {
 		return "; did you mean " + quote(best) + "?"
 	}
+
 	return ""
 }
 
@@ -245,25 +252,32 @@ func suggest(got string, candidates []string) string {
 // ("hostmetrics" for "host_metrics").
 func bestMatch(got string, candidates []string) (string, bool) {
 	got = strings.ToLower(got)
+
 	trimmed := got
 	for _, suffix := range []string{"receiver", "processor", "exporter", "extension", "connector"} {
 		if s, ok := strings.CutSuffix(got, suffix); ok && s != "" {
 			trimmed = s
+
 			break
 		}
 	}
+
 	squashed := strings.ReplaceAll(trimmed, "_", "")
 
 	var best string
+
 	bestDist := 3 // only suggest reasonably close matches
+
 	for _, c := range candidates {
 		if strings.ReplaceAll(c, "_", "") == squashed {
 			return c, true
 		}
+
 		if d := editDistance(trimmed, c); d < bestDist {
 			best, bestDist = c, d
 		}
 	}
+
 	return best, best != ""
 }
 
@@ -271,20 +285,26 @@ func bestMatch(got string, candidates []string) (string, bool) {
 func editDistance(a, b string) int {
 	prev := make([]int, len(b)+1)
 	curr := make([]int, len(b)+1)
+
 	for j := range prev {
 		prev[j] = j
 	}
+
 	for i := 1; i <= len(a); i++ {
 		curr[0] = i
-		for j := 1; j <= len(b); j++ {
+
+		for j := 1; j <= len(b); j++ { //nolint:varnamelen // j is the inner index of a matrix walk
 			cost := 1
 			if a[i-1] == b[j-1] {
 				cost = 0
 			}
+
 			curr[j] = min(prev[j]+1, min(curr[j-1]+1, prev[j-1]+cost))
 		}
+
 		prev, curr = curr, prev
 	}
+
 	return prev[len(b)]
 }
 
@@ -294,6 +314,8 @@ func sortedKeys[V any](m map[string]V) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+
 	sort.Strings(out)
+
 	return out
 }

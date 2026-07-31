@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -14,8 +16,8 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/catalogs"
 )
 
-// extensions are the catalog file suffixes, in preference order.
-var extensions = []string{".yaml", ".yml", ".json"}
+// extensions returns the catalog file suffixes, in preference order.
+func extensions() []string { return []string{".yaml", ".yml", ".json"} }
 
 // Latest selects the newest catalog available in a store.
 const Latest = "latest"
@@ -27,6 +29,10 @@ const Default = "default"
 // VersionPlaceholder is substituted with the collector version in a location
 // template, e.g. "https://example.com/otel/{{.Version}}.json".
 const VersionPlaceholder = "{{.Version}}"
+
+// defaultFetchTimeout bounds a remote catalog download when the caller has not
+// supplied its own client.
+const defaultFetchTimeout = 30 * time.Second
 
 // Store resolves collector versions to catalogs. The zero value serves the
 // catalogs embedded in the binary.
@@ -48,30 +54,26 @@ type Store struct {
 	HTTPClient *http.Client
 }
 
-// locations returns the locations to search, defaulting to the built-ins.
-func (s Store) locations() []string {
-	if len(s.Locations) == 0 {
-		return []string{Default}
-	}
-	return s.Locations
-}
-
 // Versions lists every catalog the store can serve, newest first. Templated and
 // remote locations cannot be enumerated, so they never appear here even though
 // Load can still resolve them.
 func (s Store) Versions() []string {
 	seen := map[string]bool{}
+
 	var out []string
+
 	add := func(name string) {
 		v := name
-		for _, ext := range extensions {
+		for _, ext := range extensions() {
 			v = strings.TrimSuffix(v, ext)
 		}
+
 		if v != "" && v != name && !seen[v] {
 			seen[v] = true
 			out = append(out, v)
 		}
 	}
+
 	for _, loc := range s.locations() {
 		switch kindOf(loc) {
 		case locEmbedded:
@@ -80,15 +82,19 @@ func (s Store) Versions() []string {
 				add(e.Name())
 			}
 		case locDir:
-			for _, ext := range extensions {
+			for _, ext := range extensions() {
 				names, _ := filepath.Glob(filepath.Join(loc, "*"+ext))
 				for _, n := range names {
 					add(filepath.Base(n))
 				}
 			}
+		default:
+			// Templated and remote locations cannot be listed.
 		}
 	}
+
 	sort.Slice(out, func(i, j int) bool { return Compare(out[i], out[j]) > 0 })
+
 	return out
 }
 
@@ -98,80 +104,124 @@ func (s Store) Load(version string) (*Catalog, error) {
 	if version == "" || version == Latest {
 		versions := s.Versions()
 		if len(versions) == 0 {
-			return nil, fmt.Errorf("no catalogs available in %s", strings.Join(s.locations(), ", "))
+			return nil, fmt.Errorf("%w in %s", errNoCatalogs, strings.Join(s.locations(), ", "))
 		}
+
 		version = versions[0]
 	}
+
 	version = Normalize(version)
 
 	var tried []string
+
 	for _, loc := range s.locations() {
 		c, err := s.loadFrom(loc, version)
 		switch {
 		case err == nil:
 			return c, nil
-		case os.IsNotExist(err) || err == errNotFound:
+		case errors.Is(err, os.ErrNotExist), errors.Is(err, errNotFound):
 			tried = append(tried, resolve(loc, version))
 		default:
 			return nil, fmt.Errorf("%s: %w", resolve(loc, version), err)
 		}
 	}
+
 	return nil, &UnknownVersionError{Version: version, Available: s.Versions(), Tried: tried}
 }
 
-// errNotFound signals that a location does not have the requested version.
-var errNotFound = fmt.Errorf("catalog not found")
+// locations returns the locations to search, defaulting to the built-ins.
+func (s Store) locations() []string {
+	if len(s.Locations) == 0 {
+		return []string{Default}
+	}
+
+	return s.Locations
+}
+
+var (
+	// errNotFound signals that a location does not have the requested version.
+	errNotFound = errors.New("catalog not found")
+	// errNoCatalogs signals that no location could be enumerated at all.
+	errNoCatalogs = errors.New("no catalogs available")
+	// errBadStatus signals a remote location answering with an unusable status.
+	errBadStatus = errors.New("unexpected status")
+)
 
 func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 	switch kindOf(loc) {
 	case locEmbedded:
-		for _, ext := range extensions {
+		for _, ext := range extensions() {
 			f, err := catalogs.FS.Open(version + ext)
 			if err != nil {
 				continue
 			}
-			defer f.Close()
+
+			defer func() { _ = f.Close() }()
+
 			return Read(f)
 		}
+
 		return nil, errNotFound
 	case locRemote:
 		return s.fetch(resolve(loc, version))
 	case locTemplate:
 		path := resolve(loc, version)
-		if _, err := os.Stat(path); err != nil {
+
+		_, err := os.Stat(path)
+		if err != nil {
 			return nil, errNotFound
 		}
+
 		return ReadFile(path)
 	default:
 		// A directory holds "<version>.yaml" or "<version>.json"; the readable
 		// form is preferred when both are present.
-		for _, ext := range extensions {
+		for _, ext := range extensions() {
 			path := filepath.Join(loc, version+ext)
-			if _, err := os.Stat(path); err == nil {
+
+			_, err := os.Stat(path)
+			if err == nil {
 				return ReadFile(path)
 			}
 		}
+
 		return nil, errNotFound
 	}
 }
 
+// fetch reads a catalog over HTTP. Loading is synchronous and the client
+// already carries a timeout, so the request runs on a background context.
 func (s Store) fetch(url string) (*Catalog, error) {
 	client := s.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{
+			Timeout:       defaultFetchTimeout,
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+		}
 	}
-	resp, err := client.Get(url)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build request for %s: %w", url, err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: %w", url, err)
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return Read(resp.Body)
+	case http.StatusNotFound:
 		return nil, errNotFound
+	default:
+		return nil, fmt.Errorf("GET %s: %w %s", url, errBadStatus, resp.Status)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
-	}
-	return Read(resp.Body)
 }
 
 type locKind int
@@ -204,7 +254,7 @@ func resolve(loc, version string) string {
 	case locTemplate, locRemote:
 		return strings.ReplaceAll(loc, VersionPlaceholder, version)
 	default:
-		return filepath.Join(loc, version+extensions[0])
+		return filepath.Join(loc, version+extensions()[0])
 	}
 }
 
@@ -218,10 +268,11 @@ type UnknownVersionError struct {
 }
 
 func (e *UnknownVersionError) Error() string {
-	msg := fmt.Sprintf("no catalog for collector version %s", e.Version)
+	msg := "no catalog for collector version " + e.Version
 	if len(e.Available) > 0 {
 		msg += " (available: " + strings.Join(e.Available, ", ") + ")"
 	}
+
 	return msg
 }
 
@@ -233,6 +284,7 @@ func (e *UnknownVersionError) Nearest() (string, bool) {
 			return v, true
 		}
 	}
+
 	return "", false
 }
 
@@ -242,9 +294,11 @@ func Normalize(v string) string {
 	if v == "" || v == Latest {
 		return v
 	}
+
 	if !strings.HasPrefix(v, "v") {
 		v = "v" + v
 	}
+
 	return v
 }
 
@@ -259,6 +313,7 @@ func Compare(a, b string) int {
 			return pa[i] - pb[i]
 		}
 	}
+
 	ra, rb := prerelease(a), prerelease(b)
 	switch {
 	case ra == rb:
@@ -275,22 +330,29 @@ func Compare(a, b string) int {
 // prerelease returns the suffix after the first "-", e.g. "rc.1".
 func prerelease(v string) string {
 	_, rest, _ := strings.Cut(Normalize(v), "-")
+
 	return rest
 }
 
 func parseVersion(v string) [3]int {
 	var out [3]int
+
 	v = strings.TrimPrefix(Normalize(v), "v")
 	v, _, _ = strings.Cut(v, "-") // drop any pre-release suffix
-	for i, part := range strings.SplitN(v, ".", 3) {
-		if i >= len(out) {
+
+	parts := strings.SplitN(v, ".", len(out))
+	for i := range out {
+		if i >= len(parts) {
 			break
 		}
-		n, err := strconv.Atoi(part)
+
+		n, err := strconv.Atoi(parts[i])
 		if err != nil {
-			continue
+			continue // an unparsable segment counts as zero
 		}
+
 		out[i] = n
 	}
+
 	return out
 }
