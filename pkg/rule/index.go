@@ -29,6 +29,7 @@ func NewIndex(f *config.File) *Index {
 	}
 	for kind, sec := range f.Sections {
 		idx.declared[kind] = map[config.ID]config.Component{}
+
 		idx.used[kind] = map[config.ID]bool{}
 		for _, c := range sec.Components {
 			// A duplicate key keeps the last declaration, matching YAML.
@@ -39,6 +40,7 @@ func NewIndex(f *config.File) *Index {
 	for _, ref := range f.Service.Extensions {
 		idx.markUsed(config.KindExtension, ref.ID)
 	}
+
 	for _, p := range f.Service.Pipelines {
 		for _, slot := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
 			for _, ref := range p.Refs(slot) {
@@ -46,31 +48,31 @@ func NewIndex(f *config.File) *Index {
 				if !ok {
 					continue
 				}
+
 				idx.markUsed(c.Kind, ref.ID)
+
 				if c.Kind == config.KindConnector {
 					switch slot {
 					case config.KindReceiver:
 						idx.asReceiver[ref.ID] = append(idx.asReceiver[ref.ID], p)
 					case config.KindExporter:
 						idx.asExporter[ref.ID] = append(idx.asExporter[ref.ID], p)
+					default:
+						// A connector in the processor slot is not valid wiring;
+						// the signal-support rule reports it.
 					}
 				}
 			}
 		}
 	}
-	return idx
-}
 
-func (idx *Index) markUsed(k config.Kind, id config.ID) {
-	if idx.used[k] == nil {
-		idx.used[k] = map[config.ID]bool{}
-	}
-	idx.used[k][id] = true
+	return idx
 }
 
 // Declared returns the component declared under the given kind.
 func (idx *Index) Declared(k config.Kind, id config.ID) (config.Component, bool) {
 	c, ok := idx.declared[k][id]
+
 	return c, ok
 }
 
@@ -81,20 +83,22 @@ func (idx *Index) Resolve(slot config.Kind, id config.ID) (config.Component, boo
 	if c, ok := idx.declared[slot][id]; ok {
 		return c, true
 	}
+
 	if slot == config.KindReceiver || slot == config.KindExporter {
 		if c, ok := idx.declared[config.KindConnector][id]; ok {
 			return c, true
 		}
 	}
+
 	return config.Component{}, false
 }
 
 // Used reports whether a declared component is referenced by the service block.
 func (idx *Index) Used(k config.Kind, id config.ID) bool { return idx.used[k][id] }
 
-// ConnectorPipelines returns the pipelines a connector feeds (as a receiver)
-// and the pipelines that feed it (as an exporter).
-func (idx *Index) ConnectorPipelines(id config.ID) (asReceiver, asExporter []config.Pipeline) {
+// ConnectorPipelines returns the pipelines a connector feeds, as its receiver
+// side, and then the pipelines that feed it, as its exporter side.
+func (idx *Index) ConnectorPipelines(id config.ID) ([]config.Pipeline, []config.Pipeline) {
 	return idx.asReceiver[id], idx.asExporter[id]
 }
 
@@ -102,10 +106,19 @@ func (idx *Index) ConnectorPipelines(id config.ID) (asReceiver, asExporter []con
 // every kind. It is used to explain mistakes like listing a processor under
 // "receivers:".
 func (idx *Index) KindOf(id config.ID) (config.Kind, bool) {
-	for _, k := range config.Kinds {
+	for _, k := range config.Kinds() {
 		if _, ok := idx.declared[k][id]; ok {
 			return k, true
 		}
 	}
+
 	return "", false
+}
+
+func (idx *Index) markUsed(k config.Kind, id config.ID) {
+	if idx.used[k] == nil {
+		idx.used[k] = map[config.ID]bool{}
+	}
+
+	idx.used[k][id] = true
 }

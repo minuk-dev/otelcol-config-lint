@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -21,7 +22,7 @@ type Catalog struct {
 	// CollectorVersion is the upstream release tag, e.g. "v0.157.0".
 	CollectorVersion string `json:"collectorVersion" yaml:"collectorVersion"`
 	// Distributions lists which upstream distributions were merged in.
-	Distributions []string `json:"distributions" yaml:"distributions"`
+	Distributions []string `json:"distributions"         yaml:"distributions"`
 	GeneratedAt   string   `json:"generatedAt,omitempty" yaml:"generatedAt,omitempty"`
 	// Sources maps each distribution to the module it was generated from.
 	Sources map[string]string `json:"sources,omitempty" yaml:"sources,omitempty"`
@@ -63,7 +64,7 @@ type Component struct {
 // Pair is a connector's supported signal conversion.
 type Pair struct {
 	From config.Signal `json:"from" yaml:"from"`
-	To   config.Signal `json:"to" yaml:"to"`
+	To   config.Signal `json:"to"   yaml:"to"`
 }
 
 // Stability is an upstream component stability level.
@@ -104,7 +105,9 @@ func (c *Catalog) Lookup(k config.Kind, typ string) (*Component, bool) {
 	if !ok {
 		return nil, false
 	}
+
 	comp, ok := byType[typ]
+
 	return comp, ok
 }
 
@@ -114,7 +117,9 @@ func (c *Catalog) Types(k config.Kind) []string {
 	for t := range c.Components[k] {
 		out = append(out, t)
 	}
+
 	sort.Strings(out)
+
 	return out
 }
 
@@ -124,6 +129,7 @@ func (c *Catalog) Count() int {
 	for _, byType := range c.Components {
 		n += len(byType)
 	}
+
 	return n
 }
 
@@ -131,16 +137,16 @@ func (c *Catalog) Count() int {
 // given signal. Connectors are matched against either end of their pairs, since
 // they appear as both a receiver and an exporter.
 func (comp *Component) Supports(s config.Signal) bool {
-	for _, x := range comp.Signals {
-		if x == s {
-			return true
-		}
+	if slices.Contains(comp.Signals, s) {
+		return true
 	}
+
 	for _, p := range comp.Pairs {
 		if p.From == s || p.To == s {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -152,6 +158,7 @@ func (comp *Component) SupportsAsExporter(s config.Signal) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -163,6 +170,7 @@ func (comp *Component) SupportsAsReceiver(s config.Signal) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -173,15 +181,19 @@ func (comp *Component) SignalList() string {
 		for _, p := range comp.Pairs {
 			parts = append(parts, string(p.From)+"->"+string(p.To))
 		}
+
 		return strings.Join(parts, ", ")
 	}
+
 	parts := make([]string, 0, len(comp.Signals))
 	for _, s := range comp.Signals {
 		parts = append(parts, string(s))
 	}
+
 	if len(parts) == 0 {
 		return "none"
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -191,13 +203,21 @@ func (comp *Component) StabilityFor(s config.Signal) (Stability, bool) {
 	if v, ok := comp.Stability[string(s)]; ok {
 		return v, true
 	}
+
 	if len(comp.Stability) == 1 {
 		for _, v := range comp.Stability {
 			return v, true
 		}
 	}
+
 	return "", false
 }
+
+// yamlIndent keeps the generated catalogs readable in review.
+const yamlIndent = 2
+
+// errEmptyCatalog reports a catalog file with no document in it.
+var errEmptyCatalog = errors.New("decode catalog: empty document")
 
 // Format is a catalog serialisation format.
 type Format string
@@ -213,17 +233,23 @@ const (
 // YAML, so callers do not have to know which form they were handed.
 func Read(r io.Reader) (*Catalog, error) {
 	var c Catalog
+
 	dec := yaml.NewDecoder(r)
 	dec.KnownFields(true)
-	if err := dec.Decode(&c); err != nil {
+
+	err := dec.Decode(&c)
+	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("decode catalog: empty document")
+			return nil, errEmptyCatalog
 		}
+
 		return nil, fmt.Errorf("decode catalog: %w", err)
 	}
+
 	if c.Components == nil {
 		c.Components = map[config.Kind]map[string]*Component{}
 	}
+
 	for _, byType := range c.Components {
 		for typ, comp := range byType {
 			if comp.Type == "" {
@@ -231,6 +257,7 @@ func Read(r io.Reader) (*Catalog, error) {
 			}
 		}
 	}
+
 	return &c, nil
 }
 
@@ -238,13 +265,16 @@ func Read(r io.Reader) (*Catalog, error) {
 func ReadFile(path string) (*Catalog, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open catalog: %w", err)
 	}
-	defer f.Close()
+
+	defer func() { _ = f.Close() }()
+
 	c, err := Read(f)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+
 	return c, nil
 }
 
@@ -253,14 +283,29 @@ func (c *Catalog) Write(w io.Writer, format Format) error {
 	if format == JSON {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(c)
+
+		err := enc.Encode(c)
+		if err != nil {
+			return fmt.Errorf("encode catalog as json: %w", err)
+		}
+
+		return nil
 	}
+
 	enc := yaml.NewEncoder(w)
-	enc.SetIndent(2)
-	if err := enc.Encode(c); err != nil {
-		return err
+	enc.SetIndent(yamlIndent)
+
+	err := enc.Encode(c)
+	if err != nil {
+		return fmt.Errorf("encode catalog as yaml: %w", err)
 	}
-	return enc.Close()
+
+	err = enc.Close()
+	if err != nil {
+		return fmt.Errorf("flush catalog: %w", err)
+	}
+
+	return nil
 }
 
 // FormatOf returns the format a file name implies.
@@ -268,5 +313,6 @@ func FormatOf(path string) Format {
 	if strings.HasSuffix(path, ".json") {
 		return JSON
 	}
+
 	return YAML
 }

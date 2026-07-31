@@ -24,12 +24,13 @@ type versionKey struct {
 
 // NewVersionIndex returns an index over the catalogs in store.
 func NewVersionIndex(store catalog.Store) *VersionIndex {
-	return &VersionIndex{store: store}
+	return &VersionIndex{store: store, once: sync.Once{}, byKey: nil}
 }
 
 // Versions returns the catalog versions containing the component, oldest first.
 func (v *VersionIndex) Versions(k config.Kind, typ string) []string {
 	v.once.Do(v.build)
+
 	return v.byKey[versionKey{k, typ}]
 }
 
@@ -43,6 +44,7 @@ func (v *VersionIndex) build() {
 		if err != nil {
 			continue
 		}
+
 		for kind, byType := range c.Components {
 			for typ := range byType {
 				key := versionKey{kind, typ}

@@ -2,6 +2,7 @@
 package lint
 
 import (
+	"errors"
 	"io"
 	"os"
 	"sync"
@@ -41,6 +42,7 @@ func (r Result) Message() string {
 	if r.Err != nil {
 		return r.Err.Error()
 	}
+
 	return ""
 }
 
@@ -75,20 +77,25 @@ func New(opts Options) *Linter {
 	if opts.MinSeverity == "" {
 		opts.MinSeverity = diag.Info
 	}
+
 	if opts.FailOn == "" {
 		opts.FailOn = diag.Error
 	}
+
 	if opts.Catalog == nil {
 		opts.Catalog = &catalog.Catalog{}
 	}
+
 	if opts.IgnoreMissingSchemas {
 		if _, set := opts.Severities["unknown-component"]; !set {
 			if opts.Severities == nil {
 				opts.Severities = map[string]diag.Severity{}
 			}
+
 			opts.Severities["unknown-component"] = diag.Off
 		}
 	}
+
 	return &Linter{opts: opts, rules: rule.All()}
 }
 
@@ -100,6 +107,7 @@ func (l *Linter) SeverityFor(r rule.Rule) diag.Severity {
 	if s, ok := l.opts.Severities[r.Name()]; ok {
 		return s
 	}
+
 	return r.Severity()
 }
 
@@ -109,6 +117,7 @@ func (l *Linter) LintFile(path string) Result {
 	if err != nil {
 		return Result{Path: path, Status: Error, Err: err}
 	}
+
 	return l.Lint(path, src)
 }
 
@@ -118,6 +127,7 @@ func (l *Linter) LintReader(name string, r io.Reader) Result {
 	if err != nil {
 		return Result{Path: name, Status: Error, Err: err}
 	}
+
 	return l.Lint(name, src)
 }
 
@@ -133,6 +143,7 @@ func (l *Linter) Lint(path string, src []byte) Result {
 				Err:         err,
 			}
 		}
+
 		return Result{Path: path, Status: Error, Err: err}
 	}
 
@@ -145,6 +156,7 @@ func (l *Linter) Lint(path string, src []byte) Result {
 	}
 
 	var found diag.Diagnostics
+
 	for _, r := range l.rules {
 		for _, d := range rule.Run(r, ctx, l.SeverityFor(r)) {
 			if d.Severity.AtLeast(l.opts.MinSeverity) {
@@ -152,15 +164,18 @@ func (l *Linter) Lint(path string, src []byte) Result {
 			}
 		}
 	}
+
 	found.Sort()
 
 	res := Result{Path: path, Status: Valid, Diagnostics: found}
 	for _, d := range found {
 		if d.Severity.AtLeast(l.opts.FailOn) {
 			res.Status = Invalid
+
 			break
 		}
 	}
+
 	return res
 }
 
@@ -170,27 +185,30 @@ func (l *Linter) LintAll(paths []string, n int) <-chan Result {
 	if n < 1 {
 		n = 1
 	}
+
 	out := make(chan Result, len(paths))
 	in := make(chan string)
 
-	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	var workers sync.WaitGroup
+
+	for range n {
+		workers.Go(func() {
 			for p := range in {
 				out <- l.LintFile(p)
 			}
-		}()
+		})
 	}
+
 	go func() {
 		for _, p := range paths {
 			in <- p
 		}
+
 		close(in)
-		wg.Wait()
+		workers.Wait()
 		close(out)
 	}()
+
 	return out
 }
 
@@ -216,19 +234,23 @@ func (s *Summary) Add(r Result) {
 	case Skipped:
 		s.Skipped++
 	}
+
 	s.Warnings += r.Diagnostics.Count(diag.Warning)
 	s.Infos += r.Diagnostics.Count(diag.Info)
 }
 
 // Failed reports whether any file was invalid or could not be processed.
-func (s Summary) Failed() bool { return s.Invalid > 0 || s.Errors > 0 }
+func (s *Summary) Failed() bool { return s.Invalid > 0 || s.Errors > 0 }
 
 // asSyntaxError is errors.As specialised to avoid importing errors in the hot
 // path signature; it keeps Lint readable.
 func asSyntaxError(err error, target **config.SyntaxError) bool {
-	if se, ok := err.(*config.SyntaxError); ok {
+	se := &config.SyntaxError{}
+	if errors.As(err, &se) {
 		*target = se
+
 		return true
 	}
+
 	return false
 }

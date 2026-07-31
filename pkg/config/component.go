@@ -18,19 +18,25 @@ const (
 	KindConnector Kind = "connector"
 )
 
-// Kinds lists every component kind in declaration order.
-var Kinds = []Kind{KindReceiver, KindProcessor, KindExporter, KindExtension, KindConnector}
+// Kinds lists every component kind in declaration order. It returns a fresh
+// slice so callers cannot alter what everyone else sees.
+func Kinds() []Kind {
+	return []Kind{KindReceiver, KindProcessor, KindExporter, KindExtension, KindConnector}
+}
 
 // Section is the top-level config key that declares components of a kind.
 func (k Kind) Section() string { return string(k) + "s" }
 
-// SectionKind maps a top-level config key to the kind it declares.
-var SectionKind = map[string]Kind{
-	"receivers":  KindReceiver,
-	"processors": KindProcessor,
-	"exporters":  KindExporter,
-	"extensions": KindExtension,
-	"connectors": KindConnector,
+// SectionKind reports which kind a top-level config key declares, and whether
+// the key names a component section at all.
+func SectionKind(key string) (Kind, bool) {
+	for _, k := range Kinds() {
+		if k.Section() == key {
+			return k, true
+		}
+	}
+
+	return "", false
 }
 
 // Signal is a telemetry type carried by a pipeline.
@@ -44,8 +50,11 @@ const (
 	SignalProfiles Signal = "profiles"
 )
 
-// Signals lists every known pipeline signal.
-var Signals = []Signal{SignalTraces, SignalMetrics, SignalLogs, SignalProfiles}
+// Signals lists every known pipeline signal. It returns a fresh slice so
+// callers cannot alter what everyone else sees.
+func Signals() []Signal {
+	return []Signal{SignalTraces, SignalMetrics, SignalLogs, SignalProfiles}
+}
 
 // ID identifies a configured component instance, e.g. "otlp" or "otlp/internal".
 type ID struct {
@@ -59,6 +68,7 @@ func ParseID(s string) ID {
 	if !found {
 		return ID{Type: s}
 	}
+
 	return ID{Type: typ, Name: name}
 }
 
@@ -67,5 +77,6 @@ func (id ID) String() string {
 	if id.Name == "" {
 		return id.Type
 	}
+
 	return id.Type + "/" + id.Name
 }

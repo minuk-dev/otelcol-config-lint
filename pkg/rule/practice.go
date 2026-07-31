@@ -7,8 +7,9 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 )
 
-func init() {
-	Register(
+// practiceRules check for configurations that load but behave badly.
+func practiceRules() []Rule {
+	return []Rule{
 		processorOrder{base{"processor-order",
 			"memory_limiter must run first so backpressure is applied before any work", diag.Warning}},
 		missingMemoryLimiter{base{"missing-memory-limiter",
@@ -17,7 +18,7 @@ func init() {
 			"exporting without batching costs throughput and export requests", diag.Info}},
 		insecureTLS{base{"insecure-tls",
 			"TLS verification disabled on a component that talks over the network", diag.Warning}},
-	)
+	}
 }
 
 // memoryLimiter and batch are matched on type, so instances such as
@@ -41,10 +42,12 @@ func (r processorOrder) Check(ctx *Context) {
 					Hint: "move " + quote(ref.ID.String()) + " to the front of " + path,
 				})
 			}
+
 			if ref.ID.Type == batchType && i < len(p.Processors)-1 {
 				if next := p.Processors[i+1]; next.ID.Type == memoryLimiterType {
 					continue // reported above
 				}
+
 				ctx.Report(Finding{
 					Node: ref.Node, Path: "service." + ref.Path,
 					Message:  "batch runs before other processors in pipeline " + quote(p.Key),
@@ -63,6 +66,7 @@ func (r missingMemoryLimiter) Check(ctx *Context) {
 		if hasProcessorType(p, memoryLimiterType) || len(p.Receivers) == 0 {
 			continue
 		}
+
 		ctx.Report(Finding{
 			Node: nodeOr(p.ProcessorsNode, p.KeyNode), Path: "service.pipelines." + p.Key + ".processors",
 			Message: "pipeline " + quote(p.Key) + " has no memory_limiter processor",
@@ -78,6 +82,7 @@ func (r missingBatch) Check(ctx *Context) {
 		if hasProcessorType(p, batchType) || len(p.Exporters) == 0 {
 			continue
 		}
+
 		ctx.Report(Finding{
 			Node: nodeOr(p.ProcessorsNode, p.KeyNode), Path: "service.pipelines." + p.Key + ".processors",
 			Message: "pipeline " + quote(p.Key) + " has no batch processor",
@@ -92,17 +97,19 @@ func hasProcessorType(p config.Pipeline, typ string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 type insecureTLS struct{ base }
 
 func (r insecureTLS) Check(ctx *Context) {
-	for _, kind := range config.Kinds {
+	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
 		if sec == nil {
 			continue
 		}
+
 		for _, c := range sec.Components {
 			for _, hit := range findInsecure(c.ValueNode, kind.Section()+"."+c.ID.String()) {
 				ctx.Report(Finding{
@@ -128,7 +135,9 @@ func findInsecure(n *yaml.Node, path string) []tlsHit {
 	if n == nil {
 		return nil
 	}
+
 	var out []tlsHit
+
 	switch n.Kind {
 	case yaml.MappingNode:
 		for _, e := range mapEntries(n, path) {
@@ -145,6 +154,9 @@ func findInsecure(n *yaml.Node, path string) []tlsHit {
 		for i, item := range n.Content {
 			out = append(out, findInsecure(item, indexPath(path, i))...)
 		}
+	default:
+		// Scalars and aliases hold no settings of their own.
 	}
+
 	return out
 }

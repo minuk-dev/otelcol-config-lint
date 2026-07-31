@@ -11,5 +11,6 @@ func (m *multiFlag) String() string { return strings.Join(*m, ",") }
 
 func (m *multiFlag) Set(v string) error {
 	*m = append(*m, splitList(v)...)
+
 	return nil
 }
