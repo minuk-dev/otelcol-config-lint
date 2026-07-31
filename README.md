@@ -28,6 +28,16 @@ time: the component catalogs are compiled into the binary.
 go install github.com/minuk-dev/otelcol-config-lint/cmd/otelcol-config-lint@latest
 ```
 
+Or run it as a container, mounting the configs to check:
+
+```sh
+docker run --rm -v "$PWD:/workspace" \
+  ghcr.io/minuk-dev/otelcol-config-lint:latest -summary ./configs
+```
+
+Tagged releases publish binaries for Linux, macOS and Windows on amd64 and
+arm64, plus a multi-arch image on ghcr.io.
+
 ## Usage
 
 ```
@@ -196,8 +206,13 @@ tools/schemagen/          catalog generator
 ## Development
 
 ```sh
-make test     # go test ./...
-make lint     # gofmt + go vet
-make build    # ./bin/otelcol-config-lint
+make test            # go test -race with coverage
+make lint            # golangci-lint
+make build           # ./bin/otelcol-config-lint
+make build-snapshot  # every release target, the way CI builds them
 make catalogs VERSIONS=v0.158.0
 ```
+
+CI runs the tests with coverage reported on the pull request, builds every
+release target, lints this repository's own example configs, and publishes
+binaries and container images from tags.

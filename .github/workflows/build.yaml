@@ -1,0 +1,53 @@
+name: build
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25
+      # A snapshot build exercises every target the release will produce, so a
+      # broken .goreleaser.yaml fails here rather than on a tag.
+      - name: Build all release targets
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: build --snapshot --clean
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: otelcol-config-lint-snapshot
+          path: dist/**/otelcol-config-lint*
+          retention-days: 7
+
+  self-lint:
+    # The linter checks its own example configs and annotates the pull request
+    # with anything it finds.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25
+      - name: Lint the example configs
+        run: go run ./cmd/otelcol-config-lint -output github -summary testdata/valid
