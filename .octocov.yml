@@ -1,0 +1,17 @@
+# octocov renders coverage and the code-to-test ratio as a pull-request comment
+# and a job summary, so results are readable without digging through CI logs.
+# See https://github.com/k1LoW/octocov
+coverage:
+  paths:
+    - coverage.txt
+codeToTestRatio:
+  code:
+    - "**/*.go"
+    - "!**/*_test.go"
+    - "!catalogs/**"
+  test:
+    - "**/*_test.go"
+comment:
+  if: is_pull_request
+summary:
+  if: true

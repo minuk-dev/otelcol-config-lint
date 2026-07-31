@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: otelcol-config-lint
+    binary: otelcol-config-lint
+    main: ./cmd/otelcol-config-lint
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X github.com/minuk-dev/otelcol-config-lint/internal/cli.Version={{.Version}}"
+
+archives:
+  - id: otelcol-config-lint
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    # Match the OS and arch names `uname` reports.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+
+dockers:
+  - image_templates:
+      - "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: build/docker/Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/minuk-dev/otelcol-config-lint"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+  - image_templates:
+      - "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}-arm64"
+    use: buildx
+    goarch: arm64
+    dockerfile: build/docker/Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/minuk-dev/otelcol-config-lint"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+
+docker_manifests:
+  - name_template: "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}-amd64"
+      - "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/minuk-dev/otelcol-config-lint:latest"
+    skip_push: auto # only tagged releases move :latest
+    image_templates:
+      - "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}-amd64"
+      - "ghcr.io/minuk-dev/otelcol-config-lint:{{ .Version }}-arm64"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-SNAPSHOT-{{ .ShortCommit }}"
+
+release:
+  github:
+    owner: minuk-dev
+    name: otelcol-config-lint
+  draft: false
+  replace_existing_draft: true
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore(deps)"

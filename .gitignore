@@ -1,2 +1,4 @@
 /bin/
 .claude/settings.local.json
+/dist/
+coverage.txt

@@ -1,0 +1,53 @@
+name: test
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # octocov posts the coverage report as a PR comment
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25
+      - name: Run unit tests
+        run: make test
+      - name: Report coverage (octocov)
+        uses: k1LoW/octocov-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  catalogs:
+    # The catalogs are generated, so a hand edit that does not match what
+    # schemagen produces would silently change what every config is checked
+    # against.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.25
+      - name: Check the catalogs are readable and consistent
+        run: |
+          go run ./cmd/otelcol-config-lint -list-versions
+          for f in catalogs/*.yaml; do
+            version="$(basename "${f}" .yaml)"
+            go run ./cmd/otelcol-config-lint \
+              -collector-version "${version}" -min-severity error testdata/valid
+          done
