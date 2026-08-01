@@ -24,7 +24,7 @@ jobs:
       # A snapshot build exercises every target the release will produce, so a
       # broken .goreleaser.yaml fails here rather than on a tag.
       - name: Build all release targets
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
