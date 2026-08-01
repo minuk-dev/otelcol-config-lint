@@ -1,0 +1,119 @@
+name: action
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  action:
+    # The action is used the way a consumer would use it, so a broken
+    # action.yml, Dockerfile or entrypoint fails here rather than in somebody
+    # else's workflow.
+    #
+    # Every step points schema-location at the committed fixture, for the same
+    # reason the self-lint job does: a pull request has to be checked against
+    # the schemas it carries, not against another repository's current state.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Lint the valid examples
+        id: valid
+        uses: ./
+        with:
+          files: testdata/valid
+          collector-version: v0.157.0
+          schema-location: testdata/schemas
+
+      - name: A passing run reports zero failures
+        run: |
+          test "${{ steps.valid.outputs.exit-code }}" = "0"
+          test "${{ steps.valid.outputs.valid }}" = "1"
+          test "${{ steps.valid.outputs.invalid }}" = "0"
+          test "${{ steps.valid.outputs.errors }}" = "0"
+
+      - name: Lint the invalid examples
+        id: invalid
+        continue-on-error: true
+        uses: ./
+        with:
+          files: testdata/invalid
+          collector-version: v0.157.0
+          schema-location: testdata/schemas
+          # Text, not annotations: these files are meant to be broken, and
+          # annotating them would put red marks on every pull request.
+          output: text
+
+      - name: A failing run fails the step and reports the counts
+        run: |
+          test "${{ steps.invalid.outcome }}" = "failure"
+          test "${{ steps.invalid.outputs.exit-code }}" = "1"
+          test "${{ steps.invalid.outputs.invalid }}" = "2"
+          test "${{ steps.invalid.outputs.valid }}" = "0"
+
+      - name: A rule that is turned off is not reported
+        id: disabled
+        uses: ./
+        with:
+          files: testdata/invalid/pipeline.yaml
+          collector-version: v0.157.0
+          schema-location: testdata/schemas
+          output: text
+          # Everything pipeline.yaml is invalid for, so it comes back clean.
+          disable: connector-wiring,invalid-pipeline-key,empty-pipeline
+          min-severity: error
+
+      - name: Turning the rules off makes the run pass
+        run: test "${{ steps.disabled.outputs.exit-code }}" = "0"
+
+      - name: The distribution decides what a component means
+        id: distribution
+        continue-on-error: true
+        uses: ./
+        with:
+          files: testdata/valid
+          collector-version: v0.157.0
+          # The same file, against a binary that does not carry batch,
+          # memory_limiter, debug or zpages: valid on contrib, invalid here.
+          distribution: otlp
+          schema-location: testdata/schemas
+          output: text
+
+      - name: Changing the distribution changes the verdict
+        run: |
+          test "${{ steps.distribution.outputs.exit-code }}" = "1"
+          test "${{ steps.distribution.outputs.invalid }}" = "1"
+
+      - name: A bad input is a usage error, not a lint failure
+        id: usage
+        continue-on-error: true
+        uses: ./
+        with:
+          files: testdata/valid
+          schema-location: testdata/schemas
+          disable: no-such-rule
+
+      - name: A usage error exits 2
+        run: |
+          test "${{ steps.usage.outcome }}" = "failure"
+          test "${{ steps.usage.outputs.exit-code }}" = "2"
+
+      - name: An unknown output format is a usage error as well
+        id: bad-output
+        continue-on-error: true
+        uses: ./
+        with:
+          files: testdata/valid
+          schema-location: testdata/schemas
+          output: xml
+
+      - name: A format the linter does not know exits 2
+        run: |
+          test "${{ steps.bad-output.outcome }}" = "failure"
+          test "${{ steps.bad-output.outputs.exit-code }}" = "2"

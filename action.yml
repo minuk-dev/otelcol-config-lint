@@ -1,0 +1,121 @@
+name: otelcol-config-lint
+description: >-
+  Lint OpenTelemetry Collector config files against a specific collector
+  release, with findings as inline pull-request annotations.
+author: minuk-dev
+
+branding:
+  icon: check-square
+  color: purple
+
+# Every input maps onto the "run" flag of the same name, so there is nothing new
+# to learn: the CLI documentation is the action documentation. Only -n and
+# --no-color are left out; a runner has nothing to gain from either.
+inputs:
+  files:
+    description: Files, directories or globs to check, separated by spaces or newlines.
+    required: false
+    default: "."
+  collector-version:
+    description: Collector release to validate against, e.g. v0.157.0.
+    required: false
+    default: latest
+  distribution:
+    description: "Collector distribution to validate against: core, contrib, k8s or otlp."
+    required: false
+    default: contrib
+  schema-location:
+    description: >-
+      Where to find schemas: a registry directory or URL, a {{.Version}} /
+      {{.Distribution}} template, or "default". One per line to search several
+      in order.
+    required: false
+    default: ""
+  strict:
+    description: Report unknown component settings as errors.
+    required: false
+    default: "false"
+  ignore-missing-schemas:
+    description: Do not fail on components missing from the schema.
+    required: false
+    default: "false"
+  min-severity:
+    description: "Lowest severity to report: error, warning or info."
+    required: false
+    default: info
+  fail-on:
+    description: "Severity that makes a file invalid: error, warning or info."
+    required: false
+    default: error
+  disable:
+    description: Comma-separated rules to turn off.
+    required: false
+    default: ""
+  severity:
+    description: Comma-separated rule=level overrides, e.g. missing-batch=warning.
+    required: false
+    default: ""
+  exclude:
+    description: Comma-separated glob patterns to skip when walking directories.
+    required: false
+    default: ""
+  output:
+    description: "Output format: text, json, junit, tap or github."
+    required: false
+    default: github
+  config:
+    description: Settings file to read (default .otelcol-config-lint.yaml if present).
+    required: false
+    default: ""
+  summary:
+    description: Append a count of the outcomes to the output.
+    required: false
+    default: "true"
+  verbose:
+    description: Also report the files that passed.
+    required: false
+    default: "false"
+  exit-on-error:
+    description: Stop at the first file that fails.
+    required: false
+    default: "false"
+
+outputs:
+  exit-code:
+    description: "0 every file passed, 1 at least one file failed, 2 the command could not run."
+  valid:
+    description: Number of files that passed.
+  invalid:
+    description: Number of files that failed.
+  errors:
+    description: Number of files that could not be read or parsed.
+  skipped:
+    description: Number of files that were skipped.
+  warnings:
+    description: Number of warnings reported.
+  infos:
+    description: Number of infos reported.
+
+# The image is built from this repository, so the action and the linter it runs
+# are always the same revision: a workflow pinned to @v1 cannot drift.
+runs:
+  using: docker
+  image: Dockerfile
+  # Passed as --name=value so the entrypoint does not depend on their order.
+  args:
+    - --files=${{ inputs.files }}
+    - --collector-version=${{ inputs.collector-version }}
+    - --distribution=${{ inputs.distribution }}
+    - --schema-location=${{ inputs.schema-location }}
+    - --strict=${{ inputs.strict }}
+    - --ignore-missing-schemas=${{ inputs.ignore-missing-schemas }}
+    - --min-severity=${{ inputs.min-severity }}
+    - --fail-on=${{ inputs.fail-on }}
+    - --disable=${{ inputs.disable }}
+    - --severity=${{ inputs.severity }}
+    - --exclude=${{ inputs.exclude }}
+    - --output=${{ inputs.output }}
+    - --config=${{ inputs.config }}
+    - --summary=${{ inputs.summary }}
+    - --verbose=${{ inputs.verbose }}
+    - --exit-on-error=${{ inputs.exit-on-error }}
