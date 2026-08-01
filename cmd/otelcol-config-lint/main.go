@@ -5,9 +5,15 @@ package main
 import (
 	"os"
 
-	"github.com/minuk-dev/otelcol-config-lint/internal/cli"
+	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 )
 
 func main() {
-	os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	cmd := otelcolconfiglint.NewCommand(
+		&otelcolconfiglint.Options{},
+	)
+	err := cmd.Execute()
+	if err != nil {
+		os.Exit(1)
+	}
 }
