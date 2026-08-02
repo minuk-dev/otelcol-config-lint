@@ -15,7 +15,7 @@ const versionTemplate = "otelcol-config-lint {{.Version}}\n"
 
 // newVersionCommand builds the "version" subcommand.
 func newVersionCommand() *cobra.Command {
-	return &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the linter version",
 		Args:  cobra.NoArgs,

@@ -108,7 +108,7 @@ func NewCommand(opts *Options) *cobra.Command {
 
 	// The root carries no work of its own: every mode is a subcommand, so a
 	// bare invocation prints the help that lists them.
-	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+	cmd := &cobra.Command{
 		Use:     "otelcol-config-lint <command> [flags]",
 		Short:   "Validate OpenTelemetry Collector config files against a specific collector release",
 		Version: Version,

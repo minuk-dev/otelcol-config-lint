@@ -9,7 +9,7 @@ import (
 // newRunCommand builds "run", the command that actually lints. It is where
 // every lint flag lives, and the only one whose exit code carries findings.
 func newRunCommand(opts *Options) *cobra.Command {
-	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+	cmd := &cobra.Command{
 		Use:   "run [flags] <file|dir|->...",
 		Short: "Lint the given config files",
 		Example: `  otelcol-config-lint run config.yaml
