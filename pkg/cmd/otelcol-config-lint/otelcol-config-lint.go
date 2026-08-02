@@ -99,48 +99,32 @@ type Options struct {
 	store catalog.Store
 }
 
-// NewCommand builds the cobra command. A nil opts is allowed, in which case a
+// NewCommand builds the root command. A nil opts is allowed, in which case a
 // zero value is used.
 func NewCommand(opts *Options) *cobra.Command {
 	if opts == nil {
 		opts = &Options{} //nolint:exhaustruct // every field is filled in by RegisterFlags
 	}
 
+	// The root carries no work of its own: every mode is a subcommand, so a
+	// bare invocation prints the help that lists them.
 	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
-		Use:     "otelcol-config-lint [flags] <file|dir|->...",
+		Use:     "otelcol-config-lint <command> [flags]",
 		Short:   "Validate OpenTelemetry Collector config files against a specific collector release",
 		Version: Version,
-		Example: `  otelcol-config-lint config.yaml
-  otelcol-config-lint --collector-version v0.157.0 --summary ./configs
-  cat config.yaml | otelcol-config-lint -
-  otelcol-config-lint --output json --strict ./configs > report.json`,
-		Args: cobra.ArbitraryArgs,
+		// The subcommands print command-level errors themselves, with the tool
+		// prefix, and stay quiet about ErrFilesInvalid.
+		SilenceErrors: true,
 		// Findings are not usage errors, so the usage text is printed only
 		// where it helps: bad flags and a missing argument.
 		SilenceUsage: true,
-		// The caller prints command-level errors itself, with the tool prefix,
-		// and stays quiet about ErrFilesInvalid.
-		SilenceErrors: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			err := opts.Prepare(cmd)
-			if err != nil {
-				return err
-			}
-
-			err = opts.Run(cmd, args)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		},
 	}
 
 	// Setting Version above gives the root command a built-in --version flag;
 	// this keeps it printing what the "version" subcommand prints.
 	cmd.SetVersionTemplate(versionTemplate)
 
-	cmd.AddCommand(newVersionCommand(), newListCommand(opts))
+	cmd.AddCommand(newRunCommand(opts), newListCommand(opts), newVersionCommand())
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		cmd.PrintErr(cmd.UsageString())
@@ -148,19 +132,10 @@ func NewCommand(opts *Options) *cobra.Command {
 		return err
 	})
 
-	cmd.SetUsageTemplate(cmd.UsageTemplate() + fmt.Sprintf(`
-Exit codes:
-  %d  every file passed
-  %d  at least one file failed
-  %d  the command could not run
-`, ExitOK, ExitInvalid, ExitUsage))
-
-	opts.RegisterFlags(cmd)
-
 	return cmd
 }
 
-// RegisterFlags declares every command line flag on the command.
+// RegisterFlags declares every flag the lint run takes.
 func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	// The groups below are shared with the list subcommands, which take only
 	// the flags that change what they print.

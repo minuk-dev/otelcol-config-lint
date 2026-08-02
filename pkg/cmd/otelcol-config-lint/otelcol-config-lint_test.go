@@ -42,6 +42,13 @@ func run(t *testing.T, stdin string, args ...string) (int, string, string) {
 	return otelcolconfiglint.ExitCode(err), stdout.String(), stderr.String()
 }
 
+// lint invokes the "run" subcommand, which is where every lint flag lives.
+func lint(t *testing.T, stdin string, args ...string) (int, string, string) {
+	t.Helper()
+
+	return run(t, stdin, append([]string{"run"}, args...)...)
+}
+
 func TestExitCode(t *testing.T) {
 	t.Parallel()
 
@@ -72,7 +79,7 @@ func TestExitCode(t *testing.T) {
 func TestValidDirectoryPasses(t *testing.T) {
 	t.Parallel()
 
-	code, out, errOut := run(t, "", "--min-severity", "error", validConfig)
+	code, out, errOut := lint(t, "", "--min-severity", "error", validConfig)
 	if code != 0 {
 		t.Fatalf("exit %d, stdout=%q stderr=%q", code, out, errOut)
 	}
@@ -85,7 +92,7 @@ func TestValidDirectoryPasses(t *testing.T) {
 func TestInvalidFileFails(t *testing.T) {
 	t.Parallel()
 
-	code, out, _ := run(t, "", badConfig)
+	code, out, _ := lint(t, "", badConfig)
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d", code)
 	}
@@ -100,7 +107,7 @@ func TestInvalidFileFails(t *testing.T) {
 func TestStdin(t *testing.T) {
 	t.Parallel()
 
-	code, out, _ := run(t, "receivers:\n  otlp:\n", "-")
+	code, out, _ := lint(t, "receivers:\n  otlp:\n", "-")
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d: %s", code, out)
 	}
@@ -113,7 +120,7 @@ func TestStdin(t *testing.T) {
 func TestJSONOutput(t *testing.T) {
 	t.Parallel()
 
-	code, out, _ := run(t, "", "--output", "json", badConfig)
+	code, out, _ := lint(t, "", "--output", "json", badConfig)
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d", code)
 	}
@@ -152,7 +159,7 @@ func TestJSONOutput(t *testing.T) {
 func TestGitHubOutput(t *testing.T) {
 	t.Parallel()
 
-	_, out, _ := run(t, "", "--output", "github", badConfig)
+	_, out, _ := lint(t, "", "--output", "github", badConfig)
 	if !strings.HasPrefix(out, "::error file=") {
 		t.Errorf("want workflow commands, got:\n%s", out)
 	}
@@ -165,12 +172,12 @@ func TestGitHubOutput(t *testing.T) {
 func TestJUnitAndTAPOutput(t *testing.T) {
 	t.Parallel()
 
-	_, junit, _ := run(t, "", "--output", "junit", badConfig)
+	_, junit, _ := lint(t, "", "--output", "junit", badConfig)
 	if !strings.Contains(junit, "<testsuite") || !strings.Contains(junit, "<failure") {
 		t.Errorf("unexpected junit output:\n%s", junit)
 	}
 
-	_, tap, _ := run(t, "", "--output", "tap", badConfig)
+	_, tap, _ := lint(t, "", "--output", "tap", badConfig)
 	if !strings.HasPrefix(tap, "1..1\nnot ok 1 - ") {
 		t.Errorf("unexpected tap output:\n%s", tap)
 	}
@@ -184,11 +191,11 @@ func TestFailOnWarningTightensTheGate(t *testing.T) {
 		"      receivers: [otlp]\n      processors: [batch]\n      exporters: [debug]\n" +
 		"extensions:\n  zpages:\n"
 	// The unused zpages extension is a warning, so the gate decides the outcome.
-	if code, _, _ := run(t, src, "-"); code != 0 {
+	if code, _, _ := lint(t, src, "-"); code != 0 {
 		t.Errorf("warnings alone should not fail by default, got exit %d", code)
 	}
 
-	if code, _, _ := run(t, src, "--fail-on", "warning", "-"); code != 1 {
+	if code, _, _ := lint(t, src, "--fail-on", "warning", "-"); code != 1 {
 		t.Errorf("--fail-on warning should fail, got exit %d", code)
 	}
 }
@@ -198,7 +205,7 @@ func TestDisableAndSeverityOverrides(t *testing.T) {
 
 	disabled := "unknown-top-level-key,invalid-value,undefined-reference,unknown-component"
 
-	code, out, _ := run(t, "", "--disable", disabled, badConfig)
+	code, out, _ := lint(t, "", "--disable", disabled, badConfig)
 	if strings.Contains(out, "[invalid-value]") {
 		t.Errorf("disabled rules must not report:\n%s", out)
 	}
@@ -207,12 +214,12 @@ func TestDisableAndSeverityOverrides(t *testing.T) {
 		t.Logf("remaining findings:\n%s", out)
 	}
 
-	_, out, _ = run(t, "", "--severity", "missing-batch=warning", "--min-severity", "warning", validConfig)
+	_, out, _ = lint(t, "", "--severity", "missing-batch=warning", "--min-severity", "warning", validConfig)
 	if strings.Contains(out, "[missing-batch]") {
 		t.Errorf("the valid config should not be missing batch:\n%s", out)
 	}
 
-	if code, _, errOut := run(t, "", "--disable", "no-such-rule", badConfig); code != 2 ||
+	if code, _, errOut := lint(t, "", "--disable", "no-such-rule", badConfig); code != 2 ||
 		!strings.Contains(errOut, "unknown rule") {
 		t.Errorf("an unknown rule should be a usage error, got %d: %s", code, errOut)
 	}
@@ -226,11 +233,11 @@ func TestCollectorVersionSelectsTheCatalog(t *testing.T) {
 	src := "receivers:\n  otlp:\n    protocols:\n      grpc:\nexporters:\n  logging:\n" +
 		"service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [logging]\n"
 
-	if code, out, _ := run(t, src, "--collector-version", "v0.110.0", "--min-severity", "error", "-"); code != 0 {
+	if code, out, _ := lint(t, src, "--collector-version", "v0.110.0", "--min-severity", "error", "-"); code != 0 {
 		t.Errorf("logging should exist in v0.110.0, got exit %d:\n%s", code, out)
 	}
 
-	code, out, _ := run(t, src, "--collector-version", "v0.157.0", "-")
+	code, out, _ := lint(t, src, "--collector-version", "v0.157.0", "-")
 	if code != 1 || !strings.Contains(out, "unknown-component") {
 		t.Errorf("logging should be unknown in v0.157.0, got exit %d:\n%s", code, out)
 	}
@@ -239,7 +246,7 @@ func TestCollectorVersionSelectsTheCatalog(t *testing.T) {
 func TestUnknownVersionFallsBackToTheNearestOlder(t *testing.T) {
 	t.Parallel()
 
-	code, _, errOut := run(t, "", "--collector-version", "v0.155.0", "--min-severity", "error", validConfig)
+	code, _, errOut := lint(t, "", "--collector-version", "v0.155.0", "--min-severity", "error", validConfig)
 	if code != 0 {
 		t.Fatalf("want a fallback, got exit %d: %s", code, errOut)
 	}
@@ -267,7 +274,7 @@ func TestCatalogLocationOverridesTheBuiltins(t *testing.T) {
 	src := "receivers:\n  custom:\nexporters:\n  custom:\n" +
 		"service:\n  pipelines:\n    logs:\n      receivers: [custom]\n      exporters: [custom]\n"
 
-	code, out, errOut := run(t, src,
+	code, out, errOut := lint(t, src,
 		"--catalog-location", dir, "--collector-version", "v9.9.9", "--min-severity", "error", "-")
 	if code != 0 {
 		t.Errorf("a project catalog should be honoured, got exit %d:\n%s%s", code, out, errOut)
@@ -279,11 +286,11 @@ func TestIgnoreMissingSchemas(t *testing.T) {
 
 	src := "receivers:\n  mycorp_custom:\nexporters:\n  debug:\n" +
 		"service:\n  pipelines:\n    logs:\n      receivers: [mycorp_custom]\n      exporters: [debug]\n"
-	if code, _, _ := run(t, src, "-"); code != 1 {
+	if code, _, _ := lint(t, src, "-"); code != 1 {
 		t.Error("an unknown component should fail by default")
 	}
 
-	if code, out, _ := run(t, src, "--ignore-missing-schemas", "-"); code != 0 {
+	if code, out, _ := lint(t, src, "--ignore-missing-schemas", "-"); code != 0 {
 		t.Errorf("--ignore-missing-schemas should tolerate it, got exit %d:\n%s", code, out)
 	}
 }
@@ -293,11 +300,11 @@ func TestStrictPromotesUnknownFields(t *testing.T) {
 
 	src := "receivers:\n  otlp:\n    protocols:\n      grpc:\nexporters:\n  debug:\n    verbosty: normal\n" +
 		"service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [debug]\n"
-	if code, _, _ := run(t, src, "-"); code != 0 {
+	if code, _, _ := lint(t, src, "-"); code != 0 {
 		t.Error("an unknown field is only a warning by default")
 	}
 
-	if code, _, _ := run(t, src, "--strict", "-"); code != 1 {
+	if code, _, _ := lint(t, src, "--strict", "-"); code != 1 {
 		t.Error("--strict should make an unknown field fail")
 	}
 }
@@ -317,11 +324,11 @@ func TestSettingsFile(t *testing.T) {
 	src := "receivers:\n  otlp:\n    protocols:\n      grpc:\nexporters:\n  logging:\n" +
 		"service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [logging]\n"
 
-	if code, out, _ := run(t, src, "--config", path, "-"); code != 0 {
+	if code, out, _ := lint(t, src, "--config", path, "-"); code != 0 {
 		t.Errorf("the settings file should select v0.110.0, got exit %d:\n%s", code, out)
 	}
 
-	if code, _, errOut := run(t, "", "--config", filepath.Join(dir, "missing.yaml"), validConfig); code != 2 ||
+	if code, _, errOut := lint(t, "", "--config", filepath.Join(dir, "missing.yaml"), validConfig); code != 2 ||
 		!strings.Contains(errOut, "missing.yaml") {
 		t.Errorf("an explicit settings file must exist, got %d: %s", code, errOut)
 	}
@@ -346,7 +353,7 @@ func TestFlagsWinOverTheSettingsFile(t *testing.T) {
 	src := "receivers:\n  otlp:\n    protocols:\n      grpc:\nexporters:\n  logging:\n" +
 		"service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [logging]\n"
 
-	code, out, _ := run(t, src, "--config", path, "--collector-version", "v0.157.0", "-")
+	code, out, _ := lint(t, src, "--config", path, "--collector-version", "v0.157.0", "-")
 	if code != 1 || !strings.Contains(out, "unknown-component") {
 		t.Errorf("--collector-version should beat the settings file, got exit %d:\n%s", code, out)
 	}
@@ -366,7 +373,7 @@ func TestAnEmptySettingsFileKeepsTheDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, out, errOut := run(t, "", "--config", path, "--min-severity", "error", validConfig)
+	code, out, errOut := lint(t, "", "--config", path, "--min-severity", "error", validConfig)
 	if code != 0 {
 		t.Fatalf("exit %d, stdout=%q stderr=%q", code, out, errOut)
 	}
@@ -386,11 +393,11 @@ func TestExcludeSkipsFilesInADirectoryWalk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code, _, _ := run(t, "", dir); code != 1 {
+	if code, _, _ := lint(t, "", dir); code != 1 {
 		t.Error("the broken file should be linted without --exclude")
 	}
 
-	if code, _, errOut := run(t, "", "--exclude", "broken.yaml", dir); code != 2 ||
+	if code, _, errOut := lint(t, "", "--exclude", "broken.yaml", dir); code != 2 ||
 		!strings.Contains(errOut, "no YAML files") {
 		t.Errorf("--exclude should have skipped everything, got %d: %s", code, errOut)
 	}
@@ -419,7 +426,7 @@ func TestDirectoryWalkFindsEveryFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, out, errOut := run(t, "", "--summary", "--min-severity", "error", dir)
+	code, out, errOut := lint(t, "", "--summary", "--min-severity", "error", dir)
 	if code != 0 {
 		t.Fatalf("exit %d, stdout=%q stderr=%q", code, out, errOut)
 	}
@@ -530,10 +537,28 @@ func TestVersionTakesNoArguments(t *testing.T) {
 	}
 }
 
+// TestABareInvocationPrintsHelp pins that the root command does no work of its
+// own: with no subcommand there is nothing to run, so it lists the ones there
+// are instead of failing.
+func TestABareInvocationPrintsHelp(t *testing.T) {
+	t.Parallel()
+
+	code, out, errOut := run(t, "")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+
+	for _, want := range []string{"run", "list", "version"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the help should list %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestNoArgumentsPrintsUsage(t *testing.T) {
 	t.Parallel()
 
-	code, _, errOut := run(t, "")
+	code, _, errOut := lint(t, "")
 	if code != 2 || !strings.Contains(errOut, "Usage:") {
 		t.Errorf("want usage on exit 2, got %d: %s", code, errOut)
 	}
@@ -542,9 +567,20 @@ func TestNoArgumentsPrintsUsage(t *testing.T) {
 func TestAnUnknownFlagIsAUsageError(t *testing.T) {
 	t.Parallel()
 
-	code, _, errOut := run(t, "", "--no-such-flag", validConfig)
+	code, _, errOut := lint(t, "", "--no-such-flag", validConfig)
 	if code != 2 || !strings.Contains(errOut, "Usage:") {
 		t.Errorf("want usage on exit 2, got %d: %s", code, errOut)
+	}
+}
+
+// TestTheRootRejectsLintFlags pins that the lint flags moved to "run" rather
+// than being shared, so a stale command line fails loudly.
+func TestTheRootRejectsLintFlags(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := run(t, "", "--strict", validConfig)
+	if code != 2 || !strings.Contains(errOut, "unknown flag") {
+		t.Errorf("want a usage error, got %d: %s", code, errOut)
 	}
 }
 
@@ -553,7 +589,7 @@ func TestAnUnknownFlagIsAUsageError(t *testing.T) {
 func TestFindingsDoNotPrintUsage(t *testing.T) {
 	t.Parallel()
 
-	code, _, errOut := run(t, "", badConfig)
+	code, _, errOut := lint(t, "", badConfig)
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d", code)
 	}
@@ -566,7 +602,7 @@ func TestFindingsDoNotPrintUsage(t *testing.T) {
 func TestSummaryCountsFiles(t *testing.T) {
 	t.Parallel()
 
-	_, out, _ := run(t, "", "--summary", "--min-severity", "error", validConfig, badConfig)
+	_, out, _ := lint(t, "", "--summary", "--min-severity", "error", validConfig, badConfig)
 	if !strings.Contains(out, "2 file(s) checked, 1 valid, 1 invalid") {
 		t.Errorf("unexpected summary:\n%s", out)
 	}
@@ -577,7 +613,7 @@ func TestSummaryCountsFiles(t *testing.T) {
 func TestAFileNamedTwiceIsCheckedOnce(t *testing.T) {
 	t.Parallel()
 
-	_, out, _ := run(t, "", "--summary", "--min-severity", "error",
+	_, out, _ := lint(t, "", "--summary", "--min-severity", "error",
 		validConfig, filepath.Join(validConfig, "agent.yaml"))
 	if !strings.Contains(out, "1 file(s) checked") {
 		t.Errorf("the file should have been de-duplicated:\n%s", out)
@@ -589,8 +625,8 @@ func TestAFileNamedTwiceIsCheckedOnce(t *testing.T) {
 func TestReportOrderDoesNotDependOnArgumentOrder(t *testing.T) {
 	t.Parallel()
 
-	_, forwards, _ := run(t, "", "--output", "tap", validConfig, invalidConfig)
-	_, backwards, _ := run(t, "", "--output", "tap", invalidConfig, validConfig)
+	_, forwards, _ := lint(t, "", "--output", "tap", validConfig, invalidConfig)
+	_, backwards, _ := lint(t, "", "--output", "tap", invalidConfig, validConfig)
 
 	if forwards != backwards {
 		t.Errorf("argument order changed the report:\n%s\nvs\n%s", forwards, backwards)
