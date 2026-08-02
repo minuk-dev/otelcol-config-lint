@@ -443,12 +443,30 @@ func TestListRulesAndVersions(t *testing.T) {
 	}
 }
 
+// TestVersion pins that the subcommand and the built-in flag agree, so neither
+// can drift into printing something different.
 func TestVersion(t *testing.T) {
 	t.Parallel()
 
-	code, out, _ := run(t, "", "--version")
-	if code != 0 || !strings.Contains(out, "otelcol-config-lint ") {
-		t.Errorf("--version output looks wrong (exit %d):\n%s", code, out)
+	code, out, errOut := run(t, "", "version")
+	if code != 0 || !strings.HasPrefix(out, "otelcol-config-lint ") {
+		t.Errorf("version output looks wrong (exit %d): %q %q", code, out, errOut)
+	}
+
+	code, flagOut, _ := run(t, "", "--version")
+	if code != 0 || flagOut != out {
+		t.Errorf("--version should match the subcommand (exit %d): %q vs %q", code, flagOut, out)
+	}
+}
+
+// TestVersionTakesNoArguments keeps the subcommand from silently swallowing a
+// path the user meant to lint.
+func TestVersionTakesNoArguments(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := run(t, "", "version", validConfig)
+	if code != 2 || !strings.Contains(errOut, validConfig) {
+		t.Errorf("want the stray argument reported on exit 2, got %d: %s", code, errOut)
 	}
 }
 

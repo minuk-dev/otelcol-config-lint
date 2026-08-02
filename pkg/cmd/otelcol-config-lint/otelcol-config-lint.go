@@ -26,11 +26,6 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/termutil"
 )
 
-// Version is the linter's own version.
-//
-//nolint:gochecknoglobals // injected at build time with -ldflags
-var Version = "dev"
-
 // Errors reported for bad flag values.
 var (
 	// ErrUnknownRule names a rule that does not exist.
@@ -102,7 +97,6 @@ type Options struct {
 	exitOnError      bool
 	listRules        bool
 	listVersions     bool
-	showVersion      bool
 
 	// internal state
 	store catalog.Store
@@ -116,8 +110,9 @@ func NewCommand(opts *Options) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
-		Use:   "otelcol-config-lint [flags] <file|dir|->...",
-		Short: "Validate OpenTelemetry Collector config files against a specific collector release",
+		Use:     "otelcol-config-lint [flags] <file|dir|->...",
+		Short:   "Validate OpenTelemetry Collector config files against a specific collector release",
+		Version: Version,
 		Example: `  otelcol-config-lint config.yaml
   otelcol-config-lint --collector-version v0.157.0 --summary ./configs
   cat config.yaml | otelcol-config-lint -
@@ -143,6 +138,12 @@ func NewCommand(opts *Options) *cobra.Command {
 			return nil
 		},
 	}
+
+	// Setting Version above gives the root command a built-in --version flag;
+	// this keeps it printing what the "version" subcommand prints.
+	cmd.SetVersionTemplate(versionTemplate)
+
+	cmd.AddCommand(newVersionCommand())
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		cmd.PrintErr(cmd.UsageString())
@@ -190,7 +191,6 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.exitOnError, "exit-on-error", false, "stop at the first file that fails")
 	flags.BoolVar(&o.listRules, "list-rules", false, "print the rules and their default severities, then exit")
 	flags.BoolVar(&o.listVersions, "list-versions", false, "print the available catalog versions, then exit")
-	flags.BoolVar(&o.showVersion, "version", false, "print the linter version, then exit")
 }
 
 // Prepare folds the settings file into the parsed flags and builds the catalog
@@ -211,10 +211,6 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 // Run dispatches to whichever mode the flags asked for.
 func (o *Options) Run(cmd *cobra.Command, args []string) error {
 	switch {
-	case o.showVersion:
-		cmd.Printf("otelcol-config-lint %s\n", Version)
-
-		return nil
 	case o.listVersions:
 		err := o.runListVersions(cmd)
 		if err != nil {
