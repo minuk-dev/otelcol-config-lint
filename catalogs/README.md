@@ -6,17 +6,20 @@ stability, the distributions carrying it, and its Go module.
 
 ```
 catalogs/
-  index.json                 what this registry can serve
-  all/v0.157.0.{yaml,json}   324 components — every distribution merged
-  core/…                      32
-  contrib/…                  323
-  k8s/…                       83
-  otlp/…                       5
+  index.json                     what this registry can serve
+  contrib/v0.157.0.{yaml,json}   323 components — the default
+  core/…                          32
+  k8s/…                           83
+  otlp/…                           5
 ```
 
-`all` is the union and the default: it is what the linter checks against unless
-a distribution is chosen. The others hold only what that binary ships, so a
-config using `filelog` resolves against `contrib` and not against `core`.
+Each holds only what that binary ships, so a config using `filelog` resolves
+against `contrib` and not against `core`. There is deliberately no merged
+catalog: it would be exactly these put back together, no collector ships it,
+and checking against one could only ever hide a component the binary lacks.
+
+`contrib` is the default, being the distribution most collectors are built
+from and the widest published one.
 
 Each catalog is written twice with identical content:
 
@@ -29,9 +32,12 @@ Both are accepted wherever a catalog is read.
 directory could be listed instead, but a remote registry cannot, so it publishes
 the answer as a file:
 
+Coverage differs between distributions, so versions are listed per
+distribution — upstream had no `otlp` distribution before v0.120.0:
+
 ```json
-{"distributions": ["all", "contrib", "core", "k8s", "otlp"],
- "versions": ["v0.157.0", "v0.150.0", "v0.140.0", "v0.130.0", "v0.120.0", "v0.110.0"]}
+{"distributions": {"contrib": ["v0.157.0", "…", "v0.110.0"],
+                   "otlp":    ["v0.157.0", "…", "v0.120.0"]}}
 ```
 
 ## Using them without installing anything

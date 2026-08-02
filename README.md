@@ -135,8 +135,9 @@ left alone.
 in both YAML (the readable form, meant to be reviewed in pull requests) and
 JSON. They are
 generated from the `metadata.yaml` that every upstream component ships, across
-**both core and contrib** — 324 components for v0.157.0, split into one catalog
-per distribution (`all`, `core`, `contrib`, `k8s`, `otlp`).
+**both core and contrib**, split into one catalog per distribution:
+`contrib` (323 components for v0.157.0, the default), `core` (32), `k8s` (83)
+and `otlp` (5).
 
 ```yaml
 components:

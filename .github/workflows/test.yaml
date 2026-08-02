@@ -47,12 +47,19 @@ jobs:
         run: |
           go run ./cmd/otelcol-config-lint list versions --catalog-location catalogs
           # The index is the authoritative list, so this survives a layout
-          # change. Both formats are read from disk rather than from the
-          # built-ins, which is what checks the generated files themselves.
-          for version in $(jq -r '.versions[]' catalogs/index.json); do
+          # change. Every distribution and format is read from disk rather than
+          # from the built-ins: the generated files are what this job checks.
+          # The fixture is not written for every distribution -- core does not
+          # ship what it uses -- so missing schemas are tolerated here. What is
+          # being checked is that each generated file parses and drives the
+          # rules, not that one config suits every binary.
+          jq -r '.distributions | to_entries[] | .key as $d | .value[] | "\($d) \(.)"' \
+            catalogs/index.json |
+          while read -r distribution version; do
             for format in yaml json; do
               go run ./cmd/otelcol-config-lint run \
-                --catalog-location "catalogs/{{.Distribution}}/{{.Version}}.${format}" \
-                --collector-version "${version}" --min-severity error testdata/valid
+                --catalog-location "catalogs/${distribution}/${version}.${format}" \
+                --collector-version "${version}" --min-severity error \
+                --ignore-missing-schemas testdata/valid
             done
           done

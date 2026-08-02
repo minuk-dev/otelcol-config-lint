@@ -192,7 +192,6 @@ func TestRemoteLocation(t *testing.T) {
 
 // The distributions the registry helper below publishes.
 const (
-	distAll     = "all"
 	distCore    = "core"
 	distContrib = "contrib"
 
@@ -212,10 +211,9 @@ func registry(t *testing.T, root string) {
 	)
 
 	write(t, filepath.Join(root, catalog.IndexFile),
-		`{"distributions":{"all":["v0.157.0"],"core":["v0.157.0"],"contrib":["v0.157.0"]}}`)
+		`{"distributions":{"core":["v0.157.0"],"contrib":["v0.157.0"]}}`)
 
 	for dist, comps := range map[string]string{
-		distAll:     both,
 		distCore:    otlp,
 		distContrib: both,
 	} {
@@ -238,7 +236,7 @@ func TestRegistryDirectorySelectsTheDistribution(t *testing.T) {
 	root := t.TempDir()
 	registry(t, root)
 
-	for dist, want := range map[string]int{"": 2, distAll: 2, distCore: 1, distContrib: 2} {
+	for dist, want := range map[string]int{"": 2, distCore: 1, distContrib: 2} {
 		store := catalog.Store{Locations: []string{root}, Distribution: dist}
 
 		cat, err := store.Load("v0.157.0")
@@ -277,7 +275,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/" + catalog.IndexFile:
-			_, _ = w.Write([]byte(`{"distributions":{"all":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`))
+			_, _ = w.Write([]byte(`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`))
 		case "/core/v0.157.0.yaml":
 			_, _ = w.Write([]byte("collectorVersion: v0.157.0\ndistribution: core\ncomponents: {}\n"))
 		default:
@@ -313,7 +311,7 @@ func TestIndexVersionsArePerDistribution(t *testing.T) {
 	registry(t, root)
 
 	write(t, filepath.Join(root, catalog.IndexFile),
-		`{"distributions":{"all":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`)
+		`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`)
 
 	store := catalog.Store{Locations: []string{root}, Distribution: distCore}
 	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
@@ -321,27 +319,27 @@ func TestIndexVersionsArePerDistribution(t *testing.T) {
 	}
 
 	if got := (catalog.Store{Locations: []string{root}}).Versions(); len(got) != 2 {
-		t.Errorf("all should still see both releases, got %v", got)
+		t.Errorf("the default distribution should see both releases, got %v", got)
 	}
 }
 
-// TestTheBuiltInsRefuseANarrowerDistribution pins that the embedded union is
-// never passed off as a narrower distribution. "default" is also the usual
+// TestTheBuiltInsRefuseAnotherDistribution pins that the embedded default is
+// never passed off as another distribution. "default" is also the usual
 // fallback in a repeated --catalog-location, so widening here would let a
 // contrib-only component pass a core check.
-func TestTheBuiltInsRefuseANarrowerDistribution(t *testing.T) {
+func TestTheBuiltInsRefuseAnotherDistribution(t *testing.T) {
 	t.Parallel()
 
 	store := catalog.Store{Distribution: distCore}
 
 	_, err := store.Load(latestVersion)
 	if err == nil {
-		t.Fatal("the built-ins hold only the union, so core must not resolve")
+		t.Fatal("the built-ins hold only the default distribution, so core must not resolve")
 	}
 
 	_, err = (catalog.Store{}).Load(latestVersion)
 	if err != nil {
-		t.Errorf("the union should still resolve: %v", err)
+		t.Errorf("the default distribution should still resolve: %v", err)
 	}
 }
 

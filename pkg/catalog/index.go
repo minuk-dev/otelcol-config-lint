@@ -11,10 +11,10 @@ import (
 // IndexFile is the name a registry publishes its index under.
 const IndexFile = "index.json"
 
-// AllDistributions is the catalog holding every component, whichever
-// distribution ships it. It is what the linter checked against before
-// distributions were modelled at all, so it stays the default.
-const AllDistributions = "all"
+// DefaultDistribution is checked against when none is chosen. It is the
+// distribution most collectors are built from, and the widest published one, so
+// it is the least likely to report a component the running binary does have.
+const DefaultDistribution = "contrib"
 
 // Index lists what a registry can serve. A directory can be listed to work that
 // out, but a remote registry cannot, so it publishes the answer as a file.

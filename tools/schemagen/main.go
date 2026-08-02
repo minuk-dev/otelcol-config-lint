@@ -156,10 +156,11 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 }
 
 // writeDistributions splits a merged catalog into one file per distribution,
-// under "<out>/<distribution>/<version>.<format>". The union is written too,
-// as the "all" distribution.
+// under "<out>/<distribution>/<version>.<format>". No union is written: it
+// would be exactly the distributions put back together, and no collector ships
+// it, so checking against one could only hide a component the binary lacks.
 func writeDistributions(outDir string, cat *catalog.Catalog, formats []string) error {
-	for _, dist := range append([]string{catalog.AllDistributions}, distributionsIn(cat)...) {
+	for _, dist := range distributionsIn(cat) {
 		sub := filterDistribution(cat, dist)
 
 		dir := filepath.Join(outDir, dist)
@@ -208,7 +209,7 @@ func distributionsIn(cat *catalog.Catalog) []string {
 }
 
 // filterDistribution copies the catalog down to the components one
-// distribution ships. "all" keeps everything.
+// distribution ships.
 func filterDistribution(cat *catalog.Catalog, dist string) *catalog.Catalog {
 	out := *cat
 	out.Distribution = dist
@@ -216,7 +217,7 @@ func filterDistribution(cat *catalog.Catalog, dist string) *catalog.Catalog {
 
 	for kind, byType := range cat.Components {
 		for typ, comp := range byType {
-			if dist != catalog.AllDistributions && !slices.Contains(comp.Distributions, dist) {
+			if !slices.Contains(comp.Distributions, dist) {
 				continue
 			}
 

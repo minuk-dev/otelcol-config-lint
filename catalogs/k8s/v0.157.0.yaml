@@ -3,7 +3,7 @@ distribution: k8s
 distributions:
   - core
   - contrib
-generatedAt: "2026-08-02T06:51:02Z"
+generatedAt: "2026-08-02T06:54:57Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector

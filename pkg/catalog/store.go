@@ -60,7 +60,7 @@ const defaultFetchTimeout = 30 * time.Second
 type Store struct {
 	Locations []string
 	// Distribution selects which collector binary to describe. An empty value
-	// means AllDistributions, the union of every distribution.
+	// means DefaultDistribution.
 	Distribution string
 	// HTTPClient fetches remote locations. A nil client uses a default with a
 	// 30 second timeout.
@@ -120,10 +120,10 @@ func (s Store) Load(version string) (*Catalog, error) {
 	return nil, &UnknownVersionError{Version: version, Available: s.Versions(), Tried: tried}
 }
 
-// distribution returns the distribution to serve, defaulting to "all".
+// distribution returns the distribution to serve.
 func (s Store) distribution() string {
 	if s.Distribution == "" {
-		return AllDistributions
+		return DefaultDistribution
 	}
 
 	return s.Distribution
@@ -134,7 +134,7 @@ func (s Store) distribution() string {
 func (s Store) versionsAt(loc string) []string {
 	switch kindOf(loc) {
 	case locEmbedded:
-		entries, _ := fs.ReadDir(catalogs.FS, AllDistributions)
+		entries, _ := fs.ReadDir(catalogs.FS, DefaultDistribution)
 
 		out := make([]string, 0, len(entries))
 		for _, e := range entries {
@@ -216,15 +216,16 @@ var (
 func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 	switch kindOf(loc) {
 	case locEmbedded:
-		// Only the union is embedded, so any other distribution has to come
-		// from a location that actually carries it. Answering with the union
-		// would silently widen a narrower request.
-		if s.distribution() != AllDistributions {
+		// Only the default distribution is embedded, so any other one has to
+		// come from a location that actually carries it. Answering with a
+		// wider distribution would silently accept components the requested
+		// binary does not ship.
+		if s.distribution() != DefaultDistribution {
 			return nil, errNotFound
 		}
 
 		for _, ext := range extensions() {
-			f, err := catalogs.FS.Open(path.Join(AllDistributions, version+ext))
+			f, err := catalogs.FS.Open(path.Join(DefaultDistribution, version+ext))
 			if err != nil {
 				continue
 			}
