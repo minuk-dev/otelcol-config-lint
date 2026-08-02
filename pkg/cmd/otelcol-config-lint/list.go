@@ -57,7 +57,7 @@ func (o *Options) newListRulesCommand() *cobra.Command {
 func (o *Options) newListVersionsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "versions",
-		Short: "Print the available catalog versions",
+		Short: "Print the available schema versions",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := o.Prepare(cmd)
@@ -70,7 +70,7 @@ func (o *Options) newListVersionsCommand() *cobra.Command {
 	}
 
 	o.registerSettingsFlag(cmd)
-	o.registerCatalogLocationFlag(cmd)
+	o.registerSchemaLocationFlag(cmd)
 
 	return cmd
 }
@@ -102,7 +102,7 @@ func (o *Options) runListRules(cmd *cobra.Command) error {
 func (o *Options) runListVersions(cmd *cobra.Command) error {
 	versions := o.store.Versions()
 	if len(versions) == 0 {
-		return ErrNoCatalogs
+		return ErrNoSchemas
 	}
 
 	w := newColumns(cmd.OutOrStdout())

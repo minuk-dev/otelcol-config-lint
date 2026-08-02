@@ -1,12 +1,12 @@
 package rule
 
 import (
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
-// componentRules check declarations against the targeted release's catalog.
+// componentRules check declarations against the targeted release's schema.
 func componentRules() []Rule {
 	return []Rule{
 		unknownComponent{base{"unknown-component",
@@ -20,32 +20,32 @@ func componentRules() []Rule {
 	}
 }
 
-// Availability reports which catalog versions ship a component type. It lets
+// Availability reports which schema versions ship a component type. It lets
 // rules explain that a component exists, just not in the targeted release.
 type Availability interface {
-	// Versions returns the catalog versions containing the component, oldest
+	// Versions returns the schema versions containing the component, oldest
 	// first.
 	Versions(k config.Kind, typ string) []string
 }
 
-// catalogReady reports whether a catalog with components was resolved. Rules
-// that consult the catalog stay silent otherwise rather than reporting every
+// schemaReady reports whether a schema with components was resolved. Rules
+// that consult the schema stay silent otherwise rather than reporting every
 // component as unknown.
-func (c *Context) catalogReady() bool { return c.Catalog != nil && c.Catalog.Count() > 0 }
+func (c *Context) schemaReady() bool { return c.Schema != nil && c.Schema.Count() > 0 }
 
 // version is the targeted collector release, for use in messages.
 func (c *Context) version() string {
-	if c.Catalog == nil || c.Catalog.CollectorVersion == "" {
+	if c.Schema == nil || c.Schema.CollectorVersion == "" {
 		return "the targeted release"
 	}
 
-	return "collector " + c.Catalog.CollectorVersion
+	return "collector " + c.Schema.CollectorVersion
 }
 
 type unknownComponent struct{ base }
 
 func (r unknownComponent) Check(ctx *Context) {
-	if !ctx.catalogReady() {
+	if !ctx.schemaReady() {
 		return
 	}
 
@@ -56,7 +56,7 @@ func (r unknownComponent) Check(ctx *Context) {
 		}
 
 		for _, c := range sec.Components {
-			if _, ok := ctx.Catalog.Lookup(kind, c.ID.Type); ok {
+			if _, ok := ctx.Schema.Lookup(kind, c.ID.Type); ok {
 				continue
 			}
 
@@ -77,7 +77,7 @@ func unknownHint(ctx *Context, kind config.Kind, typ string) string {
 			continue
 		}
 
-		if _, ok := ctx.Catalog.Lookup(other, typ); ok {
+		if _, ok := ctx.Schema.Lookup(other, typ); ok {
 			return quote(typ) + " is " + article(string(other)) + " " + string(other) +
 				"; declare it under " + other.Section()
 		}
@@ -86,17 +86,17 @@ func unknownHint(ctx *Context, kind config.Kind, typ string) string {
 	if ctx.Avail != nil {
 		if versions := ctx.Avail.Versions(kind, typ); len(versions) > 0 {
 			return quote(typ) + " exists in " + list(versions) +
-				" but not in " + ctx.Catalog.CollectorVersion
+				" but not in " + ctx.Schema.CollectorVersion
 		}
 	}
 
-	return "checked against " + ctx.version() + suggest(typ, ctx.Catalog.Types(kind))
+	return "checked against " + ctx.version() + suggest(typ, ctx.Schema.Types(kind))
 }
 
 type signalSupport struct{ base }
 
 func (r signalSupport) Check(ctx *Context) {
-	if !ctx.catalogReady() {
+	if !ctx.schemaReady() {
 		return
 	}
 
@@ -112,7 +112,7 @@ func (r signalSupport) Check(ctx *Context) {
 					continue // undefinedReference reports this
 				}
 
-				comp, known := ctx.Catalog.Lookup(decl.Kind, ref.ID.Type)
+				comp, known := ctx.Schema.Lookup(decl.Kind, ref.ID.Type)
 				if !known {
 					continue // unknownComponent reports this
 				}
@@ -135,7 +135,7 @@ func (r signalSupport) Check(ctx *Context) {
 // supports reports whether a component can sit in a pipeline slot for a signal.
 // Connectors are directional: the exporter side consumes the pipeline's signal,
 // the receiver side produces it.
-func supports(comp *catalog.Component, declKind, slot config.Kind, s config.Signal) bool {
+func supports(comp *schema.Component, declKind, slot config.Kind, s config.Signal) bool {
 	if declKind != config.KindConnector {
 		return comp.Supports(s)
 	}
@@ -153,11 +153,11 @@ func supports(comp *catalog.Component, declKind, slot config.Kind, s config.Sign
 type componentStability struct{ base }
 
 func (r componentStability) Check(ctx *Context) {
-	if !ctx.catalogReady() {
+	if !ctx.schemaReady() {
 		return
 	}
 
-	eachUsedComponent(ctx, func(c config.Component, comp *catalog.Component) {
+	eachUsedComponent(ctx, func(c config.Component, comp *schema.Component) {
 		for _, s := range usedSignals(ctx, c) {
 			level, ok := comp.StabilityFor(s)
 			if !ok {
@@ -167,13 +167,13 @@ func (r componentStability) Check(ctx *Context) {
 			subject := string(c.Kind) + " " + quote(c.ID.Type) + forSignal(s)
 
 			switch level {
-			case catalog.Development:
+			case schema.Development:
 				ctx.Report(Finding{
 					Node: c.KeyNode, Path: c.Kind.Section() + "." + c.ID.String(),
 					Message:  subject + " is in development and may change without notice",
 					Severity: diag.Warning,
 				})
-			case catalog.Alpha:
+			case schema.Alpha:
 				ctx.Report(Finding{
 					Node: c.KeyNode, Path: c.Kind.Section() + "." + c.ID.String(),
 					Message: subject + " is alpha; its configuration can change between releases",
@@ -191,11 +191,11 @@ func (r componentStability) Check(ctx *Context) {
 type deprecatedComponent struct{ base }
 
 func (r deprecatedComponent) Check(ctx *Context) {
-	if !ctx.catalogReady() {
+	if !ctx.schemaReady() {
 		return
 	}
 
-	eachUsedComponent(ctx, func(c config.Component, comp *catalog.Component) {
+	eachUsedComponent(ctx, func(c config.Component, comp *schema.Component) {
 		path := c.Kind.Section() + "." + c.ID.String()
 		if comp.Deprecated != "" {
 			ctx.Report(Finding{
@@ -208,7 +208,7 @@ func (r deprecatedComponent) Check(ctx *Context) {
 		}
 
 		for _, level := range comp.Stability {
-			if level == catalog.Deprecated || level == catalog.Unmaintained {
+			if level == schema.Deprecated || level == schema.Unmaintained {
 				ctx.Report(Finding{
 					Node: c.KeyNode, Path: path,
 					Message: string(c.Kind) + " " + quote(c.ID.Type) + " is marked " + string(level) + " upstream",
@@ -222,8 +222,8 @@ func (r deprecatedComponent) Check(ctx *Context) {
 }
 
 // eachUsedComponent visits every declared component that the service block
-// actually references, together with its catalog entry.
-func eachUsedComponent(ctx *Context, visit func(config.Component, *catalog.Component)) {
+// actually references, together with its schema entry.
+func eachUsedComponent(ctx *Context, visit func(config.Component, *schema.Component)) {
 	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
 		if sec == nil {
@@ -235,7 +235,7 @@ func eachUsedComponent(ctx *Context, visit func(config.Component, *catalog.Compo
 				continue
 			}
 
-			if comp, ok := ctx.Catalog.Lookup(kind, c.ID.Type); ok {
+			if comp, ok := ctx.Schema.Lookup(kind, c.ID.Type); ok {
 				visit(c, comp)
 			}
 		}

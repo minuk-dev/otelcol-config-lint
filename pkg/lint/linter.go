@@ -7,10 +7,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // Status is the outcome of linting one file.
@@ -48,8 +48,8 @@ func (r Result) Message() string {
 
 // Options configures a Linter.
 type Options struct {
-	// Catalog describes the collector release to check against.
-	Catalog *catalog.Catalog
+	// Schema describes the collector release to check against.
+	Schema *schema.Schema
 	// Availability lets diagnostics mention other releases. May be nil.
 	Availability rule.Availability
 	// Severities overrides the level individual rules report at. A value of
@@ -57,7 +57,7 @@ type Options struct {
 	Severities map[string]diag.Severity
 	// Strict makes lenient rules report as errors, like kubeconform -strict.
 	Strict bool
-	// IgnoreMissingSchemas keeps components that are absent from the catalog
+	// IgnoreMissingSchemas keeps components that are absent from the schema
 	// from failing the run, for configs using a custom distribution.
 	IgnoreMissingSchemas bool
 	// MinSeverity drops diagnostics less serious than this level.
@@ -82,8 +82,8 @@ func New(opts Options) *Linter {
 		opts.FailOn = diag.Error
 	}
 
-	if opts.Catalog == nil {
-		opts.Catalog = &catalog.Catalog{}
+	if opts.Schema == nil {
+		opts.Schema = &schema.Schema{}
 	}
 
 	if opts.IgnoreMissingSchemas {
@@ -148,11 +148,11 @@ func (l *Linter) Lint(path string, src []byte) Result {
 	}
 
 	ctx := rule.Context{
-		File:    f,
-		Catalog: l.opts.Catalog,
-		Index:   rule.NewIndex(f),
-		Avail:   l.opts.Availability,
-		Strict:  l.opts.Strict,
+		File:   f,
+		Schema: l.opts.Schema,
+		Index:  rule.NewIndex(f),
+		Avail:  l.opts.Availability,
+		Strict: l.opts.Strict,
 	}
 
 	var found diag.Diagnostics

@@ -1,6 +1,6 @@
-// Package catalog describes which components exist in a given collector
+// Package schema describes which components exist in a given collector
 // release, and what each of them accepts.
-package catalog
+package schema
 
 import (
 	"encoding/json"
@@ -17,12 +17,12 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
-// Catalog is the component inventory of one collector release, as shipped by
+// Schema is the component inventory of one collector release, as shipped by
 // one distribution.
-type Catalog struct {
+type Schema struct {
 	// CollectorVersion is the upstream release tag, e.g. "v0.157.0".
 	CollectorVersion string `json:"collectorVersion" yaml:"collectorVersion"`
-	// Distribution names the binary this catalog describes, e.g. "core". The
+	// Distribution names the binary this schema describes, e.g. "core". The
 	// special value "all" is the union of every distribution.
 	Distribution string `json:"distribution,omitempty" yaml:"distribution,omitempty"`
 	// Distributions lists which upstream distributions were merged in.
@@ -104,7 +104,7 @@ type Field struct {
 }
 
 // Lookup returns the component of the given kind and type.
-func (c *Catalog) Lookup(k config.Kind, typ string) (*Component, bool) {
+func (c *Schema) Lookup(k config.Kind, typ string) (*Component, bool) {
 	byType, ok := c.Components[k]
 	if !ok {
 		return nil, false
@@ -116,7 +116,7 @@ func (c *Catalog) Lookup(k config.Kind, typ string) (*Component, bool) {
 }
 
 // Types returns every component type of a kind, sorted.
-func (c *Catalog) Types(k config.Kind) []string {
+func (c *Schema) Types(k config.Kind) []string {
 	out := make([]string, 0, len(c.Components[k]))
 	for t := range c.Components[k] {
 		out = append(out, t)
@@ -127,8 +127,8 @@ func (c *Catalog) Types(k config.Kind) []string {
 	return out
 }
 
-// Count returns the total number of components in the catalog.
-func (c *Catalog) Count() int {
+// Count returns the total number of components in the schema.
+func (c *Schema) Count() int {
 	n := 0
 	for _, byType := range c.Components {
 		n += len(byType)
@@ -217,26 +217,26 @@ func (comp *Component) StabilityFor(s config.Signal) (Stability, bool) {
 	return "", false
 }
 
-// yamlIndent keeps the generated catalogs readable in review.
+// yamlIndent keeps the generated schemas readable in review.
 const yamlIndent = 2
 
-// errEmptyCatalog reports a catalog file with no document in it.
-var errEmptyCatalog = errors.New("decode catalog: empty document")
+// errEmptySchema reports a schema file with no document in it.
+var errEmptySchema = errors.New("decode schema: empty document")
 
-// Format is a catalog serialisation format.
+// Format is a schema serialisation format.
 type Format string
 
-// The formats a catalog can be written in. YAML is the human-readable form
+// The formats a schema can be written in. YAML is the human-readable form
 // kept in the repository; JSON is offered for tools that prefer it.
 const (
 	YAML Format = "yaml"
 	JSON Format = "json"
 )
 
-// Read decodes a catalog. Both YAML and JSON are accepted, since JSON is valid
+// Read decodes a schema. Both YAML and JSON are accepted, since JSON is valid
 // YAML, so callers do not have to know which form they were handed.
-func Read(r io.Reader) (*Catalog, error) {
-	var c Catalog
+func Read(r io.Reader) (*Schema, error) {
+	var c Schema
 
 	dec := yaml.NewDecoder(r)
 	dec.KnownFields(true)
@@ -244,10 +244,10 @@ func Read(r io.Reader) (*Catalog, error) {
 	err := dec.Decode(&c)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, errEmptyCatalog
+			return nil, errEmptySchema
 		}
 
-		return nil, fmt.Errorf("decode catalog: %w", err)
+		return nil, fmt.Errorf("decode schema: %w", err)
 	}
 
 	if c.Components == nil {
@@ -265,11 +265,11 @@ func Read(r io.Reader) (*Catalog, error) {
 	return &c, nil
 }
 
-// ReadFile decodes a catalog from a file on disk.
-func ReadFile(path string) (*Catalog, error) {
+// ReadFile decodes a schema from a file on disk.
+func ReadFile(path string) (*Schema, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open catalog: %w", err)
+		return nil, fmt.Errorf("open schema: %w", err)
 	}
 
 	defer func() { _ = f.Close() }()
@@ -282,15 +282,15 @@ func ReadFile(path string) (*Catalog, error) {
 	return c, nil
 }
 
-// Write encodes the catalog in the given format. An empty format writes YAML.
-func (c *Catalog) Write(w io.Writer, format Format) error {
+// Write encodes the schema in the given format. An empty format writes YAML.
+func (c *Schema) Write(w io.Writer, format Format) error {
 	if format == JSON {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 
 		err := enc.Encode(c)
 		if err != nil {
-			return fmt.Errorf("encode catalog as json: %w", err)
+			return fmt.Errorf("encode schema as json: %w", err)
 		}
 
 		return nil
@@ -301,12 +301,12 @@ func (c *Catalog) Write(w io.Writer, format Format) error {
 
 	err := enc.Encode(c)
 	if err != nil {
-		return fmt.Errorf("encode catalog as yaml: %w", err)
+		return fmt.Errorf("encode schema as yaml: %w", err)
 	}
 
 	err = enc.Close()
 	if err != nil {
-		return fmt.Errorf("flush catalog: %w", err)
+		return fmt.Errorf("flush schema: %w", err)
 	}
 
 	return nil

@@ -8,7 +8,7 @@ codeToTestRatio:
   code:
     - "**/*.go"
     - "!**/*_test.go"
-    - "!catalogs/**"
+    - "!schemas/**"
   test:
     - "**/*_test.go"
 comment:
