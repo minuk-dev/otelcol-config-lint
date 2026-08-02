@@ -432,14 +432,74 @@ func TestDirectoryWalkFindsEveryFile(t *testing.T) {
 func TestListRulesAndVersions(t *testing.T) {
 	t.Parallel()
 
-	code, out, _ := run(t, "", "--list-rules")
+	code, out, _ := run(t, "", "list", "rules")
 	if code != 0 || !strings.Contains(out, "unknown-component") {
-		t.Errorf("--list-rules output looks wrong (exit %d):\n%s", code, out)
+		t.Errorf("list rules output looks wrong (exit %d):\n%s", code, out)
 	}
 
-	code, out, _ = run(t, "", "--list-versions")
+	code, out, _ = run(t, "", "list", "versions")
 	if code != 0 || !strings.Contains(out, "(latest)") || !strings.Contains(out, "components") {
-		t.Errorf("--list-versions output looks wrong (exit %d):\n%s", code, out)
+		t.Errorf("list versions output looks wrong (exit %d):\n%s", code, out)
+	}
+}
+
+// TestListRulesHonoursTheSeverityFlags pins that the overrides still reach the
+// listing now that it is a subcommand with its own flag set.
+func TestListRulesHonoursTheSeverityFlags(t *testing.T) {
+	t.Parallel()
+
+	code, out, errOut := run(t, "", "list", "rules", "--severity", "missing-batch=error")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+
+	if !strings.Contains(out, "(overridden)") {
+		t.Errorf("--severity should be marked as an override:\n%s", out)
+	}
+
+	if code, _, errOut := run(t, "", "list", "rules", "--disable", "no-such-rule"); code != 2 ||
+		!strings.Contains(errOut, "unknown rule") {
+		t.Errorf("an unknown rule should be a usage error, got %d: %s", code, errOut)
+	}
+}
+
+// TestListVersionsHonoursTheCatalogLocation pins that the subcommand reports
+// the catalogs the run would actually use, not only the built-in ones.
+func TestListVersionsHonoursTheCatalogLocation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	catalogJSON := `{"collectorVersion":"v9.9.9","components":{}}`
+
+	err := os.WriteFile(filepath.Join(dir, "v9.9.9.json"), []byte(catalogJSON), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errOut := run(t, "", "list", "versions", "--catalog-location", dir)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+
+	if !strings.Contains(out, "v9.9.9") {
+		t.Errorf("a project catalog should be listed:\n%s", out)
+	}
+}
+
+// TestListSubcommandsRejectLintFlags pins the point of the split: the listings
+// no longer advertise or accept the flags that only shape a lint run.
+func TestListSubcommandsRejectLintFlags(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"list", "rules", "--strict"},
+		{"list", "versions", "--output", "json"},
+	} {
+		code, _, errOut := run(t, "", args...)
+		if code != 2 || !strings.Contains(errOut, "unknown flag") {
+			t.Errorf("%v should be a usage error, got %d: %s", args, code, errOut)
+		}
 	}
 }
 
