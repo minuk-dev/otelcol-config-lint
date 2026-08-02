@@ -1,4 +1,4 @@
-package catalog
+package schema
 
 import (
 	"context"
@@ -15,20 +15,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minuk-dev/otelcol-config-lint/catalogs"
+	"github.com/minuk-dev/otelcol-config-lint/schemas"
 )
 
-// Extensions returns the catalog file suffixes, in preference order. The
+// Extensions returns the schema file suffixes, in preference order. The
 // readable form comes first, so a location carrying both serves the YAML.
 func Extensions() []string { return []string{".yaml", ".yml", ".json"} }
 
 // extensions is the unexported spelling used throughout this package.
 func extensions() []string { return Extensions() }
 
-// Latest selects the newest catalog available in a store.
+// Latest selects the newest schema available in a store.
 const Latest = "latest"
 
-// Default names the catalogs built into the binary. It can be listed among a
+// Default names the schemas built into the binary. It can be listed among a
 // store's locations to control where the built-ins are consulted.
 const Default = "default"
 
@@ -40,16 +40,16 @@ const VersionPlaceholder = "{{.Version}}"
 // location template, e.g. "https://example.com/otel/{{.Distribution}}/{{.Version}}.json".
 const DistributionPlaceholder = "{{.Distribution}}"
 
-// defaultFetchTimeout bounds a remote catalog download when the caller has not
+// defaultFetchTimeout bounds a remote schema download when the caller has not
 // supplied its own client.
 const defaultFetchTimeout = 30 * time.Second
 
-// Store resolves collector versions to catalogs. The zero value serves the
-// catalogs embedded in the binary.
+// Store resolves collector versions to schemas. The zero value serves the
+// schemas embedded in the binary.
 //
 // A location is one of:
 //
-//   - "default", the catalogs embedded in the binary;
+//   - "default", the schemas embedded in the binary;
 //   - a directory, searched for "<version>.json";
 //   - a template containing {{.Version}}, resolved as a local path or, when it
 //     starts with http:// or https://, fetched over HTTP.
@@ -67,7 +67,7 @@ type Store struct {
 	HTTPClient *http.Client
 }
 
-// Versions lists every catalog the store can serve, newest first. Templated and
+// Versions lists every schema the store can serve, newest first. Templated and
 // remote locations cannot be enumerated, so they never appear here even though
 // Load can still resolve them.
 func (s Store) Versions() []string {
@@ -89,13 +89,13 @@ func (s Store) Versions() []string {
 	return out
 }
 
-// Load returns the catalog for a collector version. The special value "latest"
-// (or an empty string) selects the newest catalog the store can enumerate.
-func (s Store) Load(version string) (*Catalog, error) {
+// Load returns the schema for a collector version. The special value "latest"
+// (or an empty string) selects the newest schema the store can enumerate.
+func (s Store) Load(version string) (*Schema, error) {
 	if version == "" || version == Latest {
 		versions := s.Versions()
 		if len(versions) == 0 {
-			return nil, fmt.Errorf("%w in %s", errNoCatalogs, strings.Join(s.locations(), ", "))
+			return nil, fmt.Errorf("%w in %s", errNoSchemas, strings.Join(s.locations(), ", "))
 		}
 
 		version = versions[0]
@@ -134,7 +134,7 @@ func (s Store) distribution() string {
 func (s Store) versionsAt(loc string) []string {
 	switch kindOf(loc) {
 	case locEmbedded:
-		entries, _ := fs.ReadDir(catalogs.FS, DefaultDistribution)
+		entries, _ := fs.ReadDir(schemas.FS, DefaultDistribution)
 
 		out := make([]string, 0, len(entries))
 		for _, e := range entries {
@@ -161,7 +161,7 @@ func (s Store) versionsAt(loc string) []string {
 	}
 }
 
-// flatVersions lists "<dir>/<version>.<ext>", the layout used before catalogs
+// flatVersions lists "<dir>/<version>.<ext>", the layout used before schemas
 // were split by distribution.
 func flatVersions(dir string) []string {
 	var out []string
@@ -176,7 +176,7 @@ func flatVersions(dir string) []string {
 	return out
 }
 
-// trimExt strips a catalog file extension, returning "" for anything else.
+// trimExt strips a schema file extension, returning "" for anything else.
 func trimExt(name string) string {
 	for _, ext := range extensions() {
 		if base, found := strings.CutSuffix(name, ext); found {
@@ -206,14 +206,14 @@ func (s Store) locations() []string {
 
 var (
 	// errNotFound signals that a location does not have the requested version.
-	errNotFound = errors.New("catalog not found")
-	// errNoCatalogs signals that no location could be enumerated at all.
-	errNoCatalogs = errors.New("no catalogs available")
+	errNotFound = errors.New("schema not found")
+	// errNoSchemas signals that no location could be enumerated at all.
+	errNoSchemas = errors.New("no schemas available")
 	// errBadStatus signals a remote location answering with an unusable status.
 	errBadStatus = errors.New("unexpected status")
 )
 
-func (s Store) loadFrom(loc, version string) (*Catalog, error) {
+func (s Store) loadFrom(loc, version string) (*Schema, error) {
 	switch kindOf(loc) {
 	case locEmbedded:
 		// Only the default distribution is embedded, so any other one has to
@@ -225,7 +225,7 @@ func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 		}
 
 		for _, ext := range extensions() {
-			f, err := catalogs.FS.Open(path.Join(DefaultDistribution, version+ext))
+			f, err := schemas.FS.Open(path.Join(DefaultDistribution, version+ext))
 			if err != nil {
 				continue
 			}
@@ -251,8 +251,8 @@ func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 	}
 }
 
-// loadOne reads a location that names a single catalog, local or remote.
-func (s Store) loadOne(target string) (*Catalog, error) {
+// loadOne reads a location that names a single schema, local or remote.
+func (s Store) loadOne(target string) (*Schema, error) {
 	if isRemote(target) {
 		return s.fetch(target)
 	}
@@ -262,7 +262,7 @@ func (s Store) loadOne(target string) (*Catalog, error) {
 
 // loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", preferring
 // the readable form when a root carries both.
-func (s Store) loadFromRegistry(root, version string, read func(string) (*Catalog, error)) (*Catalog, error) {
+func (s Store) loadFromRegistry(root, version string, read func(string) (*Schema, error)) (*Schema, error) {
 	for _, ext := range extensions() {
 		c, err := read(join(root, s.distribution(), version+ext))
 		if err == nil {
@@ -277,9 +277,9 @@ func (s Store) loadFromRegistry(root, version string, read func(string) (*Catalo
 	return nil, errNotFound
 }
 
-// loadFlat reads "<dir>/<version>.<ext>", the layout used before catalogs were
+// loadFlat reads "<dir>/<version>.<ext>", the layout used before schemas were
 // split by distribution.
-func loadFlat(dir, version string) (*Catalog, error) {
+func loadFlat(dir, version string) (*Schema, error) {
 	for _, ext := range extensions() {
 		path := filepath.Join(dir, version+ext)
 
@@ -292,9 +292,9 @@ func loadFlat(dir, version string) (*Catalog, error) {
 	return nil, errNotFound
 }
 
-// readLocal reads a catalog from disk, reporting a missing file as errNotFound
+// readLocal reads a schema from disk, reporting a missing file as errNotFound
 // so a registry root can fall through to the next extension.
-func readLocal(path string) (*Catalog, error) {
+func readLocal(path string) (*Schema, error) {
 	_, err := os.Stat(path)
 	if err != nil {
 		return nil, errNotFound
@@ -326,9 +326,9 @@ func isRemote(loc string) bool {
 	return strings.HasPrefix(loc, "http://") || strings.HasPrefix(loc, "https://")
 }
 
-// fetch reads a catalog over HTTP. Loading is synchronous and the client
+// fetch reads a schema over HTTP. Loading is synchronous and the client
 // already carries a timeout, so the request runs on a background context.
-func (s Store) fetch(url string) (*Catalog, error) {
+func (s Store) fetch(url string) (*Schema, error) {
 	body, err := s.get(url)
 	if err != nil {
 		return nil, err
@@ -383,11 +383,11 @@ const (
 	// locDir is a local directory: a registry root when it carries an index,
 	// otherwise the flat layout.
 	locDir locKind = iota
-	// locEmbedded is the catalogs built into the binary.
+	// locEmbedded is the schemas built into the binary.
 	locEmbedded
 	// locTemplate is a path or URL with placeholders, naming one file.
 	locTemplate
-	// locFile is a path or URL naming one catalog file outright.
+	// locFile is a path or URL naming one schema file outright.
 	locFile
 	// locRemote is a remote registry root.
 	locRemote
@@ -441,7 +441,7 @@ type UnknownVersionError struct {
 }
 
 func (e *UnknownVersionError) Error() string {
-	msg := "no catalog for collector version " + e.Version
+	msg := "no schema for collector version " + e.Version
 	if len(e.Available) > 0 {
 		msg += " (available: " + strings.Join(e.Available, ", ") + ")"
 	}
@@ -450,7 +450,7 @@ func (e *UnknownVersionError) Error() string {
 }
 
 // Nearest returns the newest available version that is not newer than the
-// requested one, which is the closest safe stand-in for a missing catalog.
+// requested one, which is the closest safe stand-in for a missing schema.
 func (e *UnknownVersionError) Nearest() (string, bool) {
 	for _, v := range e.Available { // Available is sorted newest first.
 		if Compare(v, e.Version) <= 0 {
@@ -461,7 +461,7 @@ func (e *UnknownVersionError) Nearest() (string, bool) {
 	return "", false
 }
 
-// Normalize puts a version into the "vX.Y.Z" form used for catalog file names.
+// Normalize puts a version into the "vX.Y.Z" form used for schema file names.
 func Normalize(v string) string {
 	v = strings.TrimSpace(v)
 	if v == "" || v == Latest {

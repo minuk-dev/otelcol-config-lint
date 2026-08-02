@@ -31,8 +31,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  catalogs:
-    # The catalogs are generated, so a hand edit that does not match what
+  schemas:
+    # The schemas are generated, so a hand edit that does not match what
     # schemagen produces would silently change what every config is checked
     # against.
     runs-on: ubuntu-latest
@@ -43,9 +43,9 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: 1.25
-      - name: Check the catalogs are readable and consistent
+      - name: Check the schemas are readable and consistent
         run: |
-          go run ./cmd/otelcol-config-lint list versions --catalog-location catalogs
+          go run ./cmd/otelcol-config-lint list versions --schema-location schemas
           # The index is the authoritative list, so this survives a layout
           # change. Every distribution and format is read from disk rather than
           # from the built-ins: the generated files are what this job checks.
@@ -54,11 +54,11 @@ jobs:
           # being checked is that each generated file parses and drives the
           # rules, not that one config suits every binary.
           jq -r '.distributions | to_entries[] | .key as $d | .value[] | "\($d) \(.)"' \
-            catalogs/index.json |
+            schemas/index.json |
           while read -r distribution version; do
             for format in yaml json; do
               go run ./cmd/otelcol-config-lint run \
-                --catalog-location "catalogs/${distribution}/${version}.${format}" \
+                --schema-location "schemas/${distribution}/${version}.${format}" \
                 --collector-version "${version}" --min-severity error \
                 --ignore-missing-schemas testdata/valid
             done

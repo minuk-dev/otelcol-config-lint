@@ -1,4 +1,4 @@
-package catalog
+package schema
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ const DefaultDistribution = "contrib"
 // Index lists what a registry can serve. A directory can be listed to work that
 // out, but a remote registry cannot, so it publishes the answer as a file.
 type Index struct {
-	// Distributions maps each distribution to the releases it has a catalog
+	// Distributions maps each distribution to the releases it has a schema
 	// for, newest first. Coverage differs between them: upstream had no otlp
 	// distribution before v0.120.0, so asking a flat list of versions what the
 	// otlp registry holds would name releases it cannot serve.
@@ -38,7 +38,7 @@ func (i *Index) Names() []string {
 	return out
 }
 
-// Versions returns the releases one distribution has catalogs for, newest
+// Versions returns the releases one distribution has schemas for, newest
 // first. An unknown distribution has none.
 func (i *Index) Versions(distribution string) []string {
 	return i.Distributions[distribution]

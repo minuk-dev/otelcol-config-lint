@@ -16,11 +16,11 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/termutil"
 )
@@ -33,8 +33,8 @@ var (
 	ErrBadSeverityPair = errors.New("not in rule=level form")
 	// ErrNoInput reports that no file, directory or "-" was given.
 	ErrNoInput = errors.New("no files or directories specified")
-	// ErrNoCatalogs reports that no catalog version could be found.
-	ErrNoCatalogs = errors.New("no catalogs available")
+	// ErrNoSchemas reports that no schema version could be found.
+	ErrNoSchemas = errors.New("no schemas available")
 	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
 	ErrNoYAMLFiles = errors.New("no YAML files found")
 
@@ -79,7 +79,7 @@ const DefaultSettingsFile = ".otelcol-config-lint.yaml"
 type Options struct {
 	// flags
 	collectorVersion string
-	catalogLocations []string
+	schemaLocations  []string
 	output           string
 	settingsFile     string
 	disable          string
@@ -96,7 +96,7 @@ type Options struct {
 	exitOnError      bool
 
 	// internal state
-	store catalog.Store
+	store schema.Store
 }
 
 // NewCommand builds the root command. A nil opts is allowed, in which case a
@@ -140,12 +140,12 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	// The groups below are shared with the list subcommands, which take only
 	// the flags that change what they print.
 	o.registerSettingsFlag(cmd)
-	o.registerCatalogLocationFlag(cmd)
+	o.registerSchemaLocationFlag(cmd)
 	o.registerRuleFlags(cmd)
 
 	flags := cmd.Flags()
 
-	flags.StringVar(&o.collectorVersion, "collector-version", catalog.Latest,
+	flags.StringVar(&o.collectorVersion, "collector-version", schema.Latest,
 		"collector release to validate against, e.g. v0.157.0")
 	flags.StringVar(&o.output, "output", "text", "output format: text, json, junit, tap or github")
 	flags.StringVar(&o.exclude, "exclude", "", "comma-separated glob patterns to skip when walking directories")
@@ -155,14 +155,14 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.IntVarP(&o.workers, "n", "n", defaultWorkers(), "number of files to check in parallel")
 	flags.BoolVar(&o.strict, "strict", false, "report unknown component settings as errors")
 	flags.BoolVar(&o.ignoreMissing, "ignore-missing-schemas", false,
-		"do not fail on components missing from the catalog")
+		"do not fail on components missing from the schema")
 	flags.BoolVar(&o.summary, "summary", false, "print a summary of the results")
 	flags.BoolVar(&o.verbose, "verbose", false, "also report files that passed")
 	flags.BoolVar(&o.noColor, "no-color", false, "disable coloured output")
 	flags.BoolVar(&o.exitOnError, "exit-on-error", false, "stop at the first file that fails")
 }
 
-// Prepare folds the settings file into the parsed flags and builds the catalog
+// Prepare folds the settings file into the parsed flags and builds the schema
 // store. Flags given on the command line win over the file.
 func (o *Options) Prepare(cmd *cobra.Command) error {
 	fileSettings, err := loadSettings(o.settingsFile)
@@ -172,7 +172,7 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 
 	o.applySettings(fileSettings, cmd.Flags().Changed)
 
-	o.store = catalog.Store{Locations: o.catalogLocations}
+	o.store = schema.Store{Locations: o.schemaLocations}
 
 	return nil
 }
@@ -194,18 +194,18 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 }
 
 // registerSettingsFlag declares --config. Every command honours it: the
-// settings file states rule and catalog policy, not only lint options.
+// settings file states rule and schema policy, not only lint options.
 func (o *Options) registerSettingsFlag(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.settingsFile, "config", "",
 		"settings file (default "+DefaultSettingsFile+" if present)")
 }
 
-// registerCatalogLocationFlag declares --catalog-location, shared with
+// registerSchemaLocationFlag declares --schema-location, shared with
 // "list versions".
-func (o *Options) registerCatalogLocationFlag(cmd *cobra.Command) {
-	cmd.Flags().StringSliceVar(&o.catalogLocations, "catalog-location", nil,
-		"where to find catalogs: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
-			"repeat to search several in order (default: the built-in catalogs)")
+func (o *Options) registerSchemaLocationFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSliceVar(&o.schemaLocations, "schema-location", nil,
+		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
+			"repeat to search several in order (default: the built-in schemas)")
 }
 
 // registerRuleFlags declares the severity overrides, shared with "list rules".
@@ -301,7 +301,7 @@ func (o *Options) lintAll(
 }
 
 func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
-	cat, err := o.loadCatalog(cmd)
+	cat, err := o.loadSchema(cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +322,7 @@ func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	}
 
 	return lint.New(lint.Options{
-		Catalog:              cat,
+		Schema:               cat,
 		Availability:         lint.NewVersionIndex(o.store),
 		Severities:           severities,
 		Strict:               o.strict,
@@ -332,29 +332,29 @@ func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	}), nil
 }
 
-// loadCatalog resolves the targeted release, falling back to the newest
-// catalog that is not newer than the request when there is no exact match.
-func (o *Options) loadCatalog(cmd *cobra.Command) (*catalog.Catalog, error) {
+// loadSchema resolves the targeted release, falling back to the newest
+// schema that is not newer than the request when there is no exact match.
+func (o *Options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
 	cat, err := o.store.Load(o.collectorVersion)
 	if err == nil {
 		return cat, nil
 	}
 
-	var unknown *catalog.UnknownVersionError
+	var unknown *schema.UnknownVersionError
 	if !errors.As(err, &unknown) {
-		return nil, fmt.Errorf("load catalog: %w", err)
+		return nil, fmt.Errorf("load schema: %w", err)
 	}
 
 	near, hasNear := unknown.Nearest()
 	if !hasNear {
-		return nil, fmt.Errorf("load catalog: %w", err)
+		return nil, fmt.Errorf("load schema: %w", err)
 	}
 
-	cmd.PrintErrf("otelcol-config-lint: no catalog for %s, falling back to %s\n", unknown.Version, near)
+	cmd.PrintErrf("otelcol-config-lint: no schema for %s, falling back to %s\n", unknown.Version, near)
 
 	cat, err = o.store.Load(near)
 	if err != nil {
-		return nil, fmt.Errorf("load catalog %s: %w", near, err)
+		return nil, fmt.Errorf("load schema %s: %w", near, err)
 	}
 
 	return cat, nil
@@ -397,8 +397,8 @@ func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
 // commit its linting policy instead of repeating flags in CI.
 type settings struct {
 	CollectorVersion string `yaml:"collectorVersion"`
-	// CatalogLocations are searched in order before the built-in catalogs.
-	CatalogLocations     []string          `yaml:"catalogLocations"`
+	// SchemaLocations are searched in order before the built-in schemas.
+	SchemaLocations      []string          `yaml:"schemaLocations"`
 	Output               string            `yaml:"output"`
 	Strict               *bool             `yaml:"strict"`
 	IgnoreMissingSchemas *bool             `yaml:"ignoreMissingSchemas"`
@@ -462,8 +462,8 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 	boolean("ignore-missing-schemas", &o.ignoreMissing, s.IgnoreMissingSchemas)
 	boolean("summary", &o.summary, s.Summary)
 
-	if !changed("catalog-location") && len(s.CatalogLocations) > 0 {
-		o.catalogLocations = append(o.catalogLocations, s.CatalogLocations...)
+	if !changed("schema-location") && len(s.SchemaLocations) > 0 {
+		o.schemaLocations = append(o.schemaLocations, s.SchemaLocations...)
 	}
 
 	if !changed("exclude") && len(s.Exclude) > 0 {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 const good = `
@@ -43,13 +43,13 @@ service:
 func newLinter(t *testing.T, opts lint.Options) *lint.Linter {
 	t.Helper()
 
-	if opts.Catalog == nil {
-		cat, err := catalog.Store{}.Load(catalog.Latest)
+	if opts.Schema == nil {
+		cat, err := schema.Store{}.Load(schema.Latest)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		opts.Catalog = cat
+		opts.Schema = cat
 	}
 
 	return lint.New(opts)
@@ -264,7 +264,7 @@ func TestTextFormatterQuietOnSuccess(t *testing.T) {
 func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 	t.Parallel()
 
-	idx := lint.NewVersionIndex(catalog.Store{})
+	idx := lint.NewVersionIndex(schema.Store{})
 
 	versions := idx.Versions("exporter", "logging")
 	if len(versions) == 0 {
@@ -272,7 +272,7 @@ func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 	}
 
 	for i := 1; i < len(versions); i++ {
-		if catalog.Compare(versions[i-1], versions[i]) >= 0 {
+		if schema.Compare(versions[i-1], versions[i]) >= 0 {
 			t.Fatalf("versions should read oldest first: %v", versions)
 		}
 	}

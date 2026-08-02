@@ -5,25 +5,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
-// testCatalog is a hand-built stand-in for a generated catalog, so rule tests
-// do not change meaning when the embedded catalogs are regenerated.
-func testCatalog() *catalog.Catalog {
-	return &catalog.Catalog{
+// testSchema is a hand-built stand-in for a generated schema, so rule tests
+// do not change meaning when the embedded schemas are regenerated.
+func testSchema() *schema.Schema {
+	return &schema.Schema{
 		CollectorVersion: "v9.9.9",
-		Components: map[config.Kind]map[string]*catalog.Component{
+		Components: map[config.Kind]map[string]*schema.Component{
 			config.KindReceiver: {
 				"otlp": {Type: "otlp", Signals: []config.Signal{"traces", "metrics", "logs"},
-					Stability: map[string]catalog.Stability{"traces": "stable", "metrics": "stable", "logs": "stable"}},
+					Stability: map[string]schema.Stability{"traces": "stable", "metrics": "stable", "logs": "stable"}},
 				"jaeger": {Type: "jaeger", Signals: []config.Signal{"traces"},
-					Stability: map[string]catalog.Stability{"traces": "beta"}},
+					Stability: map[string]schema.Stability{"traces": "beta"}},
 				"filelog": {Type: "filelog", Signals: []config.Signal{"logs"},
-					Stability: map[string]catalog.Stability{"logs": "alpha"}},
+					Stability: map[string]schema.Stability{"logs": "alpha"}},
 			},
 			config.KindProcessor: {
 				"batch":          {Type: "batch", Signals: []config.Signal{"traces", "metrics", "logs"}},
@@ -31,17 +31,17 @@ func testCatalog() *catalog.Catalog {
 			},
 			config.KindExporter: {
 				"debug": {Type: "debug", Signals: []config.Signal{"traces", "metrics", "logs"},
-					Fields: &catalog.Field{Type: "map", Children: map[string]*catalog.Field{
+					Fields: &schema.Field{Type: "map", Children: map[string]*schema.Field{
 						"verbosity":        {Type: "string", Enum: []string{"basic", "normal", "detailed"}},
 						"sampling_initial": {Type: "int"},
 					}}},
 				"otlp": {Type: "otlp", Signals: []config.Signal{"traces", "metrics", "logs"},
-					Fields: &catalog.Field{Type: "map", Required: []string{"endpoint"},
-						Children: map[string]*catalog.Field{
+					Fields: &schema.Field{Type: "map", Required: []string{"endpoint"},
+						Children: map[string]*schema.Field{
 							"endpoint": {Type: "string"},
 							"timeout":  {Type: "duration"},
 							"headers":  {Type: "map", Open: true},
-							"tls": {Type: "map", Children: map[string]*catalog.Field{
+							"tls": {Type: "map", Children: map[string]*schema.Field{
 								"insecure": {Type: "bool"},
 							}},
 						}}},
@@ -49,10 +49,10 @@ func testCatalog() *catalog.Catalog {
 					Deprecated: "use the debug exporter instead"},
 			},
 			config.KindExtension: {
-				"zpages": {Type: "zpages", Stability: map[string]catalog.Stability{"extension": "beta"}},
+				"zpages": {Type: "zpages", Stability: map[string]schema.Stability{"extension": "beta"}},
 			},
 			config.KindConnector: {
-				"spanmetrics": {Type: "spanmetrics", Pairs: []catalog.Pair{{From: "traces", To: "metrics"}}},
+				"spanmetrics": {Type: "spanmetrics", Pairs: []schema.Pair{{From: "traces", To: "metrics"}}},
 			},
 		},
 	}
@@ -67,7 +67,7 @@ func check(t *testing.T, src string) []string {
 		t.Fatalf("parse: %v", err)
 	}
 
-	ctx := rule.Context{File: f, Catalog: testCatalog(), Index: rule.NewIndex(f)}
+	ctx := rule.Context{File: f, Schema: testSchema(), Index: rule.NewIndex(f)}
 
 	var fired []string
 
@@ -250,7 +250,7 @@ service:
 			want: "connector-wiring",
 		},
 		{
-			name: "component type not in the catalog",
+			name: "component type not in the schema",
 			src: `
 receivers: {kafka: }
 exporters: {debug: }
@@ -460,7 +460,7 @@ service:
 		t.Fatal("unknown-field rule is not registered")
 	}
 
-	ctx := rule.Context{File: f, Catalog: testCatalog(), Index: rule.NewIndex(f), Strict: true}
+	ctx := rule.Context{File: f, Schema: testSchema(), Index: rule.NewIndex(f), Strict: true}
 
 	found := rule.Run(r, ctx, r.Severity())
 	if len(found) != 1 || found[0].Severity != diag.Error {
@@ -478,7 +478,7 @@ func TestDisabledRuleProducesNothing(t *testing.T) {
 
 	r, _ := rule.Lookup("service-required")
 
-	ctx := rule.Context{File: f, Catalog: testCatalog(), Index: rule.NewIndex(f)}
+	ctx := rule.Context{File: f, Schema: testSchema(), Index: rule.NewIndex(f)}
 	if found := rule.Run(r, ctx, diag.Off); len(found) != 0 {
 		t.Errorf("a rule set to off must not report: %+v", found)
 	}
