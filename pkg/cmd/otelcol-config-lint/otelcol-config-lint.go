@@ -23,6 +23,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/termutil"
 )
 
 // Version is the linter's own version.
@@ -263,7 +264,7 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 	formatter, err := lint.NewFormatter(o.output, cmd.OutOrStdout(), lint.FormatterOptions{
 		Verbose: o.verbose,
 		Summary: o.summary,
-		Color:   !o.noColor && o.output == "text" && isTerminal(cmd.OutOrStdout()),
+		Color:   !o.noColor && o.output == "text" && termutil.IsTerminal(cmd.OutOrStdout()),
 	})
 	if err != nil {
 		return fmt.Errorf("create formatter: %w", err)
@@ -620,17 +621,4 @@ func defaultWorkers() int {
 	}
 
 	return maxDefaultWorkers
-}
-
-// isTerminal reports whether w is a character device, so colour is only used
-// when a human is watching.
-func isTerminal(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-
-	info, err := f.Stat()
-
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
