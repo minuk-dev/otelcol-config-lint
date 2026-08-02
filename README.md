@@ -19,8 +19,10 @@ config.yaml:29:30: error: service.extensions references "pprof" which is not dec
     hint: declared extensions: health_check
 ```
 
-No collector binary, no network access and no Go toolchain are needed at lint
-time: the component schemas are compiled into the binary.
+No collector binary and no Go toolchain are needed at lint time. The component
+schemas are fetched from the published registry, so a new collector release
+becomes lintable as soon as its schema is committed — no linter upgrade. Point
+`--schema-location` at a directory to run without network access.
 
 ## Install
 
@@ -101,7 +103,7 @@ severity:
   missing-memory-limiter: warning
 schemaLocations:
   - ./schemas      # this project's own schemas first
-  - default         # then the built-in ones
+  - default         # then the published registry
 ```
 
 ## What it checks
@@ -165,9 +167,10 @@ otelcol-config-lint run --schema-location \
 
 A location is a registry directory or URL (one holding `index.json`, laid out
 as `<distribution>/<version>.<ext>`), a `{{.Version}}`/`{{.Distribution}}`
-template naming a single file, or `default` for the built-ins. Repeat the flag
-to search several in order, so a private distribution's schema can take
-precedence over the public ones.
+template naming a single file, or `default` for the published registry. Repeat
+the flag to search several in order, so a private distribution's schema can take
+precedence over the public ones, or so a vendored copy answers before the
+network is tried.
 
 ### Adding a release
 

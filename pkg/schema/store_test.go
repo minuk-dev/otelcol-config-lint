@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -60,14 +61,14 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
-func TestEmbeddedSchemasLoad(t *testing.T) {
+func TestTheRepositoryRegistryLoads(t *testing.T) {
 	t.Parallel()
 
-	var store schema.Store
+	store := schema.Store{Locations: []string{repoSchemas}}
 
 	versions := store.Versions()
 	if len(versions) == 0 {
-		t.Fatal("no schemas are embedded")
+		t.Fatal("the registry lists no schemas")
 	}
 
 	for i := 1; i < len(versions); i++ {
@@ -97,7 +98,7 @@ func TestEmbeddedSchemasLoad(t *testing.T) {
 func TestUnknownVersionSuggestsTheNearestOlder(t *testing.T) {
 	t.Parallel()
 
-	var store schema.Store
+	store := schema.Store{Locations: []string{repoSchemas}}
 
 	_, err := store.Load("v0.115.0")
 	if err == nil {
@@ -126,7 +127,7 @@ func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 	write(t, filepath.Join(dir, "v0.157.0.json"),
 		`{"collectorVersion":"v0.157.0","components":{"receiver":{"custom":{"type":"custom","signals":["logs"]}}}}`)
 
-	store := schema.Store{Locations: []string{dir, schema.Default}}
+	store := schema.Store{Locations: []string{dir, repoSchemas}}
 
 	cat, err := store.Load("v0.157.0")
 	if err != nil {
@@ -137,10 +138,10 @@ func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 		t.Errorf("want the local schema, got %d components", cat.Count())
 	}
 
-	// Versions not present locally still fall through to the built-ins.
+	// Versions not present locally still fall through to the next location.
 	_, err = store.Load("v0.110.0")
 	if err != nil {
-		t.Errorf("fallthrough to the embedded schemas failed: %v", err)
+		t.Errorf("fallthrough to the registry failed: %v", err)
 	}
 }
 
@@ -191,6 +192,10 @@ func TestRemoteLocation(t *testing.T) {
 }
 
 // The distributions the registry helper below publishes.
+// repoSchemas is this repository's registry, which is what the published one
+// serves. Tests read it instead of the network.
+const repoSchemas = "../../schemas"
+
 const (
 	distCore    = "core"
 	distContrib = "contrib"
@@ -323,23 +328,49 @@ func TestIndexVersionsArePerDistribution(t *testing.T) {
 	}
 }
 
-// TestTheBuiltInsRefuseAnotherDistribution pins that the embedded default is
-// never passed off as another distribution. "default" is also the usual
-// fallback in a repeated --schema-location, so widening here would let a
-// contrib-only component pass a core check.
-func TestTheBuiltInsRefuseAnotherDistribution(t *testing.T) {
+// TestARegistryRefusesADistributionItLacks pins that a location never answers
+// with a distribution other than the one asked for. A store searches locations
+// in order, so widening here would let a contrib-only component pass a core
+// check via a fallback location.
+func TestARegistryRefusesADistributionItLacks(t *testing.T) {
 	t.Parallel()
 
-	store := schema.Store{Distribution: distCore}
+	root := t.TempDir()
+	registry(t, root)
 
-	_, err := store.Load(latestVersion)
+	write(t, filepath.Join(root, schema.IndexFile),
+		`{"distributions":{"contrib":["v0.157.0"]}}`)
+
+	_, err := (schema.Store{Locations: []string{root}, Distribution: "k8s"}).Load(latestVersion)
 	if err == nil {
-		t.Fatal("the built-ins hold only the default distribution, so core must not resolve")
+		t.Fatal("k8s is not in this registry, so it must not resolve")
 	}
 
-	_, err = (schema.Store{}).Load(latestVersion)
+	_, err = (schema.Store{Locations: []string{root}}).Load(latestVersion)
 	if err != nil {
 		t.Errorf("the default distribution should still resolve: %v", err)
+	}
+}
+
+// TestDefaultExpandsToTheOfficialRegistry pins that "default" is an alias for a
+// URL rather than a location kind of its own, so it composes with the rest.
+func TestDefaultExpandsToTheOfficialRegistry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "v0.157.0.json"),
+		`{"collectorVersion":"v0.157.0","components":{}}`)
+
+	// The local flat location answers first, so nothing reaches the network.
+	store := schema.Store{Locations: []string{dir, schema.Default}}
+
+	_, err := store.Load(latestVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.HasPrefix(schema.DefaultRegistry, "https://") {
+		t.Errorf("the default registry should be a URL, got %q", schema.DefaultRegistry)
 	}
 }
 
@@ -406,7 +437,7 @@ func TestDistributionPlaceholderInATemplate(t *testing.T) {
 func TestAliasesAreMarkedDeprecated(t *testing.T) {
 	t.Parallel()
 
-	var store schema.Store
+	store := schema.Store{Locations: []string{repoSchemas}}
 
 	cat, err := store.Load(schema.Latest)
 	if err != nil {
