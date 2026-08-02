@@ -38,6 +38,9 @@ linters:
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|FormatterOptions|Result|Summary)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/catalog\.(Store|Catalog|Component|Field)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'
+        # cobra.Command has some forty fields and its zero values are the
+        # defaults every command wants; each one sets only what it changes.
+        - 'github\.com/spf13/cobra\.Command'
         # The parser fills these in as it walks the document.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/config\..+'
         - 'net/http\.Client'

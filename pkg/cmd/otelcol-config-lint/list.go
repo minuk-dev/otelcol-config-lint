@@ -14,7 +14,7 @@ import (
 // newListCommand builds "list" and its subcommands. Each one carries only the
 // flags that change what it prints, so their help stays short.
 func newListCommand(opts *Options) *cobra.Command {
-	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "Print what the linter knows about",
 		Example: `  otelcol-config-lint list rules
@@ -29,7 +29,7 @@ func newListCommand(opts *Options) *cobra.Command {
 // newListRulesCommand builds "list rules". The severity flags apply because
 // they decide the severity the rules will actually run at.
 func (o *Options) newListRulesCommand() *cobra.Command {
-	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+	cmd := &cobra.Command{
 		Use:   "rules",
 		Short: "Print the rules and their default severities",
 		Long: "Print the rules and their default severities.\n\n" +
@@ -55,7 +55,7 @@ func (o *Options) newListRulesCommand() *cobra.Command {
 // newListVersionsCommand builds "list versions". --collector-version is
 // deliberately absent: this is the command that says which ones exist.
 func (o *Options) newListVersionsCommand() *cobra.Command {
-	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+	cmd := &cobra.Command{
 		Use:   "versions",
 		Short: "Print the available catalog versions",
 		Args:  cobra.NoArgs,
