@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -16,8 +18,12 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/catalogs"
 )
 
-// extensions returns the catalog file suffixes, in preference order.
-func extensions() []string { return []string{".yaml", ".yml", ".json"} }
+// Extensions returns the catalog file suffixes, in preference order. The
+// readable form comes first, so a location carrying both serves the YAML.
+func Extensions() []string { return []string{".yaml", ".yml", ".json"} }
+
+// extensions is the unexported spelling used throughout this package.
+func extensions() []string { return Extensions() }
 
 // Latest selects the newest catalog available in a store.
 const Latest = "latest"
@@ -29,6 +35,10 @@ const Default = "default"
 // VersionPlaceholder is substituted with the collector version in a location
 // template, e.g. "https://example.com/otel/{{.Version}}.json".
 const VersionPlaceholder = "{{.Version}}"
+
+// DistributionPlaceholder is substituted with the selected distribution in a
+// location template, e.g. "https://example.com/otel/{{.Distribution}}/{{.Version}}.json".
+const DistributionPlaceholder = "{{.Distribution}}"
 
 // defaultFetchTimeout bounds a remote catalog download when the caller has not
 // supplied its own client.
@@ -49,6 +59,9 @@ const defaultFetchTimeout = 30 * time.Second
 // built-ins are used.
 type Store struct {
 	Locations []string
+	// Distribution selects which collector binary to describe. An empty value
+	// means DefaultDistribution.
+	Distribution string
 	// HTTPClient fetches remote locations. A nil client uses a default with a
 	// 30 second timeout.
 	HTTPClient *http.Client
@@ -62,34 +75,12 @@ func (s Store) Versions() []string {
 
 	var out []string
 
-	add := func(name string) {
-		v := name
-		for _, ext := range extensions() {
-			v = strings.TrimSuffix(v, ext)
-		}
-
-		if v != "" && v != name && !seen[v] {
-			seen[v] = true
-			out = append(out, v)
-		}
-	}
-
 	for _, loc := range s.locations() {
-		switch kindOf(loc) {
-		case locEmbedded:
-			entries, _ := fs.ReadDir(catalogs.FS, ".")
-			for _, e := range entries {
-				add(e.Name())
+		for _, v := range s.versionsAt(loc) {
+			if v != "" && !seen[v] {
+				seen[v] = true
+				out = append(out, v)
 			}
-		case locDir:
-			for _, ext := range extensions() {
-				names, _ := filepath.Glob(filepath.Join(loc, "*"+ext))
-				for _, n := range names {
-					add(filepath.Base(n))
-				}
-			}
-		default:
-			// Templated and remote locations cannot be listed.
 		}
 	}
 
@@ -120,13 +111,88 @@ func (s Store) Load(version string) (*Catalog, error) {
 		case err == nil:
 			return c, nil
 		case errors.Is(err, os.ErrNotExist), errors.Is(err, errNotFound):
-			tried = append(tried, resolve(loc, version))
+			tried = append(tried, s.resolve(loc, version))
 		default:
-			return nil, fmt.Errorf("%s: %w", resolve(loc, version), err)
+			return nil, fmt.Errorf("%s: %w", s.resolve(loc, version), err)
 		}
 	}
 
 	return nil, &UnknownVersionError{Version: version, Available: s.Versions(), Tried: tried}
+}
+
+// distribution returns the distribution to serve.
+func (s Store) distribution() string {
+	if s.Distribution == "" {
+		return DefaultDistribution
+	}
+
+	return s.Distribution
+}
+
+// versionsAt lists the versions one location can serve. A template names a
+// single file and cannot be listed, so it contributes nothing.
+func (s Store) versionsAt(loc string) []string {
+	switch kindOf(loc) {
+	case locEmbedded:
+		entries, _ := fs.ReadDir(catalogs.FS, DefaultDistribution)
+
+		out := make([]string, 0, len(entries))
+		for _, e := range entries {
+			out = append(out, trimExt(e.Name()))
+		}
+
+		return out
+	case locRemote:
+		idx, err := s.fetchIndex(loc)
+		if err != nil {
+			return nil
+		}
+
+		return idx.Versions(s.distribution())
+	case locDir:
+		idx, err := ReadIndexFile(filepath.Join(loc, IndexFile))
+		if err == nil {
+			return idx.Versions(s.distribution())
+		}
+
+		return flatVersions(loc)
+	default:
+		return nil
+	}
+}
+
+// flatVersions lists "<dir>/<version>.<ext>", the layout used before catalogs
+// were split by distribution.
+func flatVersions(dir string) []string {
+	var out []string
+
+	for _, ext := range extensions() {
+		names, _ := filepath.Glob(filepath.Join(dir, "*"+ext))
+		for _, n := range names {
+			out = append(out, trimExt(filepath.Base(n)))
+		}
+	}
+
+	return out
+}
+
+// trimExt strips a catalog file extension, returning "" for anything else.
+func trimExt(name string) string {
+	for _, ext := range extensions() {
+		if base, found := strings.CutSuffix(name, ext); found {
+			return base
+		}
+	}
+
+	return ""
+}
+
+// isRegistryDir reports whether a directory is a registry root: one carrying an
+// index, and so laid out by distribution.
+func isRegistryDir(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, IndexFile))
+
+	return err == nil
 }
 
 // locations returns the locations to search, defaulting to the built-ins.
@@ -150,8 +216,16 @@ var (
 func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 	switch kindOf(loc) {
 	case locEmbedded:
+		// Only the default distribution is embedded, so any other one has to
+		// come from a location that actually carries it. Answering with a
+		// wider distribution would silently accept components the requested
+		// binary does not ship.
+		if s.distribution() != DefaultDistribution {
+			return nil, errNotFound
+		}
+
 		for _, ext := range extensions() {
-			f, err := catalogs.FS.Open(version + ext)
+			f, err := catalogs.FS.Open(path.Join(DefaultDistribution, version+ext))
 			if err != nil {
 				continue
 			}
@@ -163,35 +237,112 @@ func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 
 		return nil, errNotFound
 	case locRemote:
-		return s.fetch(resolve(loc, version))
-	case locTemplate:
-		path := resolve(loc, version)
+		return s.loadFromRegistry(loc, version, s.fetch)
+	case locTemplate, locFile:
+		return s.loadOne(s.resolve(loc, version))
+	default:
+		// A directory holding an index is a registry root, laid out by
+		// distribution. Without one it is the flat legacy layout.
+		if isRegistryDir(loc) {
+			return s.loadFromRegistry(loc, version, readLocal)
+		}
+
+		return loadFlat(loc, version)
+	}
+}
+
+// loadOne reads a location that names a single catalog, local or remote.
+func (s Store) loadOne(target string) (*Catalog, error) {
+	if isRemote(target) {
+		return s.fetch(target)
+	}
+
+	return readLocal(target)
+}
+
+// loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", preferring
+// the readable form when a root carries both.
+func (s Store) loadFromRegistry(root, version string, read func(string) (*Catalog, error)) (*Catalog, error) {
+	for _, ext := range extensions() {
+		c, err := read(join(root, s.distribution(), version+ext))
+		if err == nil {
+			return c, nil
+		}
+
+		if !errors.Is(err, errNotFound) && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+
+	return nil, errNotFound
+}
+
+// loadFlat reads "<dir>/<version>.<ext>", the layout used before catalogs were
+// split by distribution.
+func loadFlat(dir, version string) (*Catalog, error) {
+	for _, ext := range extensions() {
+		path := filepath.Join(dir, version+ext)
 
 		_, err := os.Stat(path)
-		if err != nil {
-			return nil, errNotFound
+		if err == nil {
+			return ReadFile(path)
 		}
+	}
 
-		return ReadFile(path)
-	default:
-		// A directory holds "<version>.yaml" or "<version>.json"; the readable
-		// form is preferred when both are present.
-		for _, ext := range extensions() {
-			path := filepath.Join(loc, version+ext)
+	return nil, errNotFound
+}
 
-			_, err := os.Stat(path)
-			if err == nil {
-				return ReadFile(path)
-			}
-		}
-
+// readLocal reads a catalog from disk, reporting a missing file as errNotFound
+// so a registry root can fall through to the next extension.
+func readLocal(path string) (*Catalog, error) {
+	_, err := os.Stat(path)
+	if err != nil {
 		return nil, errNotFound
 	}
+
+	return ReadFile(path)
+}
+
+// fetchIndex reads a remote registry's index.
+func (s Store) fetchIndex(root string) (*Index, error) {
+	body, err := s.get(join(root, IndexFile))
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = body.Close() }()
+
+	return ReadIndex(body)
+}
+
+// join appends path segments to a registry root, which is a URL or a local
+// directory. Slashes are right for both: filepath.Join would break URLs on
+// Windows, and a local path with forward slashes reads fine everywhere.
+func join(root string, segments ...string) string {
+	return strings.Join(append([]string{strings.TrimSuffix(root, "/")}, segments...), "/")
+}
+
+func isRemote(loc string) bool {
+	return strings.HasPrefix(loc, "http://") || strings.HasPrefix(loc, "https://")
 }
 
 // fetch reads a catalog over HTTP. Loading is synchronous and the client
 // already carries a timeout, so the request runs on a background context.
 func (s Store) fetch(url string) (*Catalog, error) {
+	body, err := s.get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = body.Close() }()
+
+	return Read(body)
+}
+
+// get performs the request behind fetch and fetchIndex. The caller closes the
+// body. Loading is synchronous and the client already carries a timeout, so the
+// request runs on a background context.
+func (s Store) get(url string) (io.ReadCloser, error) {
 	client := s.HTTPClient
 	if client == nil {
 		client = &http.Client{
@@ -212,14 +363,16 @@ func (s Store) fetch(url string) (*Catalog, error) {
 		return nil, fmt.Errorf("fetch %s: %w", url, err)
 	}
 
-	defer func() { _ = resp.Body.Close() }()
-
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return Read(resp.Body)
+		return resp.Body, nil
 	case http.StatusNotFound:
+		_ = resp.Body.Close()
+
 		return nil, errNotFound
 	default:
+		_ = resp.Body.Close()
+
 		return nil, fmt.Errorf("GET %s: %w %s", url, errBadStatus, resp.Status)
 	}
 }
@@ -227,9 +380,16 @@ func (s Store) fetch(url string) (*Catalog, error) {
 type locKind int
 
 const (
+	// locDir is a local directory: a registry root when it carries an index,
+	// otherwise the flat layout.
 	locDir locKind = iota
+	// locEmbedded is the catalogs built into the binary.
 	locEmbedded
+	// locTemplate is a path or URL with placeholders, naming one file.
 	locTemplate
+	// locFile is a path or URL naming one catalog file outright.
+	locFile
+	// locRemote is a remote registry root.
 	locRemote
 )
 
@@ -237,23 +397,36 @@ func kindOf(loc string) locKind {
 	switch {
 	case loc == Default || loc == "embedded":
 		return locEmbedded
-	case strings.HasPrefix(loc, "http://"), strings.HasPrefix(loc, "https://"):
-		return locRemote
-	case strings.Contains(loc, VersionPlaceholder):
+	case strings.Contains(loc, VersionPlaceholder), strings.Contains(loc, DistributionPlaceholder):
 		return locTemplate
+	case trimExt(path.Base(loc)) != "":
+		return locFile
+	case isRemote(loc):
+		return locRemote
 	default:
 		return locDir
 	}
 }
 
-// resolve turns a location into the concrete path or URL for a version.
-func resolve(loc, version string) string {
+// resolve turns a location into the concrete path or URL a version is read
+// from, which is what error messages name.
+func (s Store) resolve(loc, version string) string {
 	switch kindOf(loc) {
 	case locEmbedded:
 		return "built-in " + version
-	case locTemplate, locRemote:
-		return strings.ReplaceAll(loc, VersionPlaceholder, version)
+	case locFile:
+		return loc
+	case locTemplate:
+		out := strings.ReplaceAll(loc, VersionPlaceholder, version)
+
+		return strings.ReplaceAll(out, DistributionPlaceholder, s.distribution())
+	case locRemote:
+		return join(loc, s.distribution(), version+extensions()[0])
 	default:
+		if isRegistryDir(loc) {
+			return filepath.Join(loc, s.distribution(), version+extensions()[0])
+		}
+
 		return filepath.Join(loc, version+extensions()[0])
 	}
 }

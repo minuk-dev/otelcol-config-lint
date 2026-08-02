@@ -1,10 +1,11 @@
 {
   "collectorVersion": "v0.157.0",
+  "distribution": "contrib",
   "distributions": [
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-08-02T06:27:12Z",
+  "generatedAt": "2026-08-02T06:54:57Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -2114,16 +2115,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/mcp"
-      },
-      "memory_limiter": {
-        "type": "memory_limiter",
-        "stability": {
-          "extension": "development"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/extension/memorylimiterextension"
       },
       "oauth2client": {
         "type": "oauth2client",

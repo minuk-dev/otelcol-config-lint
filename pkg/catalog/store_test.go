@@ -190,6 +190,219 @@ func TestRemoteLocation(t *testing.T) {
 	}
 }
 
+// The distributions the registry helper below publishes.
+const (
+	distCore    = "core"
+	distContrib = "contrib"
+
+	// latestVersion is the release the registry helper publishes.
+	latestVersion = "v0.157.0"
+)
+
+// registry writes a registry root: an index plus one catalog per distribution.
+// "core" carries otlp alone, so filelog is the component that distinguishes the
+// distributions from each other.
+func registry(t *testing.T, root string) {
+	t.Helper()
+
+	const (
+		otlp = `"otlp":{"type":"otlp","signals":["logs"]}`
+		both = otlp + `,"filelog":{"type":"filelog","signals":["logs"]}`
+	)
+
+	write(t, filepath.Join(root, catalog.IndexFile),
+		`{"distributions":{"core":["v0.157.0"],"contrib":["v0.157.0"]}}`)
+
+	for dist, comps := range map[string]string{
+		distCore:    otlp,
+		distContrib: both,
+	} {
+		err := os.MkdirAll(filepath.Join(root, dist), 0o750)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		write(t, filepath.Join(root, dist, "v0.157.0.json"),
+			`{"collectorVersion":"v0.157.0","distribution":"`+dist+`",`+
+				`"components":{"receiver":{`+comps+`}}}`)
+	}
+}
+
+// TestRegistryDirectorySelectsTheDistribution pins the point of the split: the
+// same root serves a different component set per distribution.
+func TestRegistryDirectorySelectsTheDistribution(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	registry(t, root)
+
+	for dist, want := range map[string]int{"": 2, distCore: 1, distContrib: 2} {
+		store := catalog.Store{Locations: []string{root}, Distribution: dist}
+
+		cat, err := store.Load("v0.157.0")
+		if err != nil {
+			t.Fatalf("distribution %q: %v", dist, err)
+		}
+
+		if cat.Count() != want {
+			t.Errorf("distribution %q: got %d components, want %d", dist, cat.Count(), want)
+		}
+
+		if _, ok := cat.Lookup("receiver", "filelog"); ok && dist == distCore {
+			t.Error("filelog must not be in the core distribution")
+		}
+	}
+}
+
+// TestRegistryDirectoryEnumeratesFromTheIndex pins that a registry root is
+// listed from its index rather than by globbing, which is what lets a remote
+// root be listed at all.
+func TestRegistryDirectoryEnumeratesFromTheIndex(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	registry(t, root)
+
+	store := catalog.Store{Locations: []string{root}}
+	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
+		t.Errorf("Versions() = %v, want [%s]", got, latestVersion)
+	}
+}
+
+func TestRemoteRegistryRoot(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/" + catalog.IndexFile:
+			_, _ = w.Write([]byte(`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`))
+		case "/core/v0.157.0.yaml":
+			_, _ = w.Write([]byte("collectorVersion: v0.157.0\ndistribution: core\ncomponents: {}\n"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	store := catalog.Store{Locations: []string{srv.URL}, Distribution: distCore}
+
+	cat, err := store.Load("v0.157.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cat.Distribution != distCore {
+		t.Errorf("unexpected catalog: %+v", cat)
+	}
+
+	if got := store.Versions(); len(got) != 1 || got[0] != "v0.157.0" {
+		t.Errorf("Versions() = %v, want [v0.157.0] from the index", got)
+	}
+}
+
+// TestIndexVersionsArePerDistribution pins that a distribution is never told
+// about a release it has no catalog for. Coverage really does differ: upstream
+// had no otlp distribution before v0.120.0, and a version listed but not
+// servable poisons "latest" and the nearest-version fallback too.
+func TestIndexVersionsArePerDistribution(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	registry(t, root)
+
+	write(t, filepath.Join(root, catalog.IndexFile),
+		`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`)
+
+	store := catalog.Store{Locations: []string{root}, Distribution: distCore}
+	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
+		t.Errorf("Versions() = %v, want only the release core has", got)
+	}
+
+	if got := (catalog.Store{Locations: []string{root}}).Versions(); len(got) != 2 {
+		t.Errorf("the default distribution should see both releases, got %v", got)
+	}
+}
+
+// TestTheBuiltInsRefuseAnotherDistribution pins that the embedded default is
+// never passed off as another distribution. "default" is also the usual
+// fallback in a repeated --catalog-location, so widening here would let a
+// contrib-only component pass a core check.
+func TestTheBuiltInsRefuseAnotherDistribution(t *testing.T) {
+	t.Parallel()
+
+	store := catalog.Store{Distribution: distCore}
+
+	_, err := store.Load(latestVersion)
+	if err == nil {
+		t.Fatal("the built-ins hold only the default distribution, so core must not resolve")
+	}
+
+	_, err = (catalog.Store{}).Load(latestVersion)
+	if err != nil {
+		t.Errorf("the default distribution should still resolve: %v", err)
+	}
+}
+
+// TestRemoteFileLocation pins that a URL naming one catalog outright is read as
+// that file, not walked as a registry root.
+func TestRemoteFileLocation(t *testing.T) {
+	t.Parallel()
+
+	var asked []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.Path)
+
+		if r.URL.Path != "/catalogs/v0.157.0.yaml" {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+
+		_, _ = w.Write([]byte("collectorVersion: v0.157.0\ncomponents: {}\n"))
+	}))
+	defer srv.Close()
+
+	store := catalog.Store{Locations: []string{srv.URL + "/catalogs/v0.157.0.yaml"}}
+
+	_, err := store.Load("v0.157.0")
+	if err != nil {
+		t.Fatalf("%v (requested %v)", err, asked)
+	}
+
+	if len(asked) != 1 {
+		t.Errorf("want one request for the named file, got %v", asked)
+	}
+}
+
+func TestDistributionPlaceholderInATemplate(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	err := os.MkdirAll(filepath.Join(dir, distCore), 0o750)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	write(t, filepath.Join(dir, distCore, "v0.150.0.json"),
+		`{"collectorVersion":"v0.150.0","distribution":"core","components":{}}`)
+
+	store := catalog.Store{
+		Locations:    []string{filepath.Join(dir, "{{.Distribution}}", "{{.Version}}.json")},
+		Distribution: distCore,
+	}
+
+	cat, err := store.Load("v0.150.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cat.Distribution != distCore {
+		t.Errorf("unexpected catalog: %+v", cat)
+	}
+}
+
 func TestAliasesAreMarkedDeprecated(t *testing.T) {
 	t.Parallel()
 

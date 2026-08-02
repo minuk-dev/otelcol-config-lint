@@ -1,10 +1,11 @@
 {
   "collectorVersion": "v0.140.0",
+  "distribution": "contrib",
   "distributions": [
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-08-02T06:27:04Z",
+  "generatedAt": "2026-08-02T06:54:58Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -1711,16 +1712,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/kafkatopicsobserver"
       },
-      "memory_limiter": {
-        "type": "memory_limiter",
-        "stability": {
-          "extension": "development"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/extension/memorylimiterextension"
-      },
       "oauth2client": {
         "type": "oauth2client",
         "stability": {
@@ -1845,19 +1836,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/textencodingextension"
-      },
-      "xextension": {
-        "type": "xextension",
-        "signals": [
-          "profiles"
-        ],
-        "stability": {
-          "profiles": "development"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/extension/xextension"
       },
       "zipkin_encoding": {
         "type": "zipkin_encoding",

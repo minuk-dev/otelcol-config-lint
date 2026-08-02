@@ -1,8 +1,9 @@
-collectorVersion: v0.150.0
+collectorVersion: v0.130.0
+distribution: contrib
 distributions:
   - core
   - contrib
-generatedAt: "2026-08-02T06:27:08Z"
+generatedAt: "2026-08-02T06:54:58Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -77,15 +78,12 @@ components:
       stability:
         logs_to_logs: beta
         metrics_to_metrics: beta
-        profiles_to_profiles: alpha
         traces_to_traces: beta
       pairs:
         - from: logs
           to: logs
         - from: metrics
           to: metrics
-        - from: profiles
-          to: profiles
         - from: traces
           to: traces
       distributions:
@@ -103,16 +101,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/grafanacloudconnector
-    metricsaslogs:
-      type: metricsaslogs
-      stability:
-        metrics_to_logs: development
-      pairs:
-        - from: metrics
-          to: logs
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/metricsaslogsconnector
     otlpjson:
       type: otlpjson
       stability:
@@ -175,26 +163,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/servicegraphconnector
-    signal_to_metrics:
-      type: signal_to_metrics
-      stability:
-        logs_to_metrics: alpha
-        metrics_to_metrics: alpha
-        profiles_to_metrics: alpha
-        traces_to_metrics: alpha
-      pairs:
-        - from: logs
-          to: metrics
-        - from: metrics
-          to: metrics
-        - from: profiles
-          to: metrics
-        - from: traces
-          to: metrics
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/signaltometricsconnector
-      alias: signaltometrics
     signaltometrics:
       type: signaltometrics
       stability:
@@ -214,18 +182,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/signaltometricsconnector
-      deprecated: renamed to "signal_to_metrics" upstream; the old name still resolves for now
-      aliasOf: signal_to_metrics
-    slowsql:
-      type: slowsql
-      stability:
-        traces_to_logs: development
-      pairs:
-        - from: traces
-          to: logs
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/slowsqlconnector
     spanmetrics:
       type: spanmetrics
       stability:
@@ -269,9 +225,9 @@ components:
         - metrics
         - logs
       stability:
-        logs: unmaintained
-        metrics: unmaintained
-        traces: unmaintained
+        logs: beta
+        metrics: beta
+        traces: beta
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/alibabacloudlogserviceexporter
@@ -280,7 +236,7 @@ components:
       signals:
         - logs
       stability:
-        logs: alpha
+        logs: unmaintained
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awscloudwatchlogsexporter
@@ -328,20 +284,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter
-    azure_blob:
-      type: azure_blob
-      signals:
-        - traces
-        - metrics
-        - logs
-      stability:
-        logs: alpha
-        metrics: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/azureblobexporter
-      alias: azureblob
     azureblob:
       type: azureblob
       signals:
@@ -355,8 +297,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/azureblobexporter
-      deprecated: renamed to "azure_blob" upstream; the old name still resolves for now
-      aliasOf: azure_blob
     azuredataexplorer:
       type: azuredataexplorer
       signals:
@@ -392,6 +332,15 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/bmchelixexporter
+    carbon:
+      type: carbon
+      signals:
+        - metrics
+      stability:
+        metrics: unmaintained
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/carbonexporter
     cassandra:
       type: cassandra
       signals:
@@ -463,10 +412,10 @@ components:
         - logs
         - profiles
       stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
+        logs: development
+        metrics: development
+        profiles: development
+        traces: development
       distributions:
         - core
         - contrib
@@ -546,27 +495,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter
-    google_cloud_storage:
-      type: google_cloud_storage
-      signals:
-        - traces
-        - logs
-      stability:
-        logs: alpha
-        traces: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlecloudstorageexporter
-      alias: googlecloudstorage
-    google_secops:
-      type: google_secops
-      signals:
-        - logs
-      stability:
-        logs: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter
     googlecloud:
       type: googlecloud
       signals:
@@ -593,19 +521,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlecloudpubsubexporter
-    googlecloudstorage:
-      type: googlecloudstorage
-      signals:
-        - traces
-        - logs
-      stability:
-        logs: alpha
-        traces: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlecloudstorageexporter
-      deprecated: renamed to "google_cloud_storage" upstream; the old name still resolves for now
-      aliasOf: google_cloud_storage
     googlemanagedprometheus:
       type: googlemanagedprometheus
       signals:
@@ -643,16 +558,27 @@ components:
         - traces
         - metrics
         - logs
-        - profiles
       stability:
         logs: beta
         metrics: beta
-        profiles: development
         traces: beta
       distributions:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter
+    kinetica:
+      type: kinetica
+      signals:
+        - traces
+        - metrics
+        - logs
+      stability:
+        logs: unmaintained
+        metrics: unmaintained
+        traces: unmaintained
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kineticaexporter
     loadbalancing:
       type: loadbalancing
       signals:
@@ -689,6 +615,16 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/logzioexporter
+    loki:
+      type: loki
+      signals:
+        - logs
+      stability:
+        logs: deprecated
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/lokiexporter
+      deprecated: Use OTLP exporter (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/33916)
     mezmo:
       type: mezmo
       signals:
@@ -704,17 +640,28 @@ components:
         - traces
         - metrics
         - logs
-        - profiles
       stability:
         logs: beta
         metrics: beta
-        profiles: alpha
         traces: beta
       distributions:
         - core
         - contrib
         - k8s
       module: go.opentelemetry.io/collector/exporter/nopexporter
+    opencensus:
+      type: opencensus
+      signals:
+        - traces
+        - metrics
+      stability:
+        metrics: deprecated
+        traces: deprecated
+      distributions:
+        - core
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/opencensusexporter
+      deprecated: Use OTLP exporter (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36791)
     opensearch:
       type: opensearch
       signals:
@@ -750,7 +697,7 @@ components:
       stability:
         logs: stable
         metrics: stable
-        profiles: alpha
+        profiles: development
         traces: stable
       distributions:
         - core
@@ -758,8 +705,6 @@ components:
         - k8s
         - otlp
       module: go.opentelemetry.io/collector/exporter/otlpexporter
-      deprecated: renamed to "otlp_grpc" upstream; the old name still resolves for now
-      aliasOf: otlp_grpc
       fields:
         type: map
         children:
@@ -886,44 +831,6 @@ components:
             type: int
         required:
           - endpoint
-    otlp_grpc:
-      type: otlp_grpc
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: stable
-        metrics: stable
-        profiles: alpha
-        traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
-      module: go.opentelemetry.io/collector/exporter/otlpexporter
-      alias: otlp
-    otlp_http:
-      type: otlp_http
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: stable
-        metrics: stable
-        profiles: alpha
-        traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
-      module: go.opentelemetry.io/collector/exporter/otlphttpexporter
-      alias: otlphttp
     otlphttp:
       type: otlphttp
       signals:
@@ -934,7 +841,7 @@ components:
       stability:
         logs: stable
         metrics: stable
-        profiles: alpha
+        profiles: development
         traces: stable
       distributions:
         - core
@@ -942,8 +849,6 @@ components:
         - k8s
         - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
-      deprecated: renamed to "otlp_http" upstream; the old name still resolves for now
-      aliasOf: otlp_http
     prometheus:
       type: prometheus
       signals:
@@ -990,6 +895,16 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/rabbitmqexporter
+    sapm:
+      type: sapm
+      signals:
+        - traces
+      stability:
+        traces: deprecated
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sapmexporter
+      deprecated: use OTLP exporter
     sematext:
       type: sematext
       signals:
@@ -1005,10 +920,8 @@ components:
       type: sentry
       signals:
         - traces
-        - logs
       stability:
-        logs: alpha
-        traces: alpha
+        traces: beta
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sentryexporter
@@ -1085,9 +998,9 @@ components:
         - metrics
         - logs
       stability:
-        logs: alpha
-        metrics: alpha
-        traces: alpha
+        logs: development
+        metrics: development
+        traces: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/tinybirdexporter
@@ -1124,14 +1037,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/avrologencodingextension
-    aws_logs_encoding:
-      type: aws_logs_encoding
-      stability:
-        extension: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/awslogsencodingextension
-      alias: awslogs_encoding
     awscloudwatchmetricstreams_encoding:
       type: awscloudwatchmetricstreams_encoding
       stability:
@@ -1146,8 +1051,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/awslogsencodingextension
-      deprecated: renamed to "aws_logs_encoding" upstream; the old name still resolves for now
-      aliasOf: aws_logs_encoding
     awsproxy:
       type: awsproxy
       stability:
@@ -1155,21 +1058,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/awsproxy
-    azure_auth:
-      type: azure_auth
-      stability:
-        extension: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/azureauthextension
-      alias: azureauth
-    azure_encoding:
-      type: azure_encoding
-      stability:
-        extension: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/azureencodingextension
     azureauth:
       type: azureauth
       stability:
@@ -1177,8 +1065,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/azureauthextension
-      deprecated: renamed to "azure_auth" upstream; the old name still resolves for now
-      aliasOf: azure_auth
     basicauth:
       type: basicauth
       stability:
@@ -1198,18 +1084,10 @@ components:
     cfgarden_observer:
       type: cfgarden_observer
       stability:
-        extension: alpha
+        extension: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/cfgardenobserver
-    cgroup_runtime:
-      type: cgroup_runtime
-      stability:
-        extension: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/cgroupruntimeextension
-      alias: cgroupruntime
     cgroupruntime:
       type: cgroupruntime
       stability:
@@ -1217,8 +1095,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/cgroupruntimeextension
-      deprecated: renamed to "cgroup_runtime" upstream; the old name still resolves for now
-      aliasOf: cgroup_runtime
     datadog:
       type: datadog
       stability:
@@ -1247,6 +1123,13 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/ecsobserver
+    ecs_task_observer:
+      type: ecs_task_observer
+      stability:
+        extension: unmaintained
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/ecstaskobserver
     file_storage:
       type: file_storage
       stability:
@@ -1255,14 +1138,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage
-    google_cloud_logentry_encoding:
-      type: google_cloud_logentry_encoding
-      stability:
-        extension: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/googlecloudlogentryencodingextension
-      alias: googlecloudlogentry_encoding
     googleclientauth:
       type: googleclientauth
       stability:
@@ -1277,8 +1152,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/googlecloudlogentryencodingextension
-      deprecated: renamed to "google_cloud_logentry_encoding" upstream; the old name still resolves for now
-      aliasOf: google_cloud_logentry_encoding
     headers_setter:
       type: headers_setter
       stability:
@@ -1290,7 +1163,7 @@ components:
     health_check:
       type: health_check
       stability:
-        extension: alpha
+        extension: beta
       distributions:
         - core
         - contrib
@@ -1346,7 +1219,6 @@ components:
         extension: alpha
       distributions:
         - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/k8sleaderelector
     k8s_observer:
       type: k8s_observer
@@ -1363,13 +1235,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/kafkatopicsobserver
-    memory_limiter:
-      type: memory_limiter
-      stability:
-        extension: development
-      distributions:
-        - core
-      module: go.opentelemetry.io/collector/extension/memorylimiterextension
     oauth2client:
       type: oauth2client
       stability:
@@ -1397,7 +1262,7 @@ components:
     otlp_encoding:
       type: otlp_encoding
       stability:
-        extension: beta
+        extension: alpha
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/otlpencodingextension
@@ -1455,7 +1320,7 @@ components:
     text_encoding:
       type: text_encoding
       stability:
-        extension: beta
+        extension: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/textencodingextension
@@ -1546,6 +1411,15 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor
+    datadogsemantics:
+      type: datadogsemantics
+      signals:
+        - traces
+      stability:
+        traces: development
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/datadogsemanticsprocessor
     deltatocumulative:
       type: deltatocumulative
       signals:
@@ -1585,11 +1459,9 @@ components:
         - traces
         - metrics
         - logs
-        - profiles
       stability:
         logs: alpha
         metrics: alpha
-        profiles: development
         traces: alpha
       distributions:
         - core
@@ -1643,36 +1515,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/intervalprocessor
-    isolationforest:
-      type: isolationforest
-      signals:
-        - traces
-        - metrics
-        - logs
-      stability:
-        logs: alpha
-        metrics: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/isolationforestprocessor
-    k8s_attributes:
-      type: k8s_attributes
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: beta
-        metrics: beta
-        profiles: development
-        traces: beta
-      distributions:
-        - contrib
-        - k8s
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor
-      alias: k8sattributes
     k8sattributes:
       type: k8sattributes
       signals:
@@ -1689,8 +1531,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor
-      deprecated: renamed to "k8s_attributes" upstream; the old name still resolves for now
-      aliasOf: k8s_attributes
     logdedup:
       type: logdedup
       signals:
@@ -1710,15 +1550,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/logstransformprocessor
-    lookup:
-      type: lookup
-      signals:
-        - logs
-      stability:
-        logs: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/lookupprocessor
     memory_limiter:
       type: memory_limiter
       signals:
@@ -1756,16 +1587,6 @@ components:
             doc: spike headroom as a percentage of total memory
         required:
           - check_interval
-    metric_start_time:
-      type: metric_start_time
-      signals:
-        - metrics
-      stability:
-        metrics: beta
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstarttimeprocessor
-      alias: metricstarttime
     metricsgeneration:
       type: metricsgeneration
       signals:
@@ -1780,12 +1601,10 @@ components:
       signals:
         - metrics
       stability:
-        metrics: beta
+        metrics: alpha
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstarttimeprocessor
-      deprecated: renamed to "metric_start_time" upstream; the old name still resolves for now
-      aliasOf: metric_start_time
     metricstransform:
       type: metricstransform
       signals:
@@ -1870,6 +1689,20 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor
+    routing:
+      type: routing
+      signals:
+        - traces
+        - metrics
+        - logs
+      stability:
+        logs: deprecated
+        metrics: deprecated
+        traces: deprecated
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/routingprocessor
+      deprecated: Use routing connector (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36616)
     schema:
       type: schema
       signals:
@@ -1893,15 +1726,6 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanprocessor
-    spanpruning:
-      type: spanpruning
-      signals:
-        - traces
-      stability:
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanpruningprocessor
     sumologic:
       type: sumologic
       signals:
@@ -1941,15 +1765,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor
-    unroll:
-      type: unroll
-      signals:
-        - logs
-      stability:
-        logs: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/unrollprocessor
   receiver:
     active_directory_ds:
       type: active_directory_ds
@@ -1996,6 +1811,15 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscloudwatchreceiver
+    awscloudwatchmetrics:
+      type: awscloudwatchmetrics
+      signals:
+        - metrics
+      stability:
+        metrics: unmaintained
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscloudwatchmetricsreceiver
     awscontainerinsightreceiver:
       type: awscontainerinsightreceiver
       signals:
@@ -2025,17 +1849,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsfirehosereceiver
-    awslambda:
-      type: awslambda
-      signals:
-        - metrics
-        - logs
-      stability:
-        logs: alpha
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awslambdareceiver
     awss3:
       type: awss3
       signals:
@@ -2058,51 +1871,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver
-    azure_blob:
-      type: azure_blob
-      signals:
-        - traces
-        - logs
-      stability:
-        logs: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureblobreceiver
-      alias: azureblob
-    azure_event_hub:
-      type: azure_event_hub
-      signals:
-        - traces
-        - metrics
-        - logs
-      stability:
-        logs: beta
-        metrics: beta
-        traces: beta
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureeventhubreceiver
-      alias: azureeventhub
-    azure_functions:
-      type: azure_functions
-      signals:
-        - logs
-      stability:
-        logs: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azurefunctionsreceiver
-    azure_monitor:
-      type: azure_monitor
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azuremonitorreceiver
-      alias: azuremonitor
     azureblob:
       type: azureblob
       signals:
@@ -2114,8 +1882,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureblobreceiver
-      deprecated: renamed to "azure_blob" upstream; the old name still resolves for now
-      aliasOf: azure_blob
     azureeventhub:
       type: azureeventhub
       signals:
@@ -2123,14 +1889,12 @@ components:
         - metrics
         - logs
       stability:
-        logs: beta
-        metrics: beta
-        traces: beta
+        logs: alpha
+        metrics: alpha
+        traces: alpha
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureeventhubreceiver
-      deprecated: renamed to "azure_event_hub" upstream; the old name still resolves for now
-      aliasOf: azure_event_hub
     azuremonitor:
       type: azuremonitor
       signals:
@@ -2140,14 +1904,21 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azuremonitorreceiver
-      deprecated: renamed to "azure_monitor" upstream; the old name still resolves for now
-      aliasOf: azure_monitor
+    bigip:
+      type: bigip
+      signals:
+        - metrics
+      stability:
+        metrics: beta
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/bigipreceiver
     carbon:
       type: carbon
       signals:
         - metrics
       stability:
-        metrics: beta
+        metrics: unmaintained
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver
@@ -2160,27 +1931,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/chronyreceiver
-    cisco_os:
-      type: cisco_os
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/ciscoosreceiver
-      alias: ciscoos
-    ciscoos:
-      type: ciscoos
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/ciscoosreceiver
-      deprecated: renamed to "cisco_os" upstream; the old name still resolves for now
-      aliasOf: cisco_os
     cloudflare:
       type: cloudflare
       signals:
@@ -2224,9 +1974,7 @@ components:
       signals:
         - traces
         - metrics
-        - logs
       stability:
-        logs: alpha
         metrics: alpha
         traces: alpha
       distributions:
@@ -2279,17 +2027,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/faroreceiver
-    file_log:
-      type: file_log
-      signals:
-        - logs
-      stability:
-        logs: beta
-      distributions:
-        - contrib
-        - k8s
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver
-      alias: filelog
     filelog:
       type: filelog
       signals:
@@ -2300,8 +2037,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver
-      deprecated: renamed to "file_log" upstream; the old name still resolves for now
-      aliasOf: file_log
     filestats:
       type: filestats
       signals:
@@ -2346,7 +2081,7 @@ components:
       signals:
         - traces
       stability:
-        traces: alpha
+        traces: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/gitlabreceiver
@@ -2372,15 +2107,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudpubsubreceiver
-    googlecloudpubsubpush:
-      type: googlecloudpubsubpush
-      signals:
-        - logs
-      stability:
-        logs: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudpubsubpushreceiver
     googlecloudspanner:
       type: googlecloudspanner
       signals:
@@ -2412,17 +2138,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver
-    http_check:
-      type: http_check
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-        - k8s
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpcheckreceiver
-      alias: httpcheck
     httpcheck:
       type: httpcheck
       signals:
@@ -2433,8 +2148,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpcheckreceiver
-      deprecated: renamed to "http_check" upstream; the old name still resolves for now
-      aliasOf: http_check
     huaweicloudcesreceiver:
       type: huaweicloudcesreceiver
       signals:
@@ -2444,15 +2157,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/huaweicloudcesreceiver
-    icmpcheckreceiver:
-      type: icmpcheckreceiver
-      signals:
-        - metrics
-      stability:
-        metrics: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/icmpcheckreceiver
     iis:
       type: iis
       signals:
@@ -2487,11 +2191,10 @@ components:
       signals:
         - metrics
       stability:
-        metrics: deprecated
+        metrics: beta
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver
-      deprecated: use JMX Gatherer Java program
     journald:
       type: journald
       signals:
@@ -2524,6 +2227,15 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8seventsreceiver
+    k8slog:
+      type: k8slog
+      signals:
+        - logs
+      stability:
+        logs: development
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8slogreceiver
     k8sobjects:
       type: k8sobjects
       signals:
@@ -2540,11 +2252,9 @@ components:
         - traces
         - metrics
         - logs
-        - profiles
       stability:
         logs: beta
         metrics: beta
-        profiles: development
         traces: beta
       distributions:
         - core
@@ -2589,27 +2299,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/lokireceiver
-    macos_unified_logging:
-      type: macos_unified_logging
-      signals:
-        - logs
-      stability:
-        logs: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/macosunifiedloggingreceiver
-      alias: macosunifiedlogging
-    macosunifiedlogging:
-      type: macosunifiedlogging
-      signals:
-        - logs
-      stability:
-        logs: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/macosunifiedloggingreceiver
-      deprecated: renamed to "macos_unified_logging" upstream; the old name still resolves for now
-      aliasOf: macos_unified_logging
     memcached:
       type: memcached
       signals:
@@ -2628,18 +2317,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbreceiver
-    mongodb_atlas:
-      type: mongodb_atlas
-      signals:
-        - metrics
-        - logs
-      stability:
-        logs: beta
-        metrics: beta
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver
-      alias: mongodbatlas
     mongodbatlas:
       type: mongodbatlas
       signals:
@@ -2651,29 +2328,15 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver
-      deprecated: renamed to "mongodb_atlas" upstream; the old name still resolves for now
-      aliasOf: mongodb_atlas
     mysql:
       type: mysql
       signals:
         - metrics
-        - logs
       stability:
-        logs: development
         metrics: beta
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mysqlreceiver
-    named_pipe:
-      type: named_pipe
-      signals:
-        - logs
-      stability:
-        logs: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/namedpipereceiver
-      alias: namedpipe
     namedpipe:
       type: namedpipe
       signals:
@@ -2683,8 +2346,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/namedpipereceiver
-      deprecated: renamed to "named_pipe" upstream; the old name still resolves for now
-      aliasOf: named_pipe
     netflow:
       type: netflow
       signals:
@@ -2709,11 +2370,9 @@ components:
         - traces
         - metrics
         - logs
-        - profiles
       stability:
         logs: beta
         metrics: beta
-        profiles: alpha
         traces: beta
       distributions:
         - core
@@ -2737,13 +2396,25 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/ntpreceiver
+    opencensus:
+      type: opencensus
+      signals:
+        - traces
+        - metrics
+      stability:
+        metrics: deprecated
+        traces: deprecated
+      distributions:
+        - core
+        - contrib
+        - k8s
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/opencensusreceiver
+      deprecated: Use OTLP receiver (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36791)
     oracledb:
       type: oracledb
       signals:
         - metrics
-        - logs
       stability:
-        logs: development
         metrics: alpha
       distributions:
         - contrib
@@ -2781,7 +2452,7 @@ components:
       stability:
         logs: stable
         metrics: stable
-        profiles: alpha
+        profiles: development
         traces: stable
       distributions:
         - core
@@ -3006,7 +2677,7 @@ components:
       signals:
         - profiles
       stability:
-        profiles: alpha
+        profiles: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/pprofreceiver
@@ -3021,16 +2692,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver
-    prometheus_remote_write:
-      type: prometheus_remote_write
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusremotewritereceiver
-      alias: prometheusremotewrite
     prometheus_simple:
       type: prometheus_simple
       signals:
@@ -3045,12 +2706,10 @@ components:
       signals:
         - metrics
       stability:
-        metrics: alpha
+        metrics: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusremotewritereceiver
-      deprecated: renamed to "prometheus_remote_write" upstream; the old name still resolves for now
-      aliasOf: prometheus_remote_write
     pulsar:
       type: pulsar
       signals:
@@ -3097,25 +2756,14 @@ components:
         - traces
         - metrics
         - logs
-        - profiles
       stability:
         logs: alpha
         metrics: beta
-        profiles: alpha
         traces: alpha
       distributions:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator
-    redfish:
-      type: redfish
-      signals:
-        - metrics
-      stability:
-        metrics: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/redfishreceiver
     redis:
       type: redis
       signals:
@@ -3143,18 +2791,27 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/saphanareceiver
+    sapm:
+      type: sapm
+      signals:
+        - traces
+      stability:
+        traces: deprecated
+      distributions:
+        - contrib
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver
+      deprecated: use OTLP receiver
     signalfx:
       type: signalfx
       signals:
         - metrics
         - logs
       stability:
-        logs: deprecated
-        metrics: deprecated
+        logs: beta
+        metrics: beta
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/signalfxreceiver
-      deprecated: Use the OTLP receiver instead. This component will be removed in a future release.
     skywalking:
       type: skywalking
       signals:
@@ -3240,7 +2897,7 @@ components:
       signals:
         - metrics
       stability:
-        metrics: beta
+        metrics: alpha
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sshcheckreceiver
@@ -3267,7 +2924,7 @@ components:
       signals:
         - logs
       stability:
-        logs: beta
+        logs: alpha
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/syslogreceiver
@@ -3276,20 +2933,10 @@ components:
       signals:
         - metrics
       stability:
-        metrics: alpha
+        metrics: development
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/systemdreceiver
-    tcp_log:
-      type: tcp_log
-      signals:
-        - logs
-      stability:
-        logs: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver
-      alias: tcplog
     tcpcheck:
       type: tcpcheck
       signals:
@@ -3308,18 +2955,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver
-      deprecated: renamed to "tcp_log" upstream; the old name still resolves for now
-      aliasOf: tcp_log
-    tls_check:
-      type: tls_check
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tlscheckreceiver
-      alias: tlscheck
     tlscheck:
       type: tlscheck
       signals:
@@ -3329,18 +2964,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tlscheckreceiver
-      deprecated: renamed to "tls_check" upstream; the old name still resolves for now
-      aliasOf: tls_check
-    udp_log:
-      type: udp_log
-      signals:
-        - logs
-      stability:
-        logs: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver
-      alias: udplog
     udplog:
       type: udplog
       signals:
@@ -3350,8 +2973,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver
-      deprecated: renamed to "udp_log" upstream; the old name still resolves for now
-      aliasOf: udp_log
     vcenter:
       type: vcenter
       signals:
@@ -3361,50 +2982,24 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver
-    vcr:
-      type: vcr
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: development
-        metrics: development
-        profiles: development
-        traces: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcrreceiver
     wavefront:
       type: wavefront
       signals:
         - metrics
       stability:
-        metrics: deprecated
+        metrics: beta
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver
-      deprecated: There is no replacement. This component will be removed in a future release.
     webhookevent:
       type: webhookevent
-      signals:
-        - logs
-      stability:
-        logs: beta
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/webhookeventreceiver
-    windows_event_log:
-      type: windows_event_log
       signals:
         - logs
       stability:
         logs: alpha
       distributions:
         - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver
-      alias: windowseventlog
+      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/webhookeventreceiver
     windowseventlog:
       type: windowseventlog
       signals:
@@ -3414,8 +3009,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver
-      deprecated: renamed to "windows_event_log" upstream; the old name still resolves for now
-      aliasOf: windows_event_log
     windowsperfcounters:
       type: windowsperfcounters
       signals:
@@ -3434,27 +3027,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsservicereceiver
-    yang_grpc:
-      type: yang_grpc
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/yanggrpcreceiver
-      alias: yanggrpc
-    yanggrpc:
-      type: yanggrpc
-      signals:
-        - metrics
-      stability:
-        metrics: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/yanggrpcreceiver
-      deprecated: renamed to "yang_grpc" upstream; the old name still resolves for now
-      aliasOf: yang_grpc
     zipkin:
       type: zipkin
       signals:

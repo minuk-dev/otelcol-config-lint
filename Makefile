@@ -3,7 +3,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -X github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint.Version=$(VERSION)
 
 # Releases to regenerate catalogs for, e.g. make catalogs VERSIONS=v0.158.0
-VERSIONS ?= $(shell ls catalogs/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml$$//' | paste -sd, -)
+VERSIONS ?= $(shell jq -r '[.distributions[][]] | unique | join(",")' catalogs/index.json 2>/dev/null)
 
 .PHONY: all build build-snapshot test lint lint-fix fmt catalogs clean
 

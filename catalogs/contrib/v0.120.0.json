@@ -1,10 +1,11 @@
 {
-  "collectorVersion": "v0.130.0",
+  "collectorVersion": "v0.120.0",
+  "distribution": "contrib",
   "distributions": [
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-08-02T06:27:02Z",
+  "generatedAt": "2026-08-02T06:54:59Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -16,7 +17,6 @@
         "stability": {
           "logs_to_metrics": "alpha",
           "metrics_to_metrics": "alpha",
-          "profiles_to_metrics": "alpha",
           "traces_to_metrics": "alpha"
         },
         "pairs": [
@@ -26,10 +26,6 @@
           },
           {
             "from": "metrics",
-            "to": "metrics"
-          },
-          {
-            "from": "profiles",
             "to": "metrics"
           },
           {
@@ -260,7 +256,6 @@
         "stability": {
           "logs_to_metrics": "alpha",
           "metrics_to_metrics": "alpha",
-          "profiles_to_metrics": "alpha",
           "traces_to_metrics": "alpha"
         },
         "pairs": [
@@ -270,10 +265,6 @@
           },
           {
             "from": "metrics",
-            "to": "metrics"
-          },
-          {
-            "from": "profiles",
             "to": "metrics"
           },
           {
@@ -366,7 +357,7 @@
           "logs"
         ],
         "stability": {
-          "logs": "unmaintained"
+          "logs": "beta"
         },
         "distributions": [
           "contrib"
@@ -433,23 +424,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter"
       },
-      "azureblob": {
-        "type": "azureblob",
-        "signals": [
-          "traces",
-          "metrics",
-          "logs"
-        ],
-        "stability": {
-          "logs": "alpha",
-          "metrics": "alpha",
-          "traces": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/azureblobexporter"
-      },
       "azuredataexplorer": {
         "type": "azuredataexplorer",
         "signals": [
@@ -503,7 +477,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "unmaintained"
+          "metrics": "beta"
         },
         "distributions": [
           "contrib"
@@ -547,13 +521,11 @@
         "signals": [
           "traces",
           "metrics",
-          "logs",
-          "profiles"
+          "logs"
         ],
         "stability": {
           "logs": "beta",
           "metrics": "beta",
-          "profiles": "alpha",
           "traces": "beta"
         },
         "distributions": [
@@ -674,21 +646,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/elasticsearchexporter"
-      },
-      "faro": {
-        "type": "faro",
-        "signals": [
-          "traces",
-          "logs"
-        ],
-        "stability": {
-          "logs": "alpha",
-          "traces": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/faroexporter"
       },
       "file": {
         "type": "file",
@@ -882,8 +839,7 @@
         "distributions": [
           "contrib"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/lokiexporter",
-        "deprecated": "Use OTLP exporter (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/33916)"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/lokiexporter"
       },
       "mezmo": {
         "type": "mezmo",
@@ -931,8 +887,7 @@
           "core",
           "contrib"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/opencensusexporter",
-        "deprecated": "Use OTLP exporter (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36791)"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/opencensusexporter"
       },
       "opensearch": {
         "type": "opensearch",
@@ -941,8 +896,8 @@
           "logs"
         ],
         "stability": {
-          "logs": "alpha",
-          "traces": "alpha"
+          "logs": "unmaintained",
+          "traces": "unmaintained"
         },
         "distributions": [
           "contrib"
@@ -976,7 +931,7 @@
           "profiles"
         ],
         "stability": {
-          "logs": "stable",
+          "logs": "beta",
           "metrics": "stable",
           "profiles": "development",
           "traces": "stable"
@@ -1182,7 +1137,7 @@
           "profiles"
         ],
         "stability": {
-          "logs": "stable",
+          "logs": "beta",
           "metrics": "stable",
           "profiles": "development",
           "traces": "stable"
@@ -1268,8 +1223,7 @@
         "distributions": [
           "contrib"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sapmexporter",
-        "deprecated": "use OTLP exporter"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sapmexporter"
       },
       "sematext": {
         "type": "sematext",
@@ -1339,7 +1293,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "alpha"
+          "metrics": "development"
         },
         "distributions": [
           "contrib"
@@ -1389,23 +1343,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/tencentcloudlogserviceexporter"
       },
-      "tinybird": {
-        "type": "tinybird",
-        "signals": [
-          "traces",
-          "metrics",
-          "logs"
-        ],
-        "stability": {
-          "logs": "development",
-          "metrics": "development",
-          "traces": "development"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/tinybirdexporter"
-      },
       "zipkin": {
         "type": "zipkin",
         "signals": [
@@ -1453,26 +1390,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/avrologencodingextension"
       },
-      "awscloudwatchmetricstreams_encoding": {
-        "type": "awscloudwatchmetricstreams_encoding",
-        "stability": {
-          "extension": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/awscloudwatchmetricstreamsencodingextension"
-      },
-      "awslogs_encoding": {
-        "type": "awslogs_encoding",
-        "stability": {
-          "extension": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/awslogsencodingextension"
-      },
       "awsproxy": {
         "type": "awsproxy",
         "stability": {
@@ -1482,16 +1399,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/awsproxy"
-      },
-      "azureauth": {
-        "type": "azureauth",
-        "stability": {
-          "extension": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/azureauthextension"
       },
       "basicauth": {
         "type": "basicauth",
@@ -1528,22 +1435,12 @@
       "cgroupruntime": {
         "type": "cgroupruntime",
         "stability": {
-          "extension": "alpha"
+          "extension": "development"
         },
         "distributions": [
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/cgroupruntimeextension"
-      },
-      "datadog": {
-        "type": "datadog",
-        "stability": {
-          "extension": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/datadogextension"
       },
       "db_storage": {
         "type": "db_storage",
@@ -1599,7 +1496,7 @@
       "googleclientauth": {
         "type": "googleclientauth",
         "stability": {
-          "extension": "beta"
+          "extension": "alpha"
         },
         "distributions": [
           "contrib"
@@ -1609,7 +1506,7 @@
       "googlecloudlogentry_encoding": {
         "type": "googlecloudlogentry_encoding",
         "stability": {
-          "extension": "alpha"
+          "extension": "development"
         },
         "distributions": [
           "contrib"
@@ -1704,7 +1601,7 @@
       "k8s_leader_elector": {
         "type": "k8s_leader_elector",
         "stability": {
-          "extension": "alpha"
+          "extension": "development"
         },
         "distributions": [
           "contrib"
@@ -1725,22 +1622,12 @@
       "kafkatopics_observer": {
         "type": "kafkatopics_observer",
         "stability": {
-          "extension": "alpha"
+          "extension": "beta"
         },
         "distributions": [
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/kafkatopicsobserver"
-      },
-      "memory_limiter": {
-        "type": "memory_limiter",
-        "stability": {
-          "extension": "development"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/extension/memorylimiterextension"
       },
       "oauth2client": {
         "type": "oauth2client",
@@ -1867,19 +1754,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/textencodingextension"
       },
-      "xextension": {
-        "type": "xextension",
-        "signals": [
-          "profiles"
-        ],
-        "stability": {
-          "profiles": "development"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/extension/xextension"
-      },
       "zipkin_encoding": {
         "type": "zipkin_encoding",
         "stability": {
@@ -1978,7 +1852,7 @@
           "traces"
         ],
         "stability": {
-          "traces": "alpha"
+          "traces": "development"
         },
         "distributions": [
           "contrib"
@@ -1998,19 +1872,6 @@
           "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor"
-      },
-      "datadogsemantics": {
-        "type": "datadogsemantics",
-        "signals": [
-          "traces"
-        ],
-        "stability": {
-          "traces": "development"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/datadogsemanticsprocessor"
       },
       "deltatocumulative": {
         "type": "deltatocumulative",
@@ -2039,23 +1900,6 @@
           "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor"
-      },
-      "dnslookup": {
-        "type": "dnslookup",
-        "signals": [
-          "traces",
-          "metrics",
-          "logs"
-        ],
-        "stability": {
-          "logs": "development",
-          "metrics": "development",
-          "traces": "development"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/dnslookupprocessor"
       },
       "filter": {
         "type": "filter",
@@ -2191,13 +2035,11 @@
         "signals": [
           "traces",
           "metrics",
-          "logs",
-          "profiles"
+          "logs"
         ],
         "stability": {
           "logs": "beta",
           "metrics": "beta",
-          "profiles": "alpha",
           "traces": "beta"
         },
         "distributions": [
@@ -2254,7 +2096,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "alpha"
+          "metrics": "development"
         },
         "distributions": [
           "contrib"
@@ -2333,13 +2175,11 @@
         "signals": [
           "traces",
           "metrics",
-          "logs",
-          "profiles"
+          "logs"
         ],
         "stability": {
           "logs": "beta",
           "metrics": "beta",
-          "profiles": "development",
           "traces": "beta"
         },
         "distributions": [
@@ -2384,8 +2224,7 @@
         "distributions": [
           "contrib"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/routingprocessor",
-        "deprecated": "Use routing connector (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36616)"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/routingprocessor"
       },
       "schema": {
         "type": "schema",
@@ -2454,14 +2293,12 @@
         "signals": [
           "traces",
           "metrics",
-          "logs",
-          "profiles"
+          "logs"
         ],
         "stability": {
-          "logs": "beta",
-          "metrics": "beta",
-          "profiles": "development",
-          "traces": "beta"
+          "logs": "alpha",
+          "metrics": "alpha",
+          "traces": "alpha"
         },
         "distributions": [
           "contrib",
@@ -2684,7 +2521,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "unmaintained"
+          "metrics": "beta"
         },
         "distributions": [
           "contrib"
@@ -2751,7 +2588,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "beta"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
@@ -2792,7 +2629,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "beta"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
@@ -2805,7 +2642,7 @@
           "logs"
         ],
         "stability": {
-          "logs": "alpha"
+          "logs": "development"
         },
         "distributions": [
           "contrib"
@@ -2824,21 +2661,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/expvarreceiver"
-      },
-      "faro": {
-        "type": "faro",
-        "signals": [
-          "traces",
-          "logs"
-        ],
-        "stability": {
-          "logs": "alpha",
-          "traces": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/faroreceiver"
       },
       "filelog": {
         "type": "filelog",
@@ -3120,19 +2942,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8seventsreceiver"
       },
-      "k8slog": {
-        "type": "k8slog",
-        "signals": [
-          "logs"
-        ],
-        "stability": {
-          "logs": "development"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8slogreceiver"
-      },
       "k8sobjects": {
         "type": "k8sobjects",
         "signals": [
@@ -3226,7 +3035,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "beta"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
@@ -3267,7 +3076,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "beta"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
@@ -3293,7 +3102,7 @@
           "logs"
         ],
         "stability": {
-          "logs": "alpha"
+          "logs": "development"
         },
         "distributions": [
           "contrib"
@@ -3350,7 +3159,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "beta"
+          "metrics": "alpha"
         },
         "distributions": [
           "contrib"
@@ -3372,8 +3181,7 @@
           "contrib",
           "k8s"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/opencensusreceiver",
-        "deprecated": "Use OTLP receiver (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36791)"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/opencensusreceiver"
       },
       "oracledb": {
         "type": "oracledb",
@@ -3742,30 +3550,15 @@
       "postgresql": {
         "type": "postgresql",
         "signals": [
-          "metrics",
-          "logs"
+          "metrics"
         ],
         "stability": {
-          "logs": "development",
-          "metrics": "beta"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/postgresqlreceiver"
-      },
-      "pprof": {
-        "type": "pprof",
-        "signals": [
-          "profiles"
-        ],
-        "stability": {
-          "profiles": "development"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/pprofreceiver"
       },
       "prometheus": {
         "type": "prometheus",
@@ -3857,7 +3650,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "beta"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
@@ -3914,7 +3707,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "alpha"
+          "metrics": "development"
         },
         "distributions": [
           "contrib"
@@ -3932,8 +3725,7 @@
         "distributions": [
           "contrib"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver",
-        "deprecated": "use OTLP receiver"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver"
       },
       "signalfx": {
         "type": "signalfx",
@@ -4050,11 +3842,9 @@
       "sqlserver": {
         "type": "sqlserver",
         "signals": [
-          "metrics",
-          "logs"
+          "metrics"
         ],
         "stability": {
-          "logs": "development",
           "metrics": "beta"
         },
         "distributions": [
@@ -4088,19 +3878,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/statsdreceiver"
       },
-      "stef": {
-        "type": "stef",
-        "signals": [
-          "metrics"
-        ],
-        "stability": {
-          "metrics": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/stefreceiver"
-      },
       "syslog": {
         "type": "syslog",
         "signals": [
@@ -4127,19 +3904,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/systemdreceiver"
       },
-      "tcpcheck": {
-        "type": "tcpcheck",
-        "signals": [
-          "metrics"
-        ],
-        "stability": {
-          "metrics": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcpcheckreceiver"
-      },
       "tcplog": {
         "type": "tcplog",
         "signals": [
@@ -4159,7 +3923,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "alpha"
+          "metrics": "development"
         },
         "distributions": [
           "contrib"
@@ -4244,19 +4008,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver"
       },
-      "windowsservice": {
-        "type": "windowsservice",
-        "signals": [
-          "metrics"
-        ],
-        "stability": {
-          "metrics": "development"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsservicereceiver"
-      },
       "zipkin": {
         "type": "zipkin",
         "signals": [
@@ -4278,7 +4029,7 @@
           "metrics"
         ],
         "stability": {
-          "metrics": "alpha"
+          "metrics": "unmaintained"
         },
         "distributions": [
           "contrib"
