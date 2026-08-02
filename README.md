@@ -191,8 +191,10 @@ between releases. Components without an overlay are simply not field-checked.
 ## Layout
 
 ```
-cmd/otelcol-config-lint/  the entry point
-pkg/cmd/otelcol-config-lint/  the cobra command: flags, file discovery, settings files
+cmd/otelcol-config-lint/      the entry point
+pkg/cmd/otelcol-config-lint/  the cobra command: flags, settings files, reporting
+pkg/scanner/              expands the given paths into the files to lint
+pkg/sets/                 a set built on a map, in the shape of k8s.io/apimachinery
 pkg/config/               YAML parsing that keeps positions, so findings have line numbers
 pkg/catalog/              catalog types, version resolution and location lookup
 pkg/rule/                 the rules and the registry

@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"text/tabwriter"
@@ -22,6 +21,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
@@ -246,9 +246,9 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 
 // runLint resolves what to check and how to report it, then does the work.
 func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
-	files, err := collect(paths, splitList(o.exclude))
+	files, err := scanner.New(splitList(o.exclude)).Scan(paths)
 	if err != nil {
-		return err
+		return fmt.Errorf("collect files: %w", err)
 	}
 
 	if files.Len() == 0 {
@@ -277,9 +277,6 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 	return nil
 }
 
-// stdinMarker is the argument that asks for the config on standard input.
-const stdinMarker = "-"
-
 // lintAll checks every file and reports the results in path order, returning
 // ErrFilesInvalid when the gate was not met.
 func (o *Options) lintAll(
@@ -294,11 +291,11 @@ func (o *Options) lintAll(
 	// are checked concurrently.
 	results := make(map[string]lint.Result, files.Len())
 
-	if files.Has(stdinMarker) {
-		results[stdinMarker] = linter.LintReader("stdin", cmd.InOrStdin())
+	if files.Has(scanner.StdinMarker) {
+		results[scanner.StdinMarker] = linter.LintReader("stdin", cmd.InOrStdin())
 	}
 
-	onDisk := sets.List(files.Difference(sets.New(stdinMarker)))
+	onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
 	for r := range linter.LintAll(onDisk, o.workers) {
 		results[r.Path] = r
 	}
@@ -568,93 +565,6 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 		// Later pairs win, so file overrides are listed first.
 		o.severity = joinList(strings.Join(pairs, ","), o.severity)
 	}
-}
-
-// isConfigExt reports whether a file extension is one a directory walk picks up.
-func isConfigExt(ext string) bool {
-	return ext == ".yaml" || ext == ".yml"
-}
-
-// collect expands the command line arguments into the files to lint.
-// Directories are walked recursively; "-" is kept as a marker for stdin. The
-// same file can be named twice, or named and also walked into, so the result
-// is a set. It carries no order: that is the reporting side's decision.
-func collect(args []string, exclude []string) (sets.Set[string], error) {
-	files := sets.New[string]()
-
-	for _, arg := range args {
-		if arg == stdinMarker {
-			files.Insert(stdinMarker)
-
-			continue
-		}
-
-		info, err := os.Stat(arg)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", arg, err)
-		}
-
-		if !info.IsDir() {
-			// An explicitly named file is linted even if it would be excluded
-			// by a directory walk, matching how other linters behave.
-			files.Insert(filepath.Clean(arg))
-
-			continue
-		}
-
-		err = filepath.WalkDir(arg, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			name := d.Name()
-			if d.IsDir() {
-				if path != arg && (strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules") {
-					return fs.SkipDir
-				}
-
-				return nil
-			}
-
-			if !isConfigExt(strings.ToLower(filepath.Ext(name))) {
-				return nil
-			}
-
-			if excluded(path, exclude) {
-				return nil
-			}
-
-			files.Insert(filepath.Clean(path))
-
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("walk %s: %w", arg, err)
-		}
-	}
-
-	return files, nil
-}
-
-// excluded reports whether a path matches any exclude pattern. Patterns are
-// matched against both the full path and the base name.
-func excluded(path string, patterns []string) bool {
-	base := filepath.Base(path)
-	for _, p := range patterns {
-		if ok, _ := filepath.Match(p, base); ok {
-			return true
-		}
-
-		if ok, _ := filepath.Match(p, path); ok {
-			return true
-		}
-
-		if strings.Contains(path, strings.Trim(p, "*")) && strings.Contains(p, "*") {
-			return true
-		}
-	}
-
-	return false
 }
 
 // columns renders aligned help output for --list-rules and --list-versions.
