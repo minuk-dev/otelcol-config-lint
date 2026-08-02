@@ -1,0 +1,585 @@
+{
+  "collectorVersion": "v0.157.0",
+  "distribution": "otlp",
+  "distributions": [
+    "core",
+    "contrib"
+  ],
+  "generatedAt": "2026-08-02T06:32:23Z",
+  "sources": {
+    "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
+    "core": "go.opentelemetry.io/collector"
+  },
+  "components": {
+    "exporter": {
+      "otlp": {
+        "type": "otlp",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "alpha",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
+        "deprecated": "renamed to \"otlp_grpc\" upstream; the old name still resolves for now",
+        "aliasOf": "otlp_grpc",
+        "fields": {
+          "type": "map",
+          "children": {
+            "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "string"
+                }
+              }
+            },
+            "authority": {
+              "type": "string"
+            },
+            "balancer_name": {
+              "type": "string",
+              "enum": [
+                "round_robin",
+                "pick_first"
+              ]
+            },
+            "compression": {
+              "type": "string",
+              "enum": [
+                "gzip",
+                "snappy",
+                "zstd",
+                "zlib",
+                "deflate",
+                "lz4",
+                "none",
+                ""
+              ]
+            },
+            "endpoint": {
+              "type": "string",
+              "doc": "host:port of the OTLP gRPC endpoint"
+            },
+            "headers": {
+              "type": "map",
+              "open": true,
+              "doc": "extra gRPC metadata sent with every request"
+            },
+            "keepalive": {
+              "type": "map",
+              "children": {
+                "permit_without_stream": {
+                  "type": "bool"
+                },
+                "time": {
+                  "type": "duration"
+                },
+                "timeout": {
+                  "type": "duration"
+                }
+              }
+            },
+            "read_buffer_size": {
+              "type": "int"
+            },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
+            "sending_queue": {
+              "type": "map",
+              "children": {
+                "blocking": {
+                  "type": "bool"
+                },
+                "enabled": {
+                  "type": "bool"
+                },
+                "num_consumers": {
+                  "type": "int"
+                },
+                "queue_size": {
+                  "type": "int"
+                },
+                "sizer": {
+                  "type": "string",
+                  "enum": [
+                    "requests",
+                    "items",
+                    "bytes"
+                  ]
+                },
+                "storage": {
+                  "type": "string",
+                  "doc": "id of a storage extension for a persistent queue"
+                },
+                "wait_for_result": {
+                  "type": "bool"
+                }
+              },
+              "open": true
+            },
+            "timeout": {
+              "type": "duration"
+            },
+            "tls": {
+              "type": "map",
+              "children": {
+                "ca_file": {
+                  "type": "string"
+                },
+                "ca_pem": {
+                  "type": "string"
+                },
+                "cert_file": {
+                  "type": "string"
+                },
+                "cert_pem": {
+                  "type": "string"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool"
+                },
+                "insecure": {
+                  "type": "bool",
+                  "doc": "send in plaintext; only for local testing"
+                },
+                "insecure_skip_verify": {
+                  "type": "bool",
+                  "doc": "accept any server certificate"
+                },
+                "key_file": {
+                  "type": "string"
+                },
+                "key_pem": {
+                  "type": "string"
+                },
+                "max_version": {
+                  "type": "string"
+                },
+                "min_version": {
+                  "type": "string"
+                },
+                "reload_interval": {
+                  "type": "duration"
+                },
+                "server_name_override": {
+                  "type": "string"
+                }
+              }
+            },
+            "wait_for_ready": {
+              "type": "bool"
+            },
+            "write_buffer_size": {
+              "type": "int"
+            }
+          },
+          "required": [
+            "endpoint"
+          ]
+        }
+      },
+      "otlp_grpc": {
+        "type": "otlp_grpc",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "alpha",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
+        "alias": "otlp"
+      },
+      "otlp_http": {
+        "type": "otlp_http",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "alpha",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
+        "alias": "otlphttp"
+      },
+      "otlphttp": {
+        "type": "otlphttp",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "alpha",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
+        "deprecated": "renamed to \"otlp_http\" upstream; the old name still resolves for now",
+        "aliasOf": "otlp_http"
+      }
+    },
+    "receiver": {
+      "otlp": {
+        "type": "otlp",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "alpha",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/receiver/otlpreceiver",
+        "fields": {
+          "type": "map",
+          "children": {
+            "protocols": {
+              "type": "map",
+              "children": {
+                "grpc": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "string",
+                          "doc": "id of an authenticator extension"
+                        }
+                      }
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "doc": "host:port to listen on, e.g. 0.0.0.0:4317"
+                    },
+                    "include_metadata": {
+                      "type": "bool"
+                    },
+                    "keepalive": {
+                      "type": "map",
+                      "children": {
+                        "enforcement_policy": {
+                          "type": "map",
+                          "children": {
+                            "min_time": {
+                              "type": "duration"
+                            },
+                            "permit_without_stream": {
+                              "type": "bool"
+                            }
+                          }
+                        },
+                        "server_parameters": {
+                          "type": "map",
+                          "children": {
+                            "max_connection_age": {
+                              "type": "duration"
+                            },
+                            "max_connection_age_grace": {
+                              "type": "duration"
+                            },
+                            "max_connection_idle": {
+                              "type": "duration"
+                            },
+                            "time": {
+                              "type": "duration"
+                            },
+                            "timeout": {
+                              "type": "duration"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "max_concurrent_streams": {
+                      "type": "int"
+                    },
+                    "max_recv_msg_size_mib": {
+                      "type": "int"
+                    },
+                    "read_buffer_size": {
+                      "type": "int"
+                    },
+                    "tls": {
+                      "type": "map",
+                      "children": {
+                        "ca_file": {
+                          "type": "string"
+                        },
+                        "ca_pem": {
+                          "type": "string"
+                        },
+                        "cert_file": {
+                          "type": "string"
+                        },
+                        "cert_pem": {
+                          "type": "string"
+                        },
+                        "cipher_suites": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "client_ca_file": {
+                          "type": "string"
+                        },
+                        "client_ca_file_reload": {
+                          "type": "bool"
+                        },
+                        "include_system_ca_certs_pool": {
+                          "type": "bool"
+                        },
+                        "key_file": {
+                          "type": "string"
+                        },
+                        "key_pem": {
+                          "type": "string"
+                        },
+                        "max_version": {
+                          "type": "string"
+                        },
+                        "min_version": {
+                          "type": "string"
+                        },
+                        "reload_interval": {
+                          "type": "duration"
+                        }
+                      }
+                    },
+                    "transport": {
+                      "type": "string",
+                      "enum": [
+                        "tcp",
+                        "tcp4",
+                        "tcp6",
+                        "udp",
+                        "udp4",
+                        "udp6",
+                        "ip",
+                        "ip4",
+                        "ip6",
+                        "unix",
+                        "unixgram",
+                        "unixpacket"
+                      ]
+                    },
+                    "write_buffer_size": {
+                      "type": "int"
+                    }
+                  }
+                },
+                "http": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "compression_algorithms": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "cors": {
+                      "type": "map",
+                      "children": {
+                        "allowed_headers": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "allowed_origins": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "max_age": {
+                          "type": "int"
+                        }
+                      }
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "doc": "host:port to listen on, e.g. 0.0.0.0:4318"
+                    },
+                    "include_metadata": {
+                      "type": "bool"
+                    },
+                    "logs_url_path": {
+                      "type": "string"
+                    },
+                    "max_request_body_size": {
+                      "type": "int"
+                    },
+                    "metrics_url_path": {
+                      "type": "string"
+                    },
+                    "response_headers": {
+                      "type": "map",
+                      "open": true
+                    },
+                    "tls": {
+                      "type": "map",
+                      "children": {
+                        "ca_file": {
+                          "type": "string"
+                        },
+                        "ca_pem": {
+                          "type": "string"
+                        },
+                        "cert_file": {
+                          "type": "string"
+                        },
+                        "cert_pem": {
+                          "type": "string"
+                        },
+                        "cipher_suites": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "client_ca_file": {
+                          "type": "string"
+                        },
+                        "client_ca_file_reload": {
+                          "type": "bool"
+                        },
+                        "include_system_ca_certs_pool": {
+                          "type": "bool"
+                        },
+                        "key_file": {
+                          "type": "string"
+                        },
+                        "key_pem": {
+                          "type": "string"
+                        },
+                        "max_version": {
+                          "type": "string"
+                        },
+                        "min_version": {
+                          "type": "string"
+                        },
+                        "reload_interval": {
+                          "type": "duration"
+                        }
+                      }
+                    },
+                    "traces_url_path": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "doc": "at least one of grpc or http must be enabled"
+            }
+          },
+          "required": [
+            "protocols"
+          ]
+        }
+      }
+    }
+  }
+}

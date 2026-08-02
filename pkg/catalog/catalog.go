@@ -17,10 +17,14 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
-// Catalog is the component inventory of one collector release.
+// Catalog is the component inventory of one collector release, as shipped by
+// one distribution.
 type Catalog struct {
 	// CollectorVersion is the upstream release tag, e.g. "v0.157.0".
 	CollectorVersion string `json:"collectorVersion" yaml:"collectorVersion"`
+	// Distribution names the binary this catalog describes, e.g. "core". The
+	// special value "all" is the union of every distribution.
+	Distribution string `json:"distribution,omitempty" yaml:"distribution,omitempty"`
 	// Distributions lists which upstream distributions were merged in.
 	Distributions []string `json:"distributions"         yaml:"distributions"`
 	GeneratedAt   string   `json:"generatedAt,omitempty" yaml:"generatedAt,omitempty"`

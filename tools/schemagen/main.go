@@ -25,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -145,17 +146,137 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 
 		applyOverlays(cat, loaded)
 
-		for _, format := range formats {
-			dest := filepath.Join(outDir, v+"."+format)
+		err = writeDistributions(outDir, cat, formats)
+		if err != nil {
+			return err
+		}
+	}
 
-			err := write(dest, cat, catalog.Format(format))
+	return writeIndex(outDir)
+}
+
+// writeDistributions splits a merged catalog into one file per distribution,
+// under "<out>/<distribution>/<version>.<format>". The union is written too,
+// as the "all" distribution.
+func writeDistributions(outDir string, cat *catalog.Catalog, formats []string) error {
+	for _, dist := range append([]string{catalog.AllDistributions}, distributionsIn(cat)...) {
+		sub := filterDistribution(cat, dist)
+
+		dir := filepath.Join(outDir, dist)
+
+		err := os.MkdirAll(dir, dirPerm)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", dir, err)
+		}
+
+		for _, format := range formats {
+			dest := filepath.Join(dir, sub.CollectorVersion+"."+format)
+
+			err := write(dest, sub, catalog.Format(format))
 			if err != nil {
 				return err
 			}
+		}
 
-			logf("wrote %s (%d components)\n", dest, cat.Count())
+		logf("  %s: %d components\n", dist, sub.Count())
+	}
+
+	return nil
+}
+
+// distributionsIn returns every distribution any component in the catalog
+// ships in, sorted.
+func distributionsIn(cat *catalog.Catalog) []string {
+	seen := map[string]bool{}
+
+	for _, byType := range cat.Components {
+		for _, comp := range byType {
+			for _, d := range comp.Distributions {
+				seen[d] = true
+			}
 		}
 	}
+
+	out := make([]string, 0, len(seen))
+	for d := range seen {
+		out = append(out, d)
+	}
+
+	sort.Strings(out)
+
+	return out
+}
+
+// filterDistribution copies the catalog down to the components one
+// distribution ships. "all" keeps everything.
+func filterDistribution(cat *catalog.Catalog, dist string) *catalog.Catalog {
+	out := *cat
+	out.Distribution = dist
+	out.Components = map[config.Kind]map[string]*catalog.Component{}
+
+	for kind, byType := range cat.Components {
+		for typ, comp := range byType {
+			if dist != catalog.AllDistributions && !slices.Contains(comp.Distributions, dist) {
+				continue
+			}
+
+			if out.Components[kind] == nil {
+				out.Components[kind] = map[string]*catalog.Component{}
+			}
+
+			out.Components[kind][typ] = comp
+		}
+	}
+
+	return &out
+}
+
+// writeIndex records what the registry can serve. It is rebuilt by listing the
+// output directory, not from the versions generated in this run, so
+// regenerating one release leaves the others listed.
+func writeIndex(outDir string) error {
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", outDir, err)
+	}
+
+	idx := &catalog.Index{Distributions: nil, Versions: nil}
+	seen := map[string]bool{}
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+
+		idx.Distributions = append(idx.Distributions, e.Name())
+
+		names, _ := filepath.Glob(filepath.Join(outDir, e.Name(), "*.json"))
+		for _, n := range names {
+			v := strings.TrimSuffix(filepath.Base(n), ".json")
+			if !seen[v] {
+				seen[v] = true
+				idx.Versions = append(idx.Versions, v)
+			}
+		}
+	}
+
+	dest := filepath.Join(outDir, catalog.IndexFile)
+
+	f, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", dest, err)
+	}
+
+	err = idx.Write(f)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+
+	if err != nil {
+		return err
+	}
+
+	logf("wrote %s (%d distributions, %d versions)\n", dest, len(idx.Distributions), len(idx.Versions))
 
 	return nil
 }

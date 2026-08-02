@@ -1,0 +1,1657 @@
+{
+  "collectorVersion": "v0.130.0",
+  "distribution": "k8s",
+  "distributions": [
+    "core",
+    "contrib"
+  ],
+  "generatedAt": "2026-08-02T06:32:22Z",
+  "sources": {
+    "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
+    "core": "go.opentelemetry.io/collector"
+  },
+  "components": {
+    "connector": {
+      "count": {
+        "type": "count",
+        "stability": {
+          "logs_to_metrics": "alpha",
+          "metrics_to_metrics": "alpha",
+          "profiles_to_metrics": "alpha",
+          "traces_to_metrics": "alpha"
+        },
+        "pairs": [
+          {
+            "from": "logs",
+            "to": "metrics"
+          },
+          {
+            "from": "metrics",
+            "to": "metrics"
+          },
+          {
+            "from": "profiles",
+            "to": "metrics"
+          },
+          {
+            "from": "traces",
+            "to": "metrics"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/countconnector"
+      },
+      "exceptions": {
+        "type": "exceptions",
+        "stability": {
+          "traces_to_logs": "alpha",
+          "traces_to_metrics": "alpha"
+        },
+        "pairs": [
+          {
+            "from": "traces",
+            "to": "logs"
+          },
+          {
+            "from": "traces",
+            "to": "metrics"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/exceptionsconnector"
+      },
+      "failover": {
+        "type": "failover",
+        "stability": {
+          "logs_to_logs": "alpha",
+          "metrics_to_metrics": "alpha",
+          "traces_to_traces": "alpha"
+        },
+        "pairs": [
+          {
+            "from": "logs",
+            "to": "logs"
+          },
+          {
+            "from": "metrics",
+            "to": "metrics"
+          },
+          {
+            "from": "traces",
+            "to": "traces"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/failoverconnector"
+      },
+      "forward": {
+        "type": "forward",
+        "stability": {
+          "logs_to_logs": "beta",
+          "metrics_to_metrics": "beta",
+          "traces_to_traces": "beta"
+        },
+        "pairs": [
+          {
+            "from": "logs",
+            "to": "logs"
+          },
+          {
+            "from": "metrics",
+            "to": "metrics"
+          },
+          {
+            "from": "traces",
+            "to": "traces"
+          }
+        ],
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "go.opentelemetry.io/collector/connector/forwardconnector"
+      },
+      "otlpjson": {
+        "type": "otlpjson",
+        "stability": {
+          "logs_to_logs": "alpha",
+          "logs_to_metrics": "alpha",
+          "logs_to_traces": "alpha"
+        },
+        "pairs": [
+          {
+            "from": "logs",
+            "to": "logs"
+          },
+          {
+            "from": "logs",
+            "to": "metrics"
+          },
+          {
+            "from": "logs",
+            "to": "traces"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/otlpjsonconnector"
+      },
+      "roundrobin": {
+        "type": "roundrobin",
+        "stability": {
+          "logs_to_logs": "beta",
+          "metrics_to_metrics": "beta",
+          "traces_to_traces": "beta"
+        },
+        "pairs": [
+          {
+            "from": "logs",
+            "to": "logs"
+          },
+          {
+            "from": "metrics",
+            "to": "metrics"
+          },
+          {
+            "from": "traces",
+            "to": "traces"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/roundrobinconnector"
+      },
+      "routing": {
+        "type": "routing",
+        "stability": {
+          "logs_to_logs": "alpha",
+          "metrics_to_metrics": "alpha",
+          "traces_to_traces": "alpha"
+        },
+        "pairs": [
+          {
+            "from": "logs",
+            "to": "logs"
+          },
+          {
+            "from": "metrics",
+            "to": "metrics"
+          },
+          {
+            "from": "traces",
+            "to": "traces"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/routingconnector"
+      },
+      "servicegraph": {
+        "type": "servicegraph",
+        "stability": {
+          "traces_to_metrics": "alpha"
+        },
+        "pairs": [
+          {
+            "from": "traces",
+            "to": "metrics"
+          }
+        ],
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/servicegraphconnector"
+      }
+    },
+    "exporter": {
+      "debug": {
+        "type": "debug",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "development",
+          "metrics": "development",
+          "profiles": "development",
+          "traces": "development"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/debugexporter",
+        "fields": {
+          "type": "map",
+          "children": {
+            "sampling_initial": {
+              "type": "int",
+              "doc": "messages logged per second before sampling kicks in"
+            },
+            "sampling_thereafter": {
+              "type": "int",
+              "doc": "log one in every N messages after the initial burst"
+            },
+            "use_internal_logger": {
+              "type": "bool"
+            },
+            "verbosity": {
+              "type": "string",
+              "enum": [
+                "basic",
+                "normal",
+                "detailed"
+              ],
+              "doc": "how much of each payload is written to the collector log"
+            }
+          }
+        }
+      },
+      "file": {
+        "type": "file",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "alpha",
+          "metrics": "alpha",
+          "profiles": "development",
+          "traces": "alpha"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter"
+      },
+      "loadbalancing": {
+        "type": "loadbalancing",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "development",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter"
+      },
+      "nop": {
+        "type": "nop",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/nopexporter"
+      },
+      "otelarrow": {
+        "type": "otelarrow",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/otelarrowexporter"
+      },
+      "otlp": {
+        "type": "otlp",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "development",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
+        "fields": {
+          "type": "map",
+          "children": {
+            "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "string"
+                }
+              }
+            },
+            "authority": {
+              "type": "string"
+            },
+            "balancer_name": {
+              "type": "string",
+              "enum": [
+                "round_robin",
+                "pick_first"
+              ]
+            },
+            "compression": {
+              "type": "string",
+              "enum": [
+                "gzip",
+                "snappy",
+                "zstd",
+                "zlib",
+                "deflate",
+                "lz4",
+                "none",
+                ""
+              ]
+            },
+            "endpoint": {
+              "type": "string",
+              "doc": "host:port of the OTLP gRPC endpoint"
+            },
+            "headers": {
+              "type": "map",
+              "open": true,
+              "doc": "extra gRPC metadata sent with every request"
+            },
+            "keepalive": {
+              "type": "map",
+              "children": {
+                "permit_without_stream": {
+                  "type": "bool"
+                },
+                "time": {
+                  "type": "duration"
+                },
+                "timeout": {
+                  "type": "duration"
+                }
+              }
+            },
+            "read_buffer_size": {
+              "type": "int"
+            },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
+            "sending_queue": {
+              "type": "map",
+              "children": {
+                "blocking": {
+                  "type": "bool"
+                },
+                "enabled": {
+                  "type": "bool"
+                },
+                "num_consumers": {
+                  "type": "int"
+                },
+                "queue_size": {
+                  "type": "int"
+                },
+                "sizer": {
+                  "type": "string",
+                  "enum": [
+                    "requests",
+                    "items",
+                    "bytes"
+                  ]
+                },
+                "storage": {
+                  "type": "string",
+                  "doc": "id of a storage extension for a persistent queue"
+                },
+                "wait_for_result": {
+                  "type": "bool"
+                }
+              },
+              "open": true
+            },
+            "timeout": {
+              "type": "duration"
+            },
+            "tls": {
+              "type": "map",
+              "children": {
+                "ca_file": {
+                  "type": "string"
+                },
+                "ca_pem": {
+                  "type": "string"
+                },
+                "cert_file": {
+                  "type": "string"
+                },
+                "cert_pem": {
+                  "type": "string"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool"
+                },
+                "insecure": {
+                  "type": "bool",
+                  "doc": "send in plaintext; only for local testing"
+                },
+                "insecure_skip_verify": {
+                  "type": "bool",
+                  "doc": "accept any server certificate"
+                },
+                "key_file": {
+                  "type": "string"
+                },
+                "key_pem": {
+                  "type": "string"
+                },
+                "max_version": {
+                  "type": "string"
+                },
+                "min_version": {
+                  "type": "string"
+                },
+                "reload_interval": {
+                  "type": "duration"
+                },
+                "server_name_override": {
+                  "type": "string"
+                }
+              }
+            },
+            "wait_for_ready": {
+              "type": "bool"
+            },
+            "write_buffer_size": {
+              "type": "int"
+            }
+          },
+          "required": [
+            "endpoint"
+          ]
+        }
+      },
+      "otlphttp": {
+        "type": "otlphttp",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "development",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter"
+      }
+    },
+    "extension": {
+      "ack": {
+        "type": "ack",
+        "stability": {
+          "extension": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/ackextension"
+      },
+      "basicauth": {
+        "type": "basicauth",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/basicauthextension"
+      },
+      "bearertokenauth": {
+        "type": "bearertokenauth",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/bearertokenauthextension"
+      },
+      "file_storage": {
+        "type": "file_storage",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage"
+      },
+      "headers_setter": {
+        "type": "headers_setter",
+        "stability": {
+          "extension": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/headerssetterextension"
+      },
+      "health_check": {
+        "type": "health_check",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension"
+      },
+      "host_observer": {
+        "type": "host_observer",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/hostobserver"
+      },
+      "http_forwarder": {
+        "type": "http_forwarder",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/httpforwarderextension"
+      },
+      "k8s_observer": {
+        "type": "k8s_observer",
+        "stability": {
+          "extension": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/k8sobserver"
+      },
+      "oauth2client": {
+        "type": "oauth2client",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/oauth2clientauthextension"
+      },
+      "oidc": {
+        "type": "oidc",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/oidcauthextension"
+      },
+      "opamp": {
+        "type": "opamp",
+        "stability": {
+          "extension": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampextension"
+      },
+      "pprof": {
+        "type": "pprof",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension"
+      },
+      "zpages": {
+        "type": "zpages",
+        "stability": {
+          "extension": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "go.opentelemetry.io/collector/extension/zpagesextension"
+      }
+    },
+    "processor": {
+      "attributes": {
+        "type": "attributes",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor"
+      },
+      "batch": {
+        "type": "batch",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "go.opentelemetry.io/collector/processor/batchprocessor",
+        "fields": {
+          "type": "map",
+          "children": {
+            "metadata_cardinality_limit": {
+              "type": "int",
+              "doc": "maximum number of distinct metadata_keys combinations"
+            },
+            "metadata_keys": {
+              "type": "list",
+              "children": {
+                "item": {
+                  "type": "string"
+                }
+              },
+              "doc": "client metadata keys that get their own batcher"
+            },
+            "send_batch_max_size": {
+              "type": "int",
+              "doc": "hard upper bound on a batch; must be \u003e= send_batch_size when set"
+            },
+            "send_batch_size": {
+              "type": "int",
+              "doc": "number of spans, metric data points or log records per batch"
+            },
+            "timeout": {
+              "type": "duration",
+              "doc": "how long to wait before sending a batch that is not yet full"
+            }
+          }
+        }
+      },
+      "cumulativetodelta": {
+        "type": "cumulativetodelta",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor"
+      },
+      "deltatocumulative": {
+        "type": "deltatocumulative",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatocumulativeprocessor"
+      },
+      "deltatorate": {
+        "type": "deltatorate",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor"
+      },
+      "filter": {
+        "type": "filter",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha",
+          "metrics": "alpha",
+          "traces": "alpha"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor"
+      },
+      "groupbyattrs": {
+        "type": "groupbyattrs",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbyattrsprocessor"
+      },
+      "groupbytrace": {
+        "type": "groupbytrace",
+        "signals": [
+          "traces"
+        ],
+        "stability": {
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbytraceprocessor"
+      },
+      "interval": {
+        "type": "interval",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/intervalprocessor"
+      },
+      "k8sattributes": {
+        "type": "k8sattributes",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "profiles": "development",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor"
+      },
+      "logdedup": {
+        "type": "logdedup",
+        "signals": [
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/logdedupprocessor"
+      },
+      "memory_limiter": {
+        "type": "memory_limiter",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "profiles": "alpha",
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "go.opentelemetry.io/collector/processor/memorylimiterprocessor",
+        "fields": {
+          "type": "map",
+          "children": {
+            "check_interval": {
+              "type": "duration",
+              "doc": "how often memory use is measured; 1s is the usual value"
+            },
+            "limit_mib": {
+              "type": "int",
+              "doc": "hard limit in MiB; above it the processor starts refusing data"
+            },
+            "limit_percentage": {
+              "type": "int",
+              "doc": "hard limit as a percentage of total memory, for containers"
+            },
+            "spike_limit_mib": {
+              "type": "int",
+              "doc": "headroom in MiB reserved for allocation spikes"
+            },
+            "spike_limit_percentage": {
+              "type": "int",
+              "doc": "spike headroom as a percentage of total memory"
+            }
+          },
+          "required": [
+            "check_interval"
+          ]
+        }
+      },
+      "metricstransform": {
+        "type": "metricstransform",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor"
+      },
+      "probabilistic_sampler": {
+        "type": "probabilistic_sampler",
+        "signals": [
+          "traces",
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha",
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor"
+      },
+      "redaction": {
+        "type": "redaction",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha",
+          "metrics": "alpha",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/redactionprocessor"
+      },
+      "remotetap": {
+        "type": "remotetap",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha",
+          "metrics": "alpha",
+          "traces": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/remotetapprocessor"
+      },
+      "resource": {
+        "type": "resource",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "profiles": "development",
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor"
+      },
+      "resourcedetection": {
+        "type": "resourcedetection",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "profiles": "development",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor"
+      },
+      "tail_sampling": {
+        "type": "tail_sampling",
+        "signals": [
+          "traces"
+        ],
+        "stability": {
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor"
+      },
+      "transform": {
+        "type": "transform",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "profiles": "development",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor"
+      }
+    },
+    "receiver": {
+      "filelog": {
+        "type": "filelog",
+        "signals": [
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver"
+      },
+      "fluentforward": {
+        "type": "fluentforward",
+        "signals": [
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver"
+      },
+      "hostmetrics": {
+        "type": "hostmetrics",
+        "signals": [
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "development",
+          "metrics": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver"
+      },
+      "httpcheck": {
+        "type": "httpcheck",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpcheckreceiver"
+      },
+      "jaeger": {
+        "type": "jaeger",
+        "signals": [
+          "traces"
+        ],
+        "stability": {
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver"
+      },
+      "journald": {
+        "type": "journald",
+        "signals": [
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/journaldreceiver"
+      },
+      "k8s_cluster": {
+        "type": "k8s_cluster",
+        "signals": [
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "development",
+          "metrics": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver"
+      },
+      "k8s_events": {
+        "type": "k8s_events",
+        "signals": [
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8seventsreceiver"
+      },
+      "k8sobjects": {
+        "type": "k8sobjects",
+        "signals": [
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sobjectsreceiver"
+      },
+      "kubeletstats": {
+        "type": "kubeletstats",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver"
+      },
+      "opencensus": {
+        "type": "opencensus",
+        "signals": [
+          "traces",
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "deprecated",
+          "traces": "deprecated"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/opencensusreceiver",
+        "deprecated": "Use OTLP receiver (https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/36791)"
+      },
+      "otelarrow": {
+        "type": "otelarrow",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "beta",
+          "metrics": "beta",
+          "traces": "beta"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/otelarrowreceiver"
+      },
+      "otlp": {
+        "type": "otlp",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs",
+          "profiles"
+        ],
+        "stability": {
+          "logs": "stable",
+          "metrics": "stable",
+          "profiles": "development",
+          "traces": "stable"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s",
+          "otlp"
+        ],
+        "module": "go.opentelemetry.io/collector/receiver/otlpreceiver",
+        "fields": {
+          "type": "map",
+          "children": {
+            "protocols": {
+              "type": "map",
+              "children": {
+                "grpc": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "string",
+                          "doc": "id of an authenticator extension"
+                        }
+                      }
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "doc": "host:port to listen on, e.g. 0.0.0.0:4317"
+                    },
+                    "include_metadata": {
+                      "type": "bool"
+                    },
+                    "keepalive": {
+                      "type": "map",
+                      "children": {
+                        "enforcement_policy": {
+                          "type": "map",
+                          "children": {
+                            "min_time": {
+                              "type": "duration"
+                            },
+                            "permit_without_stream": {
+                              "type": "bool"
+                            }
+                          }
+                        },
+                        "server_parameters": {
+                          "type": "map",
+                          "children": {
+                            "max_connection_age": {
+                              "type": "duration"
+                            },
+                            "max_connection_age_grace": {
+                              "type": "duration"
+                            },
+                            "max_connection_idle": {
+                              "type": "duration"
+                            },
+                            "time": {
+                              "type": "duration"
+                            },
+                            "timeout": {
+                              "type": "duration"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "max_concurrent_streams": {
+                      "type": "int"
+                    },
+                    "max_recv_msg_size_mib": {
+                      "type": "int"
+                    },
+                    "read_buffer_size": {
+                      "type": "int"
+                    },
+                    "tls": {
+                      "type": "map",
+                      "children": {
+                        "ca_file": {
+                          "type": "string"
+                        },
+                        "ca_pem": {
+                          "type": "string"
+                        },
+                        "cert_file": {
+                          "type": "string"
+                        },
+                        "cert_pem": {
+                          "type": "string"
+                        },
+                        "cipher_suites": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "client_ca_file": {
+                          "type": "string"
+                        },
+                        "client_ca_file_reload": {
+                          "type": "bool"
+                        },
+                        "include_system_ca_certs_pool": {
+                          "type": "bool"
+                        },
+                        "key_file": {
+                          "type": "string"
+                        },
+                        "key_pem": {
+                          "type": "string"
+                        },
+                        "max_version": {
+                          "type": "string"
+                        },
+                        "min_version": {
+                          "type": "string"
+                        },
+                        "reload_interval": {
+                          "type": "duration"
+                        }
+                      }
+                    },
+                    "transport": {
+                      "type": "string",
+                      "enum": [
+                        "tcp",
+                        "tcp4",
+                        "tcp6",
+                        "udp",
+                        "udp4",
+                        "udp6",
+                        "ip",
+                        "ip4",
+                        "ip6",
+                        "unix",
+                        "unixgram",
+                        "unixpacket"
+                      ]
+                    },
+                    "write_buffer_size": {
+                      "type": "int"
+                    }
+                  }
+                },
+                "http": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "compression_algorithms": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "cors": {
+                      "type": "map",
+                      "children": {
+                        "allowed_headers": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "allowed_origins": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "max_age": {
+                          "type": "int"
+                        }
+                      }
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "doc": "host:port to listen on, e.g. 0.0.0.0:4318"
+                    },
+                    "include_metadata": {
+                      "type": "bool"
+                    },
+                    "logs_url_path": {
+                      "type": "string"
+                    },
+                    "max_request_body_size": {
+                      "type": "int"
+                    },
+                    "metrics_url_path": {
+                      "type": "string"
+                    },
+                    "response_headers": {
+                      "type": "map",
+                      "open": true
+                    },
+                    "tls": {
+                      "type": "map",
+                      "children": {
+                        "ca_file": {
+                          "type": "string"
+                        },
+                        "ca_pem": {
+                          "type": "string"
+                        },
+                        "cert_file": {
+                          "type": "string"
+                        },
+                        "cert_pem": {
+                          "type": "string"
+                        },
+                        "cipher_suites": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "client_ca_file": {
+                          "type": "string"
+                        },
+                        "client_ca_file_reload": {
+                          "type": "bool"
+                        },
+                        "include_system_ca_certs_pool": {
+                          "type": "bool"
+                        },
+                        "key_file": {
+                          "type": "string"
+                        },
+                        "key_pem": {
+                          "type": "string"
+                        },
+                        "max_version": {
+                          "type": "string"
+                        },
+                        "min_version": {
+                          "type": "string"
+                        },
+                        "reload_interval": {
+                          "type": "duration"
+                        }
+                      }
+                    },
+                    "traces_url_path": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "doc": "at least one of grpc or http must be enabled"
+            }
+          },
+          "required": [
+            "protocols"
+          ]
+        }
+      },
+      "prometheus": {
+        "type": "prometheus",
+        "signals": [
+          "metrics"
+        ],
+        "stability": {
+          "metrics": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver"
+      },
+      "receiver_creator": {
+        "type": "receiver_creator",
+        "signals": [
+          "traces",
+          "metrics",
+          "logs"
+        ],
+        "stability": {
+          "logs": "alpha",
+          "metrics": "beta",
+          "traces": "alpha"
+        },
+        "distributions": [
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator"
+      },
+      "zipkin": {
+        "type": "zipkin",
+        "signals": [
+          "traces"
+        ],
+        "stability": {
+          "traces": "beta"
+        },
+        "distributions": [
+          "core",
+          "contrib",
+          "k8s"
+        ],
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver"
+      }
+    }
+  }
+}

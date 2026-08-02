@@ -59,7 +59,7 @@ The flags below belong to `run`:
 | Flag | Meaning |
 | --- | --- |
 | `--collector-version` | release to validate against, e.g. `v0.157.0` (default `latest`) |
-| `--catalog-location` | where to find catalogs: a directory, a `{{.Version}}` template, a URL, or `default`. Repeat to search several in order |
+| `--catalog-location` | where to find catalogs: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
 | `--output` | `text`, `json`, `junit`, `tap` or `github` |
 | `--strict` | unknown component settings become errors instead of warnings |
 | `--ignore-missing-schemas` | do not fail on components absent from the catalog (custom distributions) |
@@ -131,10 +131,12 @@ left alone.
 
 ## Catalogs
 
-[`catalogs/`](catalogs) holds one file per collector release, in both YAML (the
-readable form, meant to be reviewed in pull requests) and JSON. They are
+[`catalogs/`](catalogs) holds one file per collector release per distribution,
+in both YAML (the readable form, meant to be reviewed in pull requests) and
+JSON. They are
 generated from the `metadata.yaml` that every upstream component ships, across
-**both core and contrib** — 324 components for v0.157.0.
+**both core and contrib** — 324 components for v0.157.0, split into one catalog
+per distribution (`all`, `core`, `contrib`, `k8s`, `otlp`).
 
 ```yaml
 components:
@@ -156,13 +158,15 @@ installing or cloning anything:
 
 ```sh
 otelcol-config-lint run --catalog-location \
-  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs/{{.Version}}.yaml \
+  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs \
   config.yaml
 ```
 
-A location is a directory, a `{{.Version}}` template, an `http(s)` URL, or
-`default` for the built-ins. Repeat the flag to search several in order, so a
-private distribution's catalog can take precedence over the public ones.
+A location is a registry directory or URL (one holding `index.json`, laid out
+as `<distribution>/<version>.<ext>`), a `{{.Version}}`/`{{.Distribution}}`
+template naming a single file, or `default` for the built-ins. Repeat the flag
+to search several in order, so a private distribution's catalog can take
+precedence over the public ones.
 
 ### Adding a release
 
@@ -171,9 +175,9 @@ make catalogs VERSIONS=v0.158.0
 ```
 
 `tools/schemagen` downloads the core and contrib source archives for the tag,
-reads every `metadata.yaml`, and writes `catalogs/<version>.yaml` and `.json`.
-It needs no collector dependencies, so the linter itself stays a two-package
-build.
+reads every `metadata.yaml`, and writes `catalogs/<distribution>/<version>.yaml`
+and `.json` plus the `index.json` listing them. It needs no collector
+dependencies, so the linter itself stays a two-package build.
 
 Component renames are carried through: upstream is moving types to snake_case,
 so from v0.157.0 the OTLP gRPC exporter is `otlp_grpc` with `otlp` kept as a

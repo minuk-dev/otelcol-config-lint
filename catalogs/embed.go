@@ -17,7 +17,9 @@ package catalogs
 
 import "embed"
 
-// FS holds every catalog shipped with the binary.
+// FS holds the catalogs shipped with the binary. Only the "all" distribution
+// is embedded: it is the union of every distribution and the one the linter
+// checks against unless told otherwise.
 //
-//go:embed *.yaml
+//go:embed all/*.yaml
 var FS embed.FS
