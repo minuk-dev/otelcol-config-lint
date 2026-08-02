@@ -42,7 +42,12 @@ arm64, plus a multi-arch image on ghcr.io.
 
 ```
 otelcol-config-lint [flags] <file|dir|->...
+otelcol-config-lint version
 ```
+
+| Command | Meaning |
+| --- | --- |
+| `version` | print the linter version (also available as `--version`) |
 
 | Flag | Meaning |
 | --- | --- |
@@ -58,7 +63,7 @@ otelcol-config-lint [flags] <file|dir|->...
 | `--exclude` | glob patterns to skip when walking directories |
 | `-n` | files checked in parallel |
 | `--summary`, `--verbose`, `--no-color`, `--exit-on-error` | output control |
-| `--list-rules`, `--list-versions`, `--version` | print and exit |
+| `--list-rules`, `--list-versions` | print and exit |
 
 Exit codes: `0` everything passed, `1` at least one file failed, `2` the command
 could not run.
