@@ -14,8 +14,16 @@ import (
 // under, alongside its metadata.yaml.
 const configSchemaFile = "config.schema.yaml"
 
-// typeMap is the field type for a YAML mapping, spelled once.
-const typeMap = "map"
+// The field types a schema can state, spelled once.
+const (
+	typeMap      = "map"
+	typeList     = "list"
+	typeString   = "string"
+	typeInt      = "int"
+	typeFloat    = "float"
+	typeBool     = "bool"
+	typeDuration = "duration"
+)
 
 // keysPerSchema is how many keys a schema is indexed under: its repository path
 // and its module path.
@@ -76,11 +84,11 @@ func (s *schemaSet) lookup(ref, fromDir string) *jsonSchema {
 	where, name, found := lastDot(ref)
 	if !found {
 		// A bare name is local to the referring file.
-		return s.def("/"+fromDir, ref)
+		return s.def(fromDir, ref)
 	}
 
 	if strings.HasPrefix(where, "./") || strings.HasPrefix(where, "../") {
-		return s.def("/"+path.Join(fromDir, where), name)
+		return s.def(path.Join(fromDir, where), name)
 	}
 
 	return s.def(where, name)
@@ -90,8 +98,20 @@ func (s *schemaSet) lookup(ref, fromDir string) *jsonSchema {
 // once rather than once per spelling it is keyed under.
 func (s *schemaSet) count() int { return len(s.byKey) / keysPerSchema }
 
+// def looks a definition up in the file keyed by either spelling. A reference
+// relative to a module-qualified location resolves to a module-qualified key,
+// while one relative to a repository path resolves to a rooted key, and the
+// same target has to be reachable both ways.
 func (s *schemaSet) def(key, name string) *jsonSchema {
 	owner, ok := s.byKey[key]
+	if !ok {
+		owner, ok = s.byKey["/"+key]
+	}
+
+	if !ok {
+		owner, ok = s.byKey[strings.TrimPrefix(key, "/")]
+	}
+
 	if !ok {
 		return nil
 	}
@@ -146,7 +166,7 @@ func (s *schemaSet) field(doc *jsonSchema, dir string, seen []string, depth int)
 	}
 
 	if doc.Items != nil {
-		out.Type = "list"
+		out.Type = typeList
 		out.Children = map[string]*schema.Field{"item": s.field(doc.Items, dir, seen, depth+1)}
 	}
 
@@ -223,11 +243,11 @@ func (s *schemaSet) merge(into, from *schema.Field) *schema.Field {
 func refKey(ref, fromDir string) string {
 	where, name, found := lastDot(ref)
 	if !found {
-		return "/" + fromDir + "." + ref
+		return fromDir + "." + ref
 	}
 
 	if strings.HasPrefix(where, "./") || strings.HasPrefix(where, "../") {
-		return "/" + path.Join(fromDir, where) + "." + name
+		return path.Join(fromDir, where) + "." + name
 	}
 
 	return where + "." + name
@@ -254,23 +274,23 @@ func refDir(ref, fromDir string) string {
 // fieldType maps a JSON Schema type onto the linter's. An unrecognised type is
 // left unconstrained rather than guessed at.
 func fieldType(doc *jsonSchema) string {
-	if doc.Format == "duration" {
-		return "duration"
+	if doc.Format == typeDuration {
+		return typeDuration
 	}
 
 	switch doc.Type {
 	case "object":
 		return typeMap
 	case "array":
-		return "list"
+		return typeList
 	case "string":
-		return "string"
+		return typeString
 	case "integer":
-		return "int"
+		return typeInt
 	case "number":
-		return "float"
+		return typeFloat
 	case "boolean":
-		return "bool"
+		return typeBool
 	default:
 		return ""
 	}
@@ -299,10 +319,17 @@ func firstLine(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// attachFields gives every component the field schema upstream published for
-// it. A component whose directory has no config.schema.yaml keeps whatever an
-// overlay supplies, since overlays are applied afterwards and are the only
-// source for releases predating these files.
+// attachFields folds the schema upstream published for a component into
+// whatever was read from its sources.
+//
+// Upstream's generator is explicitly a temporary one, and it is lossy in a way
+// that matters: an embedded field carrying a name, such as
+// `configretry.BackOffConfig \`mapstructure:"retry_on_failure"\“, is emitted as
+// an allOf, which merges those settings into the parent and loses the key they
+// actually live under. Trusting it alone reports a valid "retry_on_failure:"
+// as an unknown setting. So the sources decide the shape and this only adds to
+// it -- descriptions and enums, which the sources cannot supply, and any key
+// the source pass could not reach.
 func attachFields(cat *schema.Schema, set *schemaSet) int {
 	n := 0
 
@@ -320,12 +347,48 @@ func attachFields(cat *schema.Schema, set *schemaSet) int {
 				continue
 			}
 
-			comp.Fields = f
+			if comp.Fields == nil {
+				comp.Fields = f
+			} else {
+				enrich(comp.Fields, f)
+			}
+
 			n++
 		}
 	}
 
 	return n
+}
+
+// enrich adds to a field schema without ever taking away from it. The primary
+// states the shape; the secondary contributes what it knows and nothing else,
+// because a key dropped here becomes a false report against a valid config.
+func enrich(primary, secondary *schema.Field) {
+	if primary.Doc == "" {
+		primary.Doc = secondary.Doc
+	}
+
+	if len(primary.Enum) == 0 {
+		primary.Enum = secondary.Enum
+	}
+
+	if secondary.Open {
+		primary.Open = true
+	}
+
+	for name, child := range secondary.Children {
+		if primary.Children == nil {
+			primary.Children = map[string]*schema.Field{}
+		}
+
+		if existing, ok := primary.Children[name]; ok {
+			enrich(existing, child)
+
+			continue
+		}
+
+		primary.Children[name] = child
+	}
 }
 
 // moduleDir is the in-archive directory a module path corresponds to, which is

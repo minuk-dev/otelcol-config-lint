@@ -5,7 +5,7 @@
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-08-02T07:29:33Z",
+  "generatedAt": "2026-08-02T13:07:26Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -249,7 +249,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -272,7 +273,6 @@
               "doc": "The target to which the exporter is going to send traces or metrics, using the gRPC protocol. The valid syntax is described at https://github.com/grpc/grpc/blob/master/doc/naming.md."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -312,7 +312,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -389,7 +390,8 @@
                       "doc": "Partition defines the partitioning of the batches configuration."
                     },
                     "sizer": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
                     }
                   },
@@ -412,11 +414,13 @@
                   "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
                 },
                 "sizer": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
                 },
                 "storage": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
                 },
                 "wait_for_result": {
@@ -466,6 +470,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -570,7 +577,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -590,6 +598,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "disable_keep_alives": {
@@ -609,7 +619,6 @@
               "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -666,7 +675,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -751,7 +761,8 @@
                       "doc": "Partition defines the partitioning of the batches configuration."
                     },
                     "sizer": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
                     }
                   },
@@ -774,11 +785,13 @@
                   "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
                 },
                 "sizer": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
                 },
                 "storage": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
                 },
                 "wait_for_result": {
@@ -828,6 +841,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -929,7 +945,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -949,6 +966,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "disable_keep_alives": {
@@ -968,7 +987,6 @@
               "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -1025,7 +1043,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -1110,7 +1129,8 @@
                       "doc": "Partition defines the partitioning of the batches configuration."
                     },
                     "sizer": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
                     }
                   },
@@ -1133,11 +1153,13 @@
                   "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
                 },
                 "sizer": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
                 },
                 "storage": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
                 },
                 "wait_for_result": {
@@ -1187,6 +1209,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",

@@ -5,7 +5,7 @@
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-08-02T07:29:33Z",
+  "generatedAt": "2026-08-02T13:07:26Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -127,7 +127,9 @@
             "compression_params": {
               "type": "map",
               "children": {
-                "level": {}
+                "level": {
+                  "type": "int"
+                }
               },
               "doc": "CompressionParams defines compression parameters. For zstd the following levels are supported: - SpeedFastest: 1 - SpeedDefault: 3 - SpeedBetterCompression: 6 - SpeedBestCompression: 11"
             },
@@ -140,7 +142,8 @@
               "doc": "DirectoryPermissions specifies permissions used when creating directories (minus process umask). Value must be an octal string like \"0755\"."
             },
             "encoding": {
-              "type": "string",
+              "type": "map",
+              "open": true,
               "doc": "Encoding defines the encoding of the telemetry data. If specified, it overrides `FormatType` and applies an encoding extension."
             },
             "flush_interval": {
@@ -284,7 +287,8 @@
                       "doc": "SASL Mechanism to be used, possible values are: (PLAIN, AWS_MSK_IAM_OAUTHBEARER, OAUTHBEARER, SCRAM-SHA-256 or SCRAM-SHA-512)."
                     },
                     "oauthbearer_token_source": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID of type \"extension\" providing a TokenSource for OAUTHBEARER Mechanism, typically named \"oauth2client\""
                     },
                     "password": {
@@ -305,6 +309,47 @@
                 "tls": {
                   "type": "map",
                   "children": {
+                    "ca_file": {
+                      "type": "string",
+                      "doc": "Path to the CA cert. For a client this verifies the server certificate. For a server this verifies client certificates. If empty uses system root CA. (optional)"
+                    },
+                    "ca_pem": {
+                      "type": "string",
+                      "doc": "In memory PEM encoded cert. (optional)"
+                    },
+                    "cert_file": {
+                      "type": "string",
+                      "doc": "Path to the TLS cert to use for TLS required connections. (optional)"
+                    },
+                    "cert_pem": {
+                      "type": "string",
+                      "doc": "In memory PEM encoded TLS cert to use for TLS required connections. (optional)"
+                    },
+                    "cipher_suites": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "CipherSuites is a list of TLS cipher suites that the TLS transport can use. If left blank, a safe default list is used. See https://go.dev/src/crypto/tls/cipher_suites.go for a list of supported cipher suites."
+                    },
+                    "curve_preferences": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                    },
+                    "include_insecure_cipher_suites": {
+                      "type": "bool"
+                    },
+                    "include_system_ca_certs_pool": {
+                      "type": "bool",
+                      "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
+                    },
                     "insecure": {
                       "type": "bool",
                       "doc": "In gRPC and HTTP when set to true, this is used to disable the client transport security. See https://godoc.org/google.golang.org/grpc#WithInsecure for gRPC. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional, default false)"
@@ -313,9 +358,48 @@
                       "type": "bool",
                       "doc": "InsecureSkipVerify will enable TLS but not verify the certificate."
                     },
+                    "key_file": {
+                      "type": "string",
+                      "doc": "Path to the TLS key to use for TLS required connections. (optional)"
+                    },
+                    "key_pem": {
+                      "type": "string",
+                      "doc": "In memory PEM encoded TLS key to use for TLS required connections. (optional)"
+                    },
+                    "max_version": {
+                      "type": "string",
+                      "doc": "MaxVersion sets the maximum TLS version that is acceptable. If not set, refer to crypto/tls for defaults. (optional)"
+                    },
+                    "min_version": {
+                      "type": "string",
+                      "doc": "MinVersion sets the minimum TLS version that is acceptable. If not set, TLS 1.2 will be used. (optional)"
+                    },
+                    "reload_interval": {
+                      "type": "duration",
+                      "doc": "ReloadInterval specifies the duration after which the certificate will be reloaded If not set, it will never be reloaded (optional)"
+                    },
                     "server_name_override": {
                       "type": "string",
                       "doc": "ServerName requested by client for virtual hosting. This sets the ServerName in the TLSConfig. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional)"
+                    },
+                    "tpm": {
+                      "type": "map",
+                      "children": {
+                        "auth": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "bool"
+                        },
+                        "owner_auth": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string",
+                          "doc": "The path to the TPM device or Unix domain socket. For instance /dev/tpm0 or /dev/tpmrm0."
+                        }
+                      },
+                      "doc": "Trusted platform module configuration"
                     }
                   },
                   "doc": "TLS holds TLS configuration for connecting to Kafka brokers. Deprecated [v0.124.0]: use ClientConfig.TLS instead. This will be used only if ClientConfig.TLS is not set."
@@ -471,7 +555,9 @@
                 "compression_params": {
                   "type": "map",
                   "children": {
-                    "level": {}
+                    "level": {
+                      "type": "int"
+                    }
                   },
                   "doc": "CompressionParams defines compression parameters for the producer."
                 },
@@ -534,7 +620,17 @@
             "record_headers": {
               "type": "list",
               "children": {
-                "item": {}
+                "item": {
+                  "type": "map",
+                  "children": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  }
+                }
               },
               "doc": "RecordHeaders sets static headers on every outgoing Kafka record."
             },
@@ -542,16 +638,15 @@
               "type": "map",
               "children": {
                 "extension": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Extension is the component ID of an extension implementing RecordPartitionerExtension. Setting this field delegates partition assignment to that extension."
                 },
                 "least_backup": {
-                  "type": "map",
                   "open": true,
                   "doc": "LeastBackup routes each record to the partition with the fewest buffered records."
                 },
                 "round_robin": {
-                  "type": "map",
                   "open": true,
                   "doc": "RoundRobin distributes records evenly across all available partitions in round-robin order."
                 },
@@ -572,12 +667,151 @@
               "type": "bool",
               "doc": "ResolveCanonicalBootstrapServersOnly is ignored, and exists for backwards compatibility in config parsing. Deprecated [v0.153.0]: this field is a no-op since the migration to franz-go, which has no direct equivalent to the associated Sarama config. This config will be removed in a future release."
             },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
             "sending_queue": {
+              "type": "map",
+              "children": {
+                "batch": {
+                  "type": "map",
+                  "children": {
+                    "flush_timeout": {
+                      "type": "duration",
+                      "doc": "FlushTimeout sets the time after which a batch will be sent regardless of its size."
+                    },
+                    "max_size": {
+                      "type": "int",
+                      "doc": "MaxSize defines the configuration for the maximum size of a batch."
+                    },
+                    "min_size": {
+                      "type": "int",
+                      "doc": "MinSize defines the configuration for the minimum size of a batch."
+                    },
+                    "partition": {
+                      "type": "map",
+                      "children": {
+                        "metadata_keys": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "MetadataKeys is a list of client.Metadata keys that will be used to partition the data into batches. If this setting is empty, a single batcher instance will be used. When this setting is not empty, one batcher will be used per distinct combination of values for the listed metadata keys. Empty value and unset metadata are treated as distinct cases. Entries are case-insensitive. Duplicated entries will trigger a validation error."
+                        }
+                      },
+                      "doc": "Partition defines the partitioning of the batches configuration."
+                    },
+                    "sizer": {
+                      "type": "map",
+                      "open": true,
+                      "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
+                    }
+                  },
+                  "doc": "BatchConfig it configures how the requests are consumed from the queue and batch together during consumption."
+                },
+                "block_on_overflow": {
+                  "type": "bool",
+                  "doc": "BlockOnOverflow determines the behavior when the component's TotalSize limit is reached. If true, the component will wait for space; otherwise, operations will immediately return a retryable error."
+                },
+                "enabled": {
+                  "type": "bool",
+                  "doc": "Enabled indicates whether to not enqueue and batch before exporting."
+                },
+                "num_consumers": {
+                  "type": "int",
+                  "doc": "NumConsumers is the maximum number of concurrent consumers from the queue. This applies across all different optional configurations from above (e.g. wait_for_result, block_on_overflow, storage, etc.)."
+                },
+                "queue_size": {
+                  "type": "int",
+                  "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
+                },
+                "sizer": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
+                },
+                "storage": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
+                },
+                "wait_for_result": {
+                  "type": "bool",
+                  "doc": "WaitForResult determines if incoming requests are blocked until the request is processed or not. Currently, this option is not available when persistent queue is configured using the storage configuration."
+                }
+              },
               "doc": "QueueBatchConfig defines configuration for queueing and batching for the exporter."
+            },
+            "timeout": {
+              "type": "duration",
+              "doc": "Timeout is the timeout for every attempt to send data to the backend. A zero timeout means no timeout."
             },
             "tls": {
               "type": "map",
               "children": {
+                "ca_file": {
+                  "type": "string",
+                  "doc": "Path to the CA cert. For a client this verifies the server certificate. For a server this verifies client certificates. If empty uses system root CA. (optional)"
+                },
+                "ca_pem": {
+                  "type": "string",
+                  "doc": "In memory PEM encoded cert. (optional)"
+                },
+                "cert_file": {
+                  "type": "string",
+                  "doc": "Path to the TLS cert to use for TLS required connections. (optional)"
+                },
+                "cert_pem": {
+                  "type": "string",
+                  "doc": "In memory PEM encoded TLS cert to use for TLS required connections. (optional)"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "CipherSuites is a list of TLS cipher suites that the TLS transport can use. If left blank, a safe default list is used. See https://go.dev/src/crypto/tls/cipher_suites.go for a list of supported cipher suites."
+                },
+                "curve_preferences": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool",
+                  "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
+                },
                 "insecure": {
                   "type": "bool",
                   "doc": "In gRPC and HTTP when set to true, this is used to disable the client transport security. See https://godoc.org/google.golang.org/grpc#WithInsecure for gRPC. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional, default false)"
@@ -586,9 +820,48 @@
                   "type": "bool",
                   "doc": "InsecureSkipVerify will enable TLS but not verify the certificate."
                 },
+                "key_file": {
+                  "type": "string",
+                  "doc": "Path to the TLS key to use for TLS required connections. (optional)"
+                },
+                "key_pem": {
+                  "type": "string",
+                  "doc": "In memory PEM encoded TLS key to use for TLS required connections. (optional)"
+                },
+                "max_version": {
+                  "type": "string",
+                  "doc": "MaxVersion sets the maximum TLS version that is acceptable. If not set, refer to crypto/tls for defaults. (optional)"
+                },
+                "min_version": {
+                  "type": "string",
+                  "doc": "MinVersion sets the minimum TLS version that is acceptable. If not set, TLS 1.2 will be used. (optional)"
+                },
+                "reload_interval": {
+                  "type": "duration",
+                  "doc": "ReloadInterval specifies the duration after which the certificate will be reloaded If not set, it will never be reloaded (optional)"
+                },
                 "server_name_override": {
                   "type": "string",
                   "doc": "ServerName requested by client for virtual hosting. This sets the ServerName in the TLSConfig. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional)"
+                },
+                "tpm": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "bool"
+                    },
+                    "owner_auth": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string",
+                      "doc": "The path to the TPM device or Unix domain socket. For instance /dev/tpm0 or /dev/tpmrm0."
+                    }
+                  },
+                  "doc": "Trusted platform module configuration"
                 }
               },
               "doc": "TLS holds TLS-related configuration for connecting to Kafka brokers. By default the client will use an insecure connection unless SASL/AWS_MSK_IAM_OAUTHBEARER auth is configured."
@@ -885,7 +1158,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -908,7 +1182,6 @@
               "doc": "The target to which the exporter is going to send traces or metrics, using the gRPC protocol. The valid syntax is described at https://github.com/grpc/grpc/blob/master/doc/naming.md."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -948,7 +1221,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -1025,7 +1299,8 @@
                       "doc": "Partition defines the partitioning of the batches configuration."
                     },
                     "sizer": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
                     }
                   },
@@ -1048,11 +1323,13 @@
                   "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
                 },
                 "sizer": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
                 },
                 "storage": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
                 },
                 "wait_for_result": {
@@ -1102,6 +1379,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -1206,7 +1486,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -1226,6 +1507,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "disable_keep_alives": {
@@ -1245,7 +1528,6 @@
               "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -1302,7 +1584,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -1387,7 +1670,8 @@
                       "doc": "Partition defines the partitioning of the batches configuration."
                     },
                     "sizer": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
                     }
                   },
@@ -1410,11 +1694,13 @@
                   "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
                 },
                 "sizer": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
                 },
                 "storage": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
                 },
                 "wait_for_result": {
@@ -1464,6 +1750,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -1565,7 +1854,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -1585,6 +1875,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "disable_keep_alives": {
@@ -1604,7 +1896,6 @@
               "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -1661,7 +1952,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -1746,7 +2038,8 @@
                       "doc": "Partition defines the partitioning of the batches configuration."
                     },
                     "sizer": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
                     }
                   },
@@ -1769,11 +2062,13 @@
                   "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
                 },
                 "sizer": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
                 },
                 "storage": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
                 },
                 "wait_for_result": {
@@ -1823,6 +2118,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -1915,6 +2213,23 @@
               "doc": "AddMetricSuffixes controls whether suffixes are added to metric names. Defaults to true. Deprecated: Use TranslationStrategy instead. This setting is ignored when TranslationStrategy is explicitly set."
             },
             "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
+                },
+                "request_params": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "RequestParameters is a list of parameters that should be extracted from the request and added to the context. When a parameter is found in both the query string and the header, the value from the query string will be used."
+                }
+              },
               "doc": "Auth for this receiver"
             },
             "compression_algorithms": {
@@ -1927,10 +2242,54 @@
               "doc": "CompressionAlgorithms configures the list of compression algorithms the server can accept. Default: [\"\", \"gzip\", \"zstd\", \"zlib\", \"snappy\", \"deflate\"]"
             },
             "const_labels": {
+              "type": "map",
+              "open": true,
               "doc": "ConstLabels are values that are applied for every exported metric."
             },
             "cors": {
+              "type": "map",
+              "children": {
+                "allowed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "AllowedHeaders sets what headers will be allowed in CORS requests. The Accept, Accept-Language, Content-Type, and Content-Language headers are implicitly allowed. If no headers are listed, X-Requested-With will also be accepted by default. Include \"*\" to allow any request header."
+                },
+                "allowed_origins": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "AllowedOrigins sets the allowed values of the Origin header for HTTP/JSON requests to an OTLP receiver. An origin may contain a wildcard (*) to replace 0 or more characters (e.g., \"http://*.domain.com\", or \"*\" to allow any origin)."
+                },
+                "exposed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "ExposedHeaders sets the value of the Access-Control-Expose-Headers response header, indicating which headers are safe to expose to the API of a CORS response."
+                },
+                "max_age": {
+                  "type": "int",
+                  "doc": "MaxAge sets the value of the Access-Control-Max-Age response header. Set it to the number of seconds that browsers should cache a CORS preflight response for."
+                }
+              },
               "doc": "CORS configures the server for HTTP cross-origin resource sharing (CORS)."
+            },
+            "dialer": {
+              "type": "map",
+              "children": {
+                "timeout": {
+                  "type": "duration"
+                }
+              }
             },
             "enable_open_metrics": {
               "type": "bool",
@@ -1967,7 +2326,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -2003,7 +2363,6 @@
               "doc": "ResourceToTelemetrySettings defines configuration for converting resource attributes to metric labels."
             },
             "response_headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -2026,6 +2385,77 @@
               "doc": "SendTimestamps will send the underlying scrape timestamp with the export"
             },
             "sending_queue": {
+              "type": "map",
+              "children": {
+                "batch": {
+                  "type": "map",
+                  "children": {
+                    "flush_timeout": {
+                      "type": "duration",
+                      "doc": "FlushTimeout sets the time after which a batch will be sent regardless of its size."
+                    },
+                    "max_size": {
+                      "type": "int",
+                      "doc": "MaxSize defines the configuration for the maximum size of a batch."
+                    },
+                    "min_size": {
+                      "type": "int",
+                      "doc": "MinSize defines the configuration for the minimum size of a batch."
+                    },
+                    "partition": {
+                      "type": "map",
+                      "children": {
+                        "metadata_keys": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "MetadataKeys is a list of client.Metadata keys that will be used to partition the data into batches. If this setting is empty, a single batcher instance will be used. When this setting is not empty, one batcher will be used per distinct combination of values for the listed metadata keys. Empty value and unset metadata are treated as distinct cases. Entries are case-insensitive. Duplicated entries will trigger a validation error."
+                        }
+                      },
+                      "doc": "Partition defines the partitioning of the batches configuration."
+                    },
+                    "sizer": {
+                      "type": "map",
+                      "open": true,
+                      "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
+                    }
+                  },
+                  "doc": "BatchConfig it configures how the requests are consumed from the queue and batch together during consumption."
+                },
+                "block_on_overflow": {
+                  "type": "bool",
+                  "doc": "BlockOnOverflow determines the behavior when the component's TotalSize limit is reached. If true, the component will wait for space; otherwise, operations will immediately return a retryable error."
+                },
+                "enabled": {
+                  "type": "bool",
+                  "doc": "Enabled indicates whether to not enqueue and batch before exporting."
+                },
+                "num_consumers": {
+                  "type": "int",
+                  "doc": "NumConsumers is the maximum number of concurrent consumers from the queue. This applies across all different optional configurations from above (e.g. wait_for_result, block_on_overflow, storage, etc.)."
+                },
+                "queue_size": {
+                  "type": "int",
+                  "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
+                },
+                "sizer": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
+                },
+                "storage": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
+                },
+                "wait_for_result": {
+                  "type": "bool",
+                  "doc": "WaitForResult determines if incoming requests are blocked until the request is processed or not. Currently, this option is not available when persistent queue is configured using the storage configuration."
+                }
+              },
               "doc": "QueueBatchConfig defines the queue configuration."
             },
             "tls": {
@@ -2072,6 +2502,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -2123,6 +2556,9 @@
               "type": "string",
               "doc": "TranslationStrategy controls how OTLP metric and attribute names are translated into Prometheus metric and label names. When set, this takes precedence over AddMetricSuffixes."
             },
+            "transport": {
+              "type": "string"
+            },
             "without_scope_info": {
               "type": "bool",
               "doc": "WithoutScopeInfo controls the addition of labels for the instrumentation scope."
@@ -2160,7 +2596,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -2180,6 +2617,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "disable_keep_alives": {
@@ -2208,7 +2647,6 @@
               "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -2277,7 +2715,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -2295,6 +2734,8 @@
               "doc": "prefix attached to each exported metric name See: https://prometheus.io/docs/practices/naming/#metric-names"
             },
             "protobuf_message": {
+              "type": "map",
+              "open": true,
               "doc": "RemoteWriteProtoMsg controls whether prometheus remote write v1 or v2 is sent."
             },
             "proxy_url": {
@@ -2341,6 +2782,29 @@
               },
               "doc": "ResourceToTelemetrySettings is the option for converting resource attributes to telemetry attributes. \"Enabled\" - A boolean field to enable/disable this option. Default is `false`. If enabled, all the resource attributes will be converted to metric labels by default. \"ExcludeServiceAttributes\" - If set to `true`, the `service.name`, `service.instance.id` and `service.namespace` resource attributes, which are already converted to `job` and `instance` labels respectively, will be excluded from the final metrics."
             },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
             "send_metadata": {
               "type": "bool",
               "doc": "SendMetadata controls whether prometheus metadata will be generated and sent, this option is ignored when using PRW 2.0, which always includes metadata."
@@ -2357,7 +2821,7 @@
             },
             "timeout": {
               "type": "duration",
-              "doc": "Timeout parameter configures `http.Client.Timeout`. Default is 0 (unlimited)."
+              "doc": "Timeout is the timeout for every attempt to send data to the backend. A zero timeout means no timeout."
             },
             "tls": {
               "type": "map",
@@ -2395,6 +2859,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -2510,7 +2977,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -2530,6 +2998,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "disable_keep_alives": {
@@ -2558,7 +3028,6 @@
               "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -2627,7 +3096,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -2645,6 +3115,8 @@
               "doc": "prefix attached to each exported metric name See: https://prometheus.io/docs/practices/naming/#metric-names"
             },
             "protobuf_message": {
+              "type": "map",
+              "open": true,
               "doc": "RemoteWriteProtoMsg controls whether prometheus remote write v1 or v2 is sent."
             },
             "proxy_url": {
@@ -2691,6 +3163,29 @@
               },
               "doc": "ResourceToTelemetrySettings is the option for converting resource attributes to telemetry attributes. \"Enabled\" - A boolean field to enable/disable this option. Default is `false`. If enabled, all the resource attributes will be converted to metric labels by default. \"ExcludeServiceAttributes\" - If set to `true`, the `service.name`, `service.instance.id` and `service.namespace` resource attributes, which are already converted to `job` and `instance` labels respectively, will be excluded from the final metrics."
             },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
             "send_metadata": {
               "type": "bool",
               "doc": "SendMetadata controls whether prometheus metadata will be generated and sent, this option is ignored when using PRW 2.0, which always includes metadata."
@@ -2707,7 +3202,7 @@
             },
             "timeout": {
               "type": "duration",
-              "doc": "Timeout parameter configures `http.Client.Timeout`. Default is 0 (unlimited)."
+              "doc": "Timeout is the timeout for every attempt to send data to the backend. A zero timeout means no timeout."
             },
             "tls": {
               "type": "map",
@@ -2745,6 +3240,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -2854,7 +3352,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 }
               },
@@ -2874,6 +3373,8 @@
               "doc": "Advanced configuration options for the Compression"
             },
             "cookies": {
+              "type": "map",
+              "open": true,
               "doc": "Cookies configures the cookie management of the HTTP client."
             },
             "default_service_name": {
@@ -2899,7 +3400,6 @@
               "type": "string"
             },
             "headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -2960,7 +3460,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -2985,7 +3486,101 @@
               "type": "int",
               "doc": "ReadBufferSize for HTTP client. See http.Transport.ReadBufferSize. Default is 0."
             },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
             "sending_queue": {
+              "type": "map",
+              "children": {
+                "batch": {
+                  "type": "map",
+                  "children": {
+                    "flush_timeout": {
+                      "type": "duration",
+                      "doc": "FlushTimeout sets the time after which a batch will be sent regardless of its size."
+                    },
+                    "max_size": {
+                      "type": "int",
+                      "doc": "MaxSize defines the configuration for the maximum size of a batch."
+                    },
+                    "min_size": {
+                      "type": "int",
+                      "doc": "MinSize defines the configuration for the minimum size of a batch."
+                    },
+                    "partition": {
+                      "type": "map",
+                      "children": {
+                        "metadata_keys": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "MetadataKeys is a list of client.Metadata keys that will be used to partition the data into batches. If this setting is empty, a single batcher instance will be used. When this setting is not empty, one batcher will be used per distinct combination of values for the listed metadata keys. Empty value and unset metadata are treated as distinct cases. Entries are case-insensitive. Duplicated entries will trigger a validation error."
+                        }
+                      },
+                      "doc": "Partition defines the partitioning of the batches configuration."
+                    },
+                    "sizer": {
+                      "type": "map",
+                      "open": true,
+                      "doc": "Sizer determines the type of size measurement used by the batch. If not configured, use the same configuration as the queue. It accepts \"requests\", \"items\", or \"bytes\"."
+                    }
+                  },
+                  "doc": "BatchConfig it configures how the requests are consumed from the queue and batch together during consumption."
+                },
+                "block_on_overflow": {
+                  "type": "bool",
+                  "doc": "BlockOnOverflow determines the behavior when the component's TotalSize limit is reached. If true, the component will wait for space; otherwise, operations will immediately return a retryable error."
+                },
+                "enabled": {
+                  "type": "bool",
+                  "doc": "Enabled indicates whether to not enqueue and batch before exporting."
+                },
+                "num_consumers": {
+                  "type": "int",
+                  "doc": "NumConsumers is the maximum number of concurrent consumers from the queue. This applies across all different optional configurations from above (e.g. wait_for_result, block_on_overflow, storage, etc.)."
+                },
+                "queue_size": {
+                  "type": "int",
+                  "doc": "QueueSize represents the maximum data size allowed for concurrent storage and processing."
+                },
+                "sizer": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "Sizer determines the type of size measurement used by this component. It accepts \"requests\", \"items\", or \"bytes\"."
+                },
+                "storage": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "StorageID if not empty, enables the persistent storage and uses the component specified as a storage extension for the persistent queue. TODO: This will be changed to Optional when available. See https://github.com/open-telemetry/opentelemetry-collector/issues/13822"
+                },
+                "wait_for_result": {
+                  "type": "bool",
+                  "doc": "WaitForResult determines if incoming requests are blocked until the request is processed or not. Currently, this option is not available when persistent queue is configured using the storage configuration."
+                }
+              },
               "doc": "QueueBatchConfig defines configuration for queueing and batching for the exporter."
             },
             "timeout": {
@@ -3028,6 +3623,9 @@
                     }
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
                 },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
@@ -3107,7 +3705,628 @@
           "contrib",
           "k8s"
         ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension"
+        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension",
+        "fields": {
+          "type": "map",
+          "children": {
+            "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "map",
+                  "open": true
+                },
+                "request_params": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "check_collector_pipeline": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "exporter_failure_threshold": {
+                  "type": "int"
+                },
+                "interval": {
+                  "type": "string"
+                }
+              }
+            },
+            "component_health": {
+              "type": "map",
+              "children": {
+                "include_permanent_errors": {
+                  "type": "bool"
+                },
+                "include_recoverable_errors": {
+                  "type": "bool"
+                },
+                "recovery_duration": {
+                  "type": "duration"
+                }
+              }
+            },
+            "compression_algorithms": {
+              "type": "list",
+              "children": {
+                "item": {
+                  "type": "string"
+                }
+              }
+            },
+            "cors": {
+              "type": "map",
+              "children": {
+                "allowed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "allowed_origins": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "exposed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "max_age": {
+                  "type": "int"
+                }
+              }
+            },
+            "dialer": {
+              "type": "map",
+              "children": {
+                "timeout": {
+                  "type": "duration"
+                }
+              }
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "grpc": {
+              "type": "map",
+              "children": {
+                "auth": {
+                  "type": "map",
+                  "children": {
+                    "authenticator": {
+                      "type": "map",
+                      "open": true
+                    }
+                  }
+                },
+                "dialer": {
+                  "type": "map",
+                  "children": {
+                    "timeout": {
+                      "type": "duration"
+                    }
+                  }
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "include_metadata": {
+                  "type": "bool"
+                },
+                "keepalive": {
+                  "type": "map",
+                  "children": {
+                    "enforcement_policy": {
+                      "type": "map",
+                      "children": {
+                        "min_time": {
+                          "type": "duration"
+                        },
+                        "permit_without_stream": {
+                          "type": "bool"
+                        }
+                      }
+                    },
+                    "server_parameters": {
+                      "type": "map",
+                      "children": {
+                        "max_connection_age": {
+                          "type": "duration"
+                        },
+                        "max_connection_age_grace": {
+                          "type": "duration"
+                        },
+                        "max_connection_idle": {
+                          "type": "duration"
+                        },
+                        "time": {
+                          "type": "duration"
+                        },
+                        "timeout": {
+                          "type": "duration"
+                        }
+                      }
+                    }
+                  }
+                },
+                "max_concurrent_streams": {
+                  "type": "int"
+                },
+                "max_recv_msg_size_mib": {
+                  "type": "int"
+                },
+                "middlewares": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "map",
+                      "children": {
+                        "id": {
+                          "type": "map",
+                          "open": true
+                        }
+                      }
+                    }
+                  }
+                },
+                "read_buffer_size": {
+                  "type": "int"
+                },
+                "tls": {
+                  "type": "map",
+                  "children": {
+                    "ca_file": {
+                      "type": "string"
+                    },
+                    "ca_pem": {
+                      "type": "string"
+                    },
+                    "cert_file": {
+                      "type": "string"
+                    },
+                    "cert_pem": {
+                      "type": "string"
+                    },
+                    "cipher_suites": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "client_ca_file": {
+                      "type": "string"
+                    },
+                    "client_ca_file_reload": {
+                      "type": "bool"
+                    },
+                    "curve_preferences": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "include_insecure_cipher_suites": {
+                      "type": "bool"
+                    },
+                    "include_system_ca_certs_pool": {
+                      "type": "bool"
+                    },
+                    "key_file": {
+                      "type": "string"
+                    },
+                    "key_pem": {
+                      "type": "string"
+                    },
+                    "max_version": {
+                      "type": "string"
+                    },
+                    "min_version": {
+                      "type": "string"
+                    },
+                    "reload_interval": {
+                      "type": "duration"
+                    },
+                    "tpm": {
+                      "type": "map",
+                      "children": {
+                        "auth": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "bool"
+                        },
+                        "owner_auth": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "transport": {
+                  "type": "string"
+                },
+                "write_buffer_size": {
+                  "type": "int"
+                }
+              }
+            },
+            "http": {
+              "type": "map",
+              "children": {
+                "auth": {
+                  "type": "map",
+                  "children": {
+                    "authenticator": {
+                      "type": "map",
+                      "open": true
+                    },
+                    "request_params": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "compression_algorithms": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "config": {
+                  "type": "map",
+                  "children": {
+                    "enabled": {
+                      "type": "bool"
+                    },
+                    "include_attributes": {
+                      "type": "bool"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "cors": {
+                  "type": "map",
+                  "children": {
+                    "allowed_headers": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "allowed_origins": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "exposed_headers": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "max_age": {
+                      "type": "int"
+                    }
+                  }
+                },
+                "dialer": {
+                  "type": "map",
+                  "children": {
+                    "timeout": {
+                      "type": "duration"
+                    }
+                  }
+                },
+                "endpoint": {
+                  "type": "string"
+                },
+                "idle_timeout": {
+                  "type": "duration"
+                },
+                "include_metadata": {
+                  "type": "bool"
+                },
+                "keep_alives_enabled": {
+                  "type": "bool"
+                },
+                "max_request_body_size": {
+                  "type": "int"
+                },
+                "middlewares": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "map",
+                      "children": {
+                        "id": {
+                          "type": "map",
+                          "open": true
+                        }
+                      }
+                    }
+                  }
+                },
+                "read_header_timeout": {
+                  "type": "duration"
+                },
+                "read_timeout": {
+                  "type": "duration"
+                },
+                "response_headers": {},
+                "status": {
+                  "type": "map",
+                  "children": {
+                    "enabled": {
+                      "type": "bool"
+                    },
+                    "include_attributes": {
+                      "type": "bool"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "tls": {
+                  "type": "map",
+                  "children": {
+                    "ca_file": {
+                      "type": "string"
+                    },
+                    "ca_pem": {
+                      "type": "string"
+                    },
+                    "cert_file": {
+                      "type": "string"
+                    },
+                    "cert_pem": {
+                      "type": "string"
+                    },
+                    "cipher_suites": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "client_ca_file": {
+                      "type": "string"
+                    },
+                    "client_ca_file_reload": {
+                      "type": "bool"
+                    },
+                    "curve_preferences": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "include_insecure_cipher_suites": {
+                      "type": "bool"
+                    },
+                    "include_system_ca_certs_pool": {
+                      "type": "bool"
+                    },
+                    "key_file": {
+                      "type": "string"
+                    },
+                    "key_pem": {
+                      "type": "string"
+                    },
+                    "max_version": {
+                      "type": "string"
+                    },
+                    "min_version": {
+                      "type": "string"
+                    },
+                    "reload_interval": {
+                      "type": "duration"
+                    },
+                    "tpm": {
+                      "type": "map",
+                      "children": {
+                        "auth": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "bool"
+                        },
+                        "owner_auth": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "transport": {
+                  "type": "string"
+                },
+                "write_timeout": {
+                  "type": "duration"
+                }
+              }
+            },
+            "idle_timeout": {
+              "type": "duration"
+            },
+            "include_metadata": {
+              "type": "bool"
+            },
+            "keep_alives_enabled": {
+              "type": "bool"
+            },
+            "max_request_body_size": {
+              "type": "int"
+            },
+            "middlewares": {
+              "type": "list",
+              "children": {
+                "item": {
+                  "type": "map",
+                  "children": {
+                    "id": {
+                      "type": "map",
+                      "open": true
+                    }
+                  }
+                }
+              }
+            },
+            "path": {
+              "type": "string"
+            },
+            "read_header_timeout": {
+              "type": "duration"
+            },
+            "read_timeout": {
+              "type": "duration"
+            },
+            "response_body": {
+              "type": "map",
+              "children": {
+                "healthy": {
+                  "type": "string"
+                },
+                "unhealthy": {
+                  "type": "string"
+                }
+              }
+            },
+            "response_headers": {},
+            "tls": {
+              "type": "map",
+              "children": {
+                "ca_file": {
+                  "type": "string"
+                },
+                "ca_pem": {
+                  "type": "string"
+                },
+                "cert_file": {
+                  "type": "string"
+                },
+                "cert_pem": {
+                  "type": "string"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "client_ca_file": {
+                  "type": "string"
+                },
+                "client_ca_file_reload": {
+                  "type": "bool"
+                },
+                "curve_preferences": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool"
+                },
+                "key_file": {
+                  "type": "string"
+                },
+                "key_pem": {
+                  "type": "string"
+                },
+                "max_version": {
+                  "type": "string"
+                },
+                "min_version": {
+                  "type": "string"
+                },
+                "reload_interval": {
+                  "type": "duration"
+                },
+                "tpm": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "bool"
+                    },
+                    "owner_auth": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "transport": {
+              "type": "string"
+            },
+            "use_v2": {
+              "type": "bool"
+            },
+            "write_timeout": {
+              "type": "duration"
+            }
+          }
+        }
       },
       "memory_limiter": {
         "type": "memory_limiter",
@@ -3180,6 +4399,13 @@
               "doc": "Fraction of blocking events that are profiled. A value \u003c= 0 disables profiling. See https://golang.org/pkg/runtime/#SetBlockProfileRate for details."
             },
             "dialer": {
+              "type": "map",
+              "children": {
+                "timeout": {
+                  "type": "duration",
+                  "doc": "Timeout is the maximum amount of time a dial will wait for a connect to complete. The default is no timeout."
+                }
+              },
               "doc": "DialerConfig contains options for connecting to an address."
             },
             "endpoint": {
@@ -3216,7 +4442,8 @@
               "type": "map",
               "children": {
                 "authenticator": {
-                  "type": "string",
+                  "type": "map",
+                  "open": true,
                   "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                 },
                 "request_params": {
@@ -3277,6 +4504,14 @@
               },
               "doc": "CORS configures the server for HTTP cross-origin resource sharing (CORS)."
             },
+            "dialer": {
+              "type": "map",
+              "children": {
+                "timeout": {
+                  "type": "duration"
+                }
+              }
+            },
             "endpoint": {
               "type": "string",
               "doc": "Endpoint configures the listening address for the server."
@@ -3314,7 +4549,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -3332,7 +4568,6 @@
               "doc": "ReadTimeout is the maximum duration for reading the entire request, including the body. A zero or negative value means there will be no timeout. Because ReadTimeout does not let Handlers make per-request decisions on each request body's acceptable deadline or upload rate, most users will prefer to use ReadHeaderTimeout. It is valid to use them both."
             },
             "response_headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -3395,6 +4630,9 @@
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
                 },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
+                },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
                   "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
@@ -3440,6 +4678,9 @@
                 }
               },
               "doc": "TLS struct exposes TLS client configuration."
+            },
+            "transport": {
+              "type": "string"
             },
             "write_timeout": {
               "type": "duration",
@@ -3487,6 +4728,8 @@
                       "doc": "ConvertedType specifies the target type of an attribute to be converted If the key doesn't exist, no action is performed. If the value cannot be converted, the original value will be left as-is"
                     },
                     "default_value": {
+                      "type": "map",
+                      "open": true,
                       "doc": "DefaultValue specifies the value to use if Value/FromAttribute/FromContext doesn't provide a value (e.g., environment variable not set, attribute doesn't exist). Only used with INSERT, UPDATE, and UPSERT actions."
                     },
                     "from_attribute": {
@@ -3506,6 +4749,8 @@
                       "doc": "A regex pattern must be specified for the action EXTRACT. It uses the attribute specified by `key' to extract values from The target keys are inferred based on the names of the matcher groups provided and the names will be inferred based on the values of the matcher group. Note: All subexpressions must have a name. Note: The value type of the source key must be a string. If it isn't, no extraction will occur."
                     },
                     "value": {
+                      "type": "map",
+                      "open": true,
                       "doc": "Value specifies the value to populate for the key. The type of the value is inferred from the configuration."
                     }
                   },
@@ -3528,6 +4773,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -3625,6 +4872,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -3677,6 +4926,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -3774,6 +5025,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -3895,7 +5148,25 @@
             "log_conditions": {
               "type": "list",
               "children": {
-                "item": {}
+                "item": {
+                  "type": "map",
+                  "children": {
+                    "conditions": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "error_mode": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             },
             "logs": {
@@ -3928,6 +5199,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -3947,6 +5220,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4008,6 +5283,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4027,6 +5304,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4085,7 +5364,25 @@
             "metric_conditions": {
               "type": "list",
               "children": {
-                "item": {}
+                "item": {
+                  "type": "map",
+                  "children": {
+                    "conditions": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "error_mode": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             },
             "metrics": {
@@ -4150,6 +5447,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4211,6 +5510,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4260,7 +5561,25 @@
             "profile_conditions": {
               "type": "list",
               "children": {
-                "item": {}
+                "item": {
+                  "type": "map",
+                  "children": {
+                    "conditions": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "error_mode": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             },
             "profiles": {
@@ -4304,6 +5623,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4401,6 +5722,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4453,6 +5776,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4550,6 +5875,8 @@
                               "doc": "Key specifies the attribute key."
                             },
                             "value": {
+                              "type": "map",
+                              "open": true,
                               "doc": "Values specifies the value to match against. If it is not set, any value will match."
                             }
                           },
@@ -4594,7 +5921,25 @@
             "trace_conditions": {
               "type": "list",
               "children": {
-                "item": {}
+                "item": {
+                  "type": "map",
+                  "children": {
+                    "conditions": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "error_mode": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             },
             "traces": {
@@ -4702,6 +6047,9 @@
         "fields": {
           "type": "map",
           "children": {
+            "attribute_source": {
+              "type": "string"
+            },
             "fail_closed": {
               "type": "bool",
               "doc": "FailClosed indicates to not sample data (the processor will fail \"closed\") in case of error, such as failure to parse the tracestate field or missing the randomness attribute. By default, failure cases are sampled (the processor is fails \"open\").  Sampling priority-based decisions are made after FailClosed is processed, making it possible to sample despite errors using priority."
@@ -4772,6 +6120,8 @@
                       "doc": "ConvertedType specifies the target type of an attribute to be converted If the key doesn't exist, no action is performed. If the value cannot be converted, the original value will be left as-is"
                     },
                     "default_value": {
+                      "type": "map",
+                      "open": true,
                       "doc": "DefaultValue specifies the value to use if Value/FromAttribute/FromContext doesn't provide a value (e.g., environment variable not set, attribute doesn't exist). Only used with INSERT, UPDATE, and UPSERT actions."
                     },
                     "from_attribute": {
@@ -4791,6 +6141,8 @@
                       "doc": "A regex pattern must be specified for the action EXTRACT. It uses the attribute specified by `key' to extract values from The target keys are inferred based on the names of the matcher groups provided and the names will be inferred based on the values of the matcher group. Note: All subexpressions must have a name. Note: The value type of the source key must be a string. If it isn't, no extraction will occur."
                     },
                     "value": {
+                      "type": "map",
+                      "open": true,
                       "doc": "Value specifies the value to populate for the key. The type of the value is inferred from the configuration."
                     }
                   },
@@ -4833,6 +6185,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -4930,6 +6284,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -4982,6 +6338,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -5079,6 +6437,8 @@
                           "doc": "Key specifies the attribute key."
                         },
                         "value": {
+                          "type": "map",
+                          "open": true,
                           "doc": "Values specifies the value to match against. If it is not set, any value will match."
                         }
                       },
@@ -5351,6 +6711,42 @@
                   "doc": "Include propagates the incoming connection's metadata to downstream consumers."
                 },
                 "keepalive": {
+                  "type": "map",
+                  "children": {
+                    "enforcement_policy": {
+                      "type": "map",
+                      "children": {
+                        "min_time": {
+                          "type": "duration"
+                        },
+                        "permit_without_stream": {
+                          "type": "bool"
+                        }
+                      },
+                      "doc": "KeepaliveEnforcementPolicy allow configuration of the keepalive.EnforcementPolicy. The same default values as keepalive.EnforcementPolicy are applicable and get applied by the server. See https://godoc.org/google.golang.org/grpc/keepalive#EnforcementPolicy for details."
+                    },
+                    "server_parameters": {
+                      "type": "map",
+                      "children": {
+                        "max_connection_age": {
+                          "type": "duration"
+                        },
+                        "max_connection_age_grace": {
+                          "type": "duration"
+                        },
+                        "max_connection_idle": {
+                          "type": "duration"
+                        },
+                        "time": {
+                          "type": "duration"
+                        },
+                        "timeout": {
+                          "type": "duration"
+                        }
+                      },
+                      "doc": "KeepaliveServerParameters allow configuration of the keepalive.ServerParameters. The same default values as keepalive.ServerParameters are applicable and get applied by the server. See https://godoc.org/google.golang.org/grpc/keepalive#ServerParameters for details."
+                    }
+                  },
                   "doc": "Keepalive anchor for all the settings related to keepalive."
                 },
                 "max_concurrent_streams": {
@@ -5483,6 +6879,410 @@
               },
               "doc": "ServerConfig defines common settings for a gRPC server configuration."
             },
+            "protocols": {
+              "type": "map",
+              "children": {
+                "grpc": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "map",
+                          "open": true
+                        }
+                      }
+                    },
+                    "dialer": {
+                      "type": "map",
+                      "children": {
+                        "timeout": {
+                          "type": "duration"
+                        }
+                      }
+                    },
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "include_metadata": {
+                      "type": "bool"
+                    },
+                    "keepalive": {
+                      "type": "map",
+                      "children": {
+                        "enforcement_policy": {
+                          "type": "map",
+                          "children": {
+                            "min_time": {
+                              "type": "duration"
+                            },
+                            "permit_without_stream": {
+                              "type": "bool"
+                            }
+                          }
+                        },
+                        "server_parameters": {
+                          "type": "map",
+                          "children": {
+                            "max_connection_age": {
+                              "type": "duration"
+                            },
+                            "max_connection_age_grace": {
+                              "type": "duration"
+                            },
+                            "max_connection_idle": {
+                              "type": "duration"
+                            },
+                            "time": {
+                              "type": "duration"
+                            },
+                            "timeout": {
+                              "type": "duration"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "max_concurrent_streams": {
+                      "type": "int"
+                    },
+                    "max_recv_msg_size_mib": {
+                      "type": "int"
+                    },
+                    "middlewares": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "map",
+                          "children": {
+                            "id": {
+                              "type": "map",
+                              "open": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "read_buffer_size": {
+                      "type": "int"
+                    },
+                    "tls": {
+                      "type": "map",
+                      "children": {
+                        "ca_file": {
+                          "type": "string"
+                        },
+                        "ca_pem": {
+                          "type": "string"
+                        },
+                        "cert_file": {
+                          "type": "string"
+                        },
+                        "cert_pem": {
+                          "type": "string"
+                        },
+                        "cipher_suites": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "client_ca_file": {
+                          "type": "string"
+                        },
+                        "client_ca_file_reload": {
+                          "type": "bool"
+                        },
+                        "curve_preferences": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "include_insecure_cipher_suites": {
+                          "type": "bool"
+                        },
+                        "include_system_ca_certs_pool": {
+                          "type": "bool"
+                        },
+                        "key_file": {
+                          "type": "string"
+                        },
+                        "key_pem": {
+                          "type": "string"
+                        },
+                        "max_version": {
+                          "type": "string"
+                        },
+                        "min_version": {
+                          "type": "string"
+                        },
+                        "reload_interval": {
+                          "type": "duration"
+                        },
+                        "tpm": {
+                          "type": "map",
+                          "children": {
+                            "auth": {
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "type": "bool"
+                            },
+                            "owner_auth": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "transport": {
+                      "type": "string"
+                    },
+                    "write_buffer_size": {
+                      "type": "int"
+                    }
+                  }
+                },
+                "thrift_binary": {
+                  "type": "map",
+                  "children": {
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "max_packet_size": {
+                      "type": "int"
+                    },
+                    "queue_size": {
+                      "type": "int"
+                    },
+                    "socket_buffer_size": {
+                      "type": "int"
+                    },
+                    "workers": {
+                      "type": "int"
+                    }
+                  }
+                },
+                "thrift_compact": {
+                  "type": "map",
+                  "children": {
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "max_packet_size": {
+                      "type": "int"
+                    },
+                    "queue_size": {
+                      "type": "int"
+                    },
+                    "socket_buffer_size": {
+                      "type": "int"
+                    },
+                    "workers": {
+                      "type": "int"
+                    }
+                  }
+                },
+                "thrift_http": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "map",
+                          "open": true
+                        },
+                        "request_params": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "compression_algorithms": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "cors": {
+                      "type": "map",
+                      "children": {
+                        "allowed_headers": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "allowed_origins": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "exposed_headers": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "max_age": {
+                          "type": "int"
+                        }
+                      }
+                    },
+                    "dialer": {
+                      "type": "map",
+                      "children": {
+                        "timeout": {
+                          "type": "duration"
+                        }
+                      }
+                    },
+                    "endpoint": {
+                      "type": "string"
+                    },
+                    "idle_timeout": {
+                      "type": "duration"
+                    },
+                    "include_metadata": {
+                      "type": "bool"
+                    },
+                    "keep_alives_enabled": {
+                      "type": "bool"
+                    },
+                    "max_request_body_size": {
+                      "type": "int"
+                    },
+                    "middlewares": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "map",
+                          "children": {
+                            "id": {
+                              "type": "map",
+                              "open": true
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "read_header_timeout": {
+                      "type": "duration"
+                    },
+                    "read_timeout": {
+                      "type": "duration"
+                    },
+                    "response_headers": {},
+                    "tls": {
+                      "type": "map",
+                      "children": {
+                        "ca_file": {
+                          "type": "string"
+                        },
+                        "ca_pem": {
+                          "type": "string"
+                        },
+                        "cert_file": {
+                          "type": "string"
+                        },
+                        "cert_pem": {
+                          "type": "string"
+                        },
+                        "cipher_suites": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "client_ca_file": {
+                          "type": "string"
+                        },
+                        "client_ca_file_reload": {
+                          "type": "bool"
+                        },
+                        "curve_preferences": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "include_insecure_cipher_suites": {
+                          "type": "bool"
+                        },
+                        "include_system_ca_certs_pool": {
+                          "type": "bool"
+                        },
+                        "key_file": {
+                          "type": "string"
+                        },
+                        "key_pem": {
+                          "type": "string"
+                        },
+                        "max_version": {
+                          "type": "string"
+                        },
+                        "min_version": {
+                          "type": "string"
+                        },
+                        "reload_interval": {
+                          "type": "duration"
+                        },
+                        "tpm": {
+                          "type": "map",
+                          "children": {
+                            "auth": {
+                              "type": "string"
+                            },
+                            "enabled": {
+                              "type": "bool"
+                            },
+                            "owner_auth": {
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "transport": {
+                      "type": "string"
+                    },
+                    "write_timeout": {
+                      "type": "duration"
+                    }
+                  }
+                }
+              }
+            },
             "remote_sampling": {
               "type": "map",
               "children": {
@@ -5490,7 +7290,8 @@
                   "type": "map",
                   "children": {
                     "authenticator": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                     }
                   },
@@ -5513,7 +7314,6 @@
                   "doc": "The target to which the exporter is going to send traces or metrics, using the gRPC protocol. The valid syntax is described at https://github.com/grpc/grpc/blob/master/doc/naming.md."
                 },
                 "headers": {
-                  "type": "list",
                   "children": {
                     "item": {
                       "type": "map",
@@ -5535,6 +7335,18 @@
                   "type": "string"
                 },
                 "keepalive": {
+                  "type": "map",
+                  "children": {
+                    "permit_without_stream": {
+                      "type": "bool"
+                    },
+                    "time": {
+                      "type": "duration"
+                    },
+                    "timeout": {
+                      "type": "duration"
+                    }
+                  },
                   "doc": "The keepalive parameters for gRPC client. See grpc.WithKeepaliveParams. (https://godoc.org/google.golang.org/grpc#WithKeepaliveParams)."
                 },
                 "middlewares": {
@@ -5544,7 +7356,8 @@
                       "type": "map",
                       "children": {
                         "id": {
-                          "type": "string",
+                          "type": "map",
+                          "open": true,
                           "doc": "ID specifies the name of the extension to use."
                         }
                       },
@@ -5599,6 +7412,9 @@
                         }
                       },
                       "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                    },
+                    "include_insecure_cipher_suites": {
+                      "type": "bool"
                     },
                     "include_system_ca_certs_pool": {
                       "type": "bool",
@@ -5719,6 +7535,22 @@
               "type": "map",
               "children": {
                 "auth": {
+                  "type": "map",
+                  "children": {
+                    "authenticator": {
+                      "type": "string",
+                      "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
+                    },
+                    "request_params": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "RequestParameters is a list of parameters that should be extracted from the request and added to the context. When a parameter is found in both the query string and the header, the value from the query string will be used."
+                    }
+                  },
                   "doc": "Auth for this receiver"
                 },
                 "compression_algorithms": {
@@ -5731,6 +7563,40 @@
                   "doc": "CompressionAlgorithms configures the list of compression algorithms the server can accept. Default: [\"\", \"gzip\", \"zstd\", \"zlib\", \"snappy\", \"deflate\"]"
                 },
                 "cors": {
+                  "type": "map",
+                  "children": {
+                    "allowed_headers": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "AllowedHeaders sets what headers will be allowed in CORS requests. The Accept, Accept-Language, Content-Type, and Content-Language headers are implicitly allowed. If no headers are listed, X-Requested-With will also be accepted by default. Include \"*\" to allow any request header."
+                    },
+                    "allowed_origins": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "AllowedOrigins sets the allowed values of the Origin header for HTTP/JSON requests to an OTLP receiver. An origin may contain a wildcard (*) to replace 0 or more characters (e.g., \"http://*.domain.com\", or \"*\" to allow any origin)."
+                    },
+                    "exposed_headers": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "ExposedHeaders sets the value of the Access-Control-Expose-Headers response header, indicating which headers are safe to expose to the API of a CORS response."
+                    },
+                    "max_age": {
+                      "type": "int",
+                      "doc": "MaxAge sets the value of the Access-Control-Max-Age response header. Set it to the number of seconds that browsers should cache a CORS preflight response for."
+                    }
+                  },
                   "doc": "CORS configures the server for HTTP cross-origin resource sharing (CORS)."
                 },
                 "endpoint": {
@@ -5983,7 +7849,8 @@
                       "doc": "SASL Mechanism to be used, possible values are: (PLAIN, AWS_MSK_IAM_OAUTHBEARER, OAUTHBEARER, SCRAM-SHA-256 or SCRAM-SHA-512)."
                     },
                     "oauthbearer_token_source": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID of type \"extension\" providing a TokenSource for OAUTHBEARER Mechanism, typically named \"oauth2client\""
                     },
                     "password": {
@@ -6004,6 +7871,47 @@
                 "tls": {
                   "type": "map",
                   "children": {
+                    "ca_file": {
+                      "type": "string",
+                      "doc": "Path to the CA cert. For a client this verifies the server certificate. For a server this verifies client certificates. If empty uses system root CA. (optional)"
+                    },
+                    "ca_pem": {
+                      "type": "string",
+                      "doc": "In memory PEM encoded cert. (optional)"
+                    },
+                    "cert_file": {
+                      "type": "string",
+                      "doc": "Path to the TLS cert to use for TLS required connections. (optional)"
+                    },
+                    "cert_pem": {
+                      "type": "string",
+                      "doc": "In memory PEM encoded TLS cert to use for TLS required connections. (optional)"
+                    },
+                    "cipher_suites": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "CipherSuites is a list of TLS cipher suites that the TLS transport can use. If left blank, a safe default list is used. See https://go.dev/src/crypto/tls/cipher_suites.go for a list of supported cipher suites."
+                    },
+                    "curve_preferences": {
+                      "type": "list",
+                      "children": {
+                        "item": {
+                          "type": "string"
+                        }
+                      },
+                      "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                    },
+                    "include_insecure_cipher_suites": {
+                      "type": "bool"
+                    },
+                    "include_system_ca_certs_pool": {
+                      "type": "bool",
+                      "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
+                    },
                     "insecure": {
                       "type": "bool",
                       "doc": "In gRPC and HTTP when set to true, this is used to disable the client transport security. See https://godoc.org/google.golang.org/grpc#WithInsecure for gRPC. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional, default false)"
@@ -6012,9 +7920,48 @@
                       "type": "bool",
                       "doc": "InsecureSkipVerify will enable TLS but not verify the certificate."
                     },
+                    "key_file": {
+                      "type": "string",
+                      "doc": "Path to the TLS key to use for TLS required connections. (optional)"
+                    },
+                    "key_pem": {
+                      "type": "string",
+                      "doc": "In memory PEM encoded TLS key to use for TLS required connections. (optional)"
+                    },
+                    "max_version": {
+                      "type": "string",
+                      "doc": "MaxVersion sets the maximum TLS version that is acceptable. If not set, refer to crypto/tls for defaults. (optional)"
+                    },
+                    "min_version": {
+                      "type": "string",
+                      "doc": "MinVersion sets the minimum TLS version that is acceptable. If not set, TLS 1.2 will be used. (optional)"
+                    },
+                    "reload_interval": {
+                      "type": "duration",
+                      "doc": "ReloadInterval specifies the duration after which the certificate will be reloaded If not set, it will never be reloaded (optional)"
+                    },
                     "server_name_override": {
                       "type": "string",
                       "doc": "ServerName requested by client for virtual hosting. This sets the ServerName in the TLSConfig. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional)"
+                    },
+                    "tpm": {
+                      "type": "map",
+                      "children": {
+                        "auth": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "bool"
+                        },
+                        "owner_auth": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string",
+                          "doc": "The path to the TPM device or Unix domain socket. For instance /dev/tpm0 or /dev/tpmrm0."
+                        }
+                      },
+                      "doc": "Trusted platform module configuration"
                     }
                   },
                   "doc": "TLS holds TLS configuration for connecting to Kafka brokers. Deprecated [v0.124.0]: use ClientConfig.TLS instead. This will be used only if ClientConfig.TLS is not set."
@@ -6316,6 +8263,47 @@
             "tls": {
               "type": "map",
               "children": {
+                "ca_file": {
+                  "type": "string",
+                  "doc": "Path to the CA cert. For a client this verifies the server certificate. For a server this verifies client certificates. If empty uses system root CA. (optional)"
+                },
+                "ca_pem": {
+                  "type": "string",
+                  "doc": "In memory PEM encoded cert. (optional)"
+                },
+                "cert_file": {
+                  "type": "string",
+                  "doc": "Path to the TLS cert to use for TLS required connections. (optional)"
+                },
+                "cert_pem": {
+                  "type": "string",
+                  "doc": "In memory PEM encoded TLS cert to use for TLS required connections. (optional)"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "CipherSuites is a list of TLS cipher suites that the TLS transport can use. If left blank, a safe default list is used. See https://go.dev/src/crypto/tls/cipher_suites.go for a list of supported cipher suites."
+                },
+                "curve_preferences": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool",
+                  "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
+                },
                 "insecure": {
                   "type": "bool",
                   "doc": "In gRPC and HTTP when set to true, this is used to disable the client transport security. See https://godoc.org/google.golang.org/grpc#WithInsecure for gRPC. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional, default false)"
@@ -6324,9 +8312,48 @@
                   "type": "bool",
                   "doc": "InsecureSkipVerify will enable TLS but not verify the certificate."
                 },
+                "key_file": {
+                  "type": "string",
+                  "doc": "Path to the TLS key to use for TLS required connections. (optional)"
+                },
+                "key_pem": {
+                  "type": "string",
+                  "doc": "In memory PEM encoded TLS key to use for TLS required connections. (optional)"
+                },
+                "max_version": {
+                  "type": "string",
+                  "doc": "MaxVersion sets the maximum TLS version that is acceptable. If not set, refer to crypto/tls for defaults. (optional)"
+                },
+                "min_version": {
+                  "type": "string",
+                  "doc": "MinVersion sets the minimum TLS version that is acceptable. If not set, TLS 1.2 will be used. (optional)"
+                },
+                "reload_interval": {
+                  "type": "duration",
+                  "doc": "ReloadInterval specifies the duration after which the certificate will be reloaded If not set, it will never be reloaded (optional)"
+                },
                 "server_name_override": {
                   "type": "string",
                   "doc": "ServerName requested by client for virtual hosting. This sets the ServerName in the TLSConfig. Please refer to https://godoc.org/crypto/tls#Config for more information. (optional)"
+                },
+                "tpm": {
+                  "type": "map",
+                  "children": {
+                    "auth": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "bool"
+                    },
+                    "owner_auth": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string",
+                      "doc": "The path to the TPM device or Unix domain socket. For instance /dev/tpm0 or /dev/tpmrm0."
+                    }
+                  },
+                  "doc": "Trusted platform module configuration"
                 }
               },
               "doc": "TLS holds TLS-related configuration for connecting to Kafka brokers. By default the client will use an insecure connection unless SASL/AWS_MSK_IAM_OAUTHBEARER auth is configured."
@@ -6705,6 +8732,23 @@
                   "type": "map",
                   "children": {
                     "auth": {
+                      "type": "map",
+                      "children": {
+                        "authenticator": {
+                          "type": "map",
+                          "open": true,
+                          "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
+                        },
+                        "request_params": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "RequestParameters is a list of parameters that should be extracted from the request and added to the context. When a parameter is found in both the query string and the header, the value from the query string will be used."
+                        }
+                      },
                       "doc": "Auth for this receiver"
                     },
                     "compression_algorithms": {
@@ -6717,7 +8761,49 @@
                       "doc": "CompressionAlgorithms configures the list of compression algorithms the server can accept. Default: [\"\", \"gzip\", \"zstd\", \"zlib\", \"snappy\", \"deflate\"]"
                     },
                     "cors": {
+                      "type": "map",
+                      "children": {
+                        "allowed_headers": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "AllowedHeaders sets what headers will be allowed in CORS requests. The Accept, Accept-Language, Content-Type, and Content-Language headers are implicitly allowed. If no headers are listed, X-Requested-With will also be accepted by default. Include \"*\" to allow any request header."
+                        },
+                        "allowed_origins": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "AllowedOrigins sets the allowed values of the Origin header for HTTP/JSON requests to an OTLP receiver. An origin may contain a wildcard (*) to replace 0 or more characters (e.g., \"http://*.domain.com\", or \"*\" to allow any origin)."
+                        },
+                        "exposed_headers": {
+                          "type": "list",
+                          "children": {
+                            "item": {
+                              "type": "string"
+                            }
+                          },
+                          "doc": "ExposedHeaders sets the value of the Access-Control-Expose-Headers response header, indicating which headers are safe to expose to the API of a CORS response."
+                        },
+                        "max_age": {
+                          "type": "int",
+                          "doc": "MaxAge sets the value of the Access-Control-Max-Age response header. Set it to the number of seconds that browsers should cache a CORS preflight response for."
+                        }
+                      },
                       "doc": "CORS configures the server for HTTP cross-origin resource sharing (CORS)."
+                    },
+                    "dialer": {
+                      "type": "map",
+                      "children": {
+                        "timeout": {
+                          "type": "duration"
+                        }
+                      }
                     },
                     "endpoint": {
                       "type": "string",
@@ -6746,7 +8832,8 @@
                           "type": "map",
                           "children": {
                             "id": {
-                              "type": "string",
+                              "type": "map",
+                              "open": true,
                               "doc": "ID specifies the name of the extension to use."
                             }
                           },
@@ -6764,7 +8851,6 @@
                       "doc": "ReadTimeout is the maximum duration for reading the entire request, including the body. A zero or negative value means there will be no timeout. Because ReadTimeout does not let Handlers make per-request decisions on each request body's acceptable deadline or upload rate, most users will prefer to use ReadHeaderTimeout. It is valid to use them both."
                     },
                     "response_headers": {
-                      "type": "list",
                       "children": {
                         "item": {
                           "type": "map",
@@ -6827,6 +8913,9 @@
                           },
                           "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
                         },
+                        "include_insecure_cipher_suites": {
+                          "type": "bool"
+                        },
                         "include_system_ca_certs_pool": {
                           "type": "bool",
                           "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
@@ -6873,6 +8962,9 @@
                       },
                       "doc": "TLS struct exposes TLS client configuration."
                     },
+                    "transport": {
+                      "type": "string"
+                    },
                     "write_timeout": {
                       "type": "duration",
                       "doc": "WriteTimeout is the maximum duration before timing out writes of the response. It is reset whenever a new request's header is read. Like ReadTimeout, it does not let Handlers make decisions on a per-request basis. A zero or negative value means there will be no timeout."
@@ -6884,7 +8976,6 @@
               "doc": "APIServer has the settings to enable the receiver to host the Prometheus API server in agent mode. This allows the user to call the endpoint to get the config, service discovery, and targets for debugging purposes."
             },
             "config": {
-              "type": "map",
               "children": {
                 "global": {
                   "type": "map",
@@ -8076,7 +10167,8 @@
                   "type": "map",
                   "children": {
                     "authenticator": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
                     }
                   },
@@ -8099,6 +10191,8 @@
                   "doc": "Advanced configuration options for the Compression"
                 },
                 "cookies": {
+                  "type": "map",
+                  "open": true,
                   "doc": "Cookies configures the cookie management of the HTTP client."
                 },
                 "disable_keep_alives": {
@@ -8114,7 +10208,6 @@
                   "doc": "Enabling ForceAttemptHTTP2 forces the HTTP transport to use the HTTP/2 protocol. By default, this is set to true. NOTE: HTTP/2 does not support settings such as MaxConnsPerHost, MaxIdleConnsPerHost and MaxIdleConns."
                 },
                 "headers": {
-                  "type": "list",
                   "children": {
                     "item": {
                       "type": "map",
@@ -8170,7 +10263,8 @@
                       "type": "map",
                       "children": {
                         "id": {
-                          "type": "string",
+                          "type": "map",
+                          "open": true,
                           "doc": "ID specifies the name of the extension to use."
                         }
                       },
@@ -8227,6 +10321,9 @@
                         }
                       },
                       "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
+                    },
+                    "include_insecure_cipher_suites": {
+                      "type": "bool"
                     },
                     "include_system_ca_certs_pool": {
                       "type": "bool",
@@ -8318,6 +10415,23 @@
           "type": "map",
           "children": {
             "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "map",
+                  "open": true,
+                  "doc": "AuthenticatorID specifies the name of the extension to use in order to authenticate the incoming data point."
+                },
+                "request_params": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "RequestParameters is a list of parameters that should be extracted from the request and added to the context. When a parameter is found in both the query string and the header, the value from the query string will be used."
+                }
+              },
               "doc": "Auth for this receiver"
             },
             "compression_algorithms": {
@@ -8330,7 +10444,49 @@
               "doc": "CompressionAlgorithms configures the list of compression algorithms the server can accept. Default: [\"\", \"gzip\", \"zstd\", \"zlib\", \"snappy\", \"deflate\"]"
             },
             "cors": {
+              "type": "map",
+              "children": {
+                "allowed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "AllowedHeaders sets what headers will be allowed in CORS requests. The Accept, Accept-Language, Content-Type, and Content-Language headers are implicitly allowed. If no headers are listed, X-Requested-With will also be accepted by default. Include \"*\" to allow any request header."
+                },
+                "allowed_origins": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "AllowedOrigins sets the allowed values of the Origin header for HTTP/JSON requests to an OTLP receiver. An origin may contain a wildcard (*) to replace 0 or more characters (e.g., \"http://*.domain.com\", or \"*\" to allow any origin)."
+                },
+                "exposed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  },
+                  "doc": "ExposedHeaders sets the value of the Access-Control-Expose-Headers response header, indicating which headers are safe to expose to the API of a CORS response."
+                },
+                "max_age": {
+                  "type": "int",
+                  "doc": "MaxAge sets the value of the Access-Control-Max-Age response header. Set it to the number of seconds that browsers should cache a CORS preflight response for."
+                }
+              },
               "doc": "CORS configures the server for HTTP cross-origin resource sharing (CORS)."
+            },
+            "dialer": {
+              "type": "map",
+              "children": {
+                "timeout": {
+                  "type": "duration"
+                }
+              }
             },
             "endpoint": {
               "type": "string",
@@ -8359,7 +10515,8 @@
                   "type": "map",
                   "children": {
                     "id": {
-                      "type": "string",
+                      "type": "map",
+                      "open": true,
                       "doc": "ID specifies the name of the extension to use."
                     }
                   },
@@ -8381,7 +10538,6 @@
               "doc": "ReadTimeout is the maximum duration for reading the entire request, including the body. A zero or negative value means there will be no timeout. Because ReadTimeout does not let Handlers make per-request decisions on each request body's acceptable deadline or upload rate, most users will prefer to use ReadHeaderTimeout. It is valid to use them both."
             },
             "response_headers": {
-              "type": "list",
               "children": {
                 "item": {
                   "type": "map",
@@ -8444,6 +10600,9 @@
                   },
                   "doc": "contains the elliptic curves that will be used in an ECDHE handshake, in preference order Defaults to empty list and \"crypto/tls\" defaults are used, internally."
                 },
+                "include_insecure_cipher_suites": {
+                  "type": "bool"
+                },
                 "include_system_ca_certs_pool": {
                   "type": "bool",
                   "doc": "If true, load system CA certificates pool in addition to the certificates configured in this struct."
@@ -8489,6 +10648,9 @@
                 }
               },
               "doc": "TLS struct exposes TLS client configuration."
+            },
+            "transport": {
+              "type": "string"
             },
             "write_timeout": {
               "type": "duration",

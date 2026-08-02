@@ -3,7 +3,7 @@ distribution: core
 distributions:
   - core
   - contrib
-generatedAt: "2026-08-02T07:28:35Z"
+generatedAt: "2026-08-02T13:05:39Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -83,6 +83,42 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter
+      fields:
+        type: map
+        children:
+          append:
+            type: bool
+          compression:
+            type: string
+          encoding:
+            type: map
+            open: true
+          flush_interval:
+            type: duration
+          format:
+            type: string
+          group_by:
+            type: map
+            children:
+              enabled:
+                type: bool
+              max_open_files:
+                type: int
+              resource_attribute:
+                type: string
+          path:
+            type: string
+          rotation:
+            type: map
+            children:
+              localtime:
+                type: bool
+              max_backups:
+                type: int
+              max_days:
+                type: int
+              max_megabytes:
+                type: int
     kafka:
       type: kafka
       signals:
@@ -99,6 +135,306 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              kerberos:
+                type: map
+                children:
+                  config_file:
+                    type: string
+                  disable_fast_negotiation:
+                    type: bool
+                  keytab_file:
+                    type: string
+                  password:
+                    type: string
+                  realm:
+                    type: string
+                  service_name:
+                    type: string
+                  use_keytab:
+                    type: bool
+                  username:
+                    type: string
+              plain_text:
+                type: map
+                children:
+                  password:
+                    type: string
+                  username:
+                    type: string
+              sasl:
+                type: map
+                children:
+                  aws_msk:
+                    type: map
+                    children:
+                      region:
+                        type: string
+                  mechanism:
+                    type: string
+                  password:
+                    type: string
+                  username:
+                    type: string
+                  version:
+                    type: int
+              tls:
+                type: map
+                children:
+                  ca_file:
+                    type: string
+                  ca_pem:
+                    type: string
+                  cert_file:
+                    type: string
+                  cert_pem:
+                    type: string
+                  cipher_suites:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  curve_preferences:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  include_system_ca_certs_pool:
+                    type: bool
+                  insecure:
+                    type: bool
+                  insecure_skip_verify:
+                    type: bool
+                  key_file:
+                    type: string
+                  key_pem:
+                    type: string
+                  max_version:
+                    type: string
+                  min_version:
+                    type: string
+                  reload_interval:
+                    type: duration
+                  server_name_override:
+                    type: string
+                  tpm:
+                    type: map
+                    children:
+                      auth:
+                        type: string
+                      enabled:
+                        type: bool
+                      owner_auth:
+                        type: string
+                      path:
+                        type: string
+          brokers:
+            type: list
+            children:
+              item:
+                type: string
+          client_id:
+            type: string
+          encoding:
+            type: string
+          include_metadata_keys:
+            type: list
+            children:
+              item:
+                type: string
+          logs:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+              topic_from_metadata_key:
+                type: string
+          metadata:
+            type: map
+            children:
+              full:
+                type: bool
+              refresh_interval:
+                type: duration
+              retry:
+                type: map
+                children:
+                  backoff:
+                    type: duration
+                  max:
+                    type: int
+          metrics:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+              topic_from_metadata_key:
+                type: string
+          partition_logs_by_resource_attributes:
+            type: bool
+          partition_logs_by_trace_id:
+            type: bool
+          partition_metrics_by_resource_attributes:
+            type: bool
+          partition_traces_by_id:
+            type: bool
+          producer:
+            type: map
+            children:
+              allow_auto_topic_creation:
+                type: bool
+              compression:
+                type: string
+              compression_params:
+                type: map
+                children:
+                  level:
+                    type: int
+              flush_max_messages:
+                type: int
+              linger:
+                type: duration
+              max_message_bytes:
+                type: int
+              required_acks:
+                type: int
+          profiles:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+              topic_from_metadata_key:
+                type: string
+          protocol_version:
+            type: string
+          rack_id:
+            type: string
+          resolve_canonical_bootstrap_servers_only:
+            type: bool
+          retry_on_failure:
+            type: map
+            children:
+              enabled:
+                type: bool
+              initial_interval:
+                type: duration
+              max_elapsed_time:
+                type: duration
+              max_interval:
+                type: duration
+              multiplier:
+                type: float
+              randomization_factor:
+                type: float
+          sending_queue:
+            type: map
+            children:
+              batch:
+                type: map
+                children:
+                  flush_timeout:
+                    type: duration
+                  max_size:
+                    type: int
+                  min_size:
+                    type: int
+                  sizer:
+                    type: map
+                    open: true
+              block_on_overflow:
+                type: bool
+              enabled:
+                type: bool
+              num_consumers:
+                type: int
+              queue_size:
+                type: int
+              sizer:
+                type: map
+                open: true
+              storage:
+                type: map
+                open: true
+              wait_for_result:
+                type: bool
+          timeout:
+            type: duration
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              insecure:
+                type: bool
+              insecure_skip_verify:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              server_name_override:
+                type: string
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          topic:
+            type: string
+          topic_from_attribute:
+            type: string
+          traces:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+              topic_from_metadata_key:
+                type: string
+          use_leader_epoch:
+            type: bool
     nop:
       type: nop
       signals:
@@ -276,6 +612,169 @@ components:
         - k8s
         - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+          compression:
+            type: string
+          compression_params:
+            type: map
+            children:
+              level:
+                type: int
+          cookies:
+            type: map
+            children:
+              enabled:
+                type: bool
+          disable_keep_alives:
+            type: bool
+          encoding:
+            type: string
+          endpoint:
+            type: string
+          force_attempt_http2:
+            type: bool
+          headers: {}
+          http2_ping_timeout:
+            type: duration
+          http2_read_idle_timeout:
+            type: duration
+          idle_conn_timeout:
+            type: duration
+          logs_endpoint:
+            type: string
+          max_conns_per_host:
+            type: int
+          max_idle_conns:
+            type: int
+          max_idle_conns_per_host:
+            type: int
+          metrics_endpoint:
+            type: string
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          profiles_endpoint:
+            type: string
+          proxy_url:
+            type: string
+          read_buffer_size:
+            type: int
+          retry_on_failure:
+            type: map
+            children:
+              enabled:
+                type: bool
+              initial_interval:
+                type: duration
+              max_elapsed_time:
+                type: duration
+              max_interval:
+                type: duration
+              multiplier:
+                type: float
+              randomization_factor:
+                type: float
+          sending_queue:
+            type: map
+            children:
+              batch:
+                type: map
+                children:
+                  flush_timeout:
+                    type: duration
+                  max_size:
+                    type: int
+                  min_size:
+                    type: int
+                  sizer:
+                    type: map
+                    open: true
+              block_on_overflow:
+                type: bool
+              enabled:
+                type: bool
+              num_consumers:
+                type: int
+              queue_size:
+                type: int
+              sizer:
+                type: map
+                open: true
+              storage:
+                type: map
+                open: true
+              wait_for_result:
+                type: bool
+          timeout:
+            type: duration
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              insecure:
+                type: bool
+              insecure_skip_verify:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              server_name_override:
+                type: string
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          traces_endpoint:
+            type: string
+          write_buffer_size:
+            type: int
     prometheus:
       type: prometheus
       signals:
@@ -286,6 +785,165 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter
+      fields:
+        type: map
+        children:
+          add_metric_suffixes:
+            type: bool
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+              request_params:
+                type: list
+                children:
+                  item:
+                    type: string
+          compression_algorithms:
+            type: list
+            children:
+              item:
+                type: string
+          const_labels:
+            type: map
+            open: true
+          cors:
+            type: map
+            children:
+              allowed_headers:
+                type: list
+                children:
+                  item:
+                    type: string
+              allowed_origins:
+                type: list
+                children:
+                  item:
+                    type: string
+              max_age:
+                type: int
+          enable_open_metrics:
+            type: bool
+          endpoint:
+            type: string
+          idle_timeout:
+            type: duration
+          include_metadata:
+            type: bool
+          keep_alives_enabled:
+            type: bool
+          max_request_body_size:
+            type: int
+          metric_expiration:
+            type: duration
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          namespace:
+            type: string
+          read_header_timeout:
+            type: duration
+          read_timeout:
+            type: duration
+          resource_to_telemetry_conversion:
+            type: map
+            children:
+              enabled:
+                type: bool
+          response_headers: {}
+          send_timestamps:
+            type: bool
+          sending_queue:
+            type: map
+            children:
+              batch:
+                type: map
+                children:
+                  flush_timeout:
+                    type: duration
+                  max_size:
+                    type: int
+                  min_size:
+                    type: int
+                  sizer:
+                    type: map
+                    open: true
+              block_on_overflow:
+                type: bool
+              enabled:
+                type: bool
+              num_consumers:
+                type: int
+              queue_size:
+                type: int
+              sizer:
+                type: map
+                open: true
+              storage:
+                type: map
+                open: true
+              wait_for_result:
+                type: bool
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              client_ca_file:
+                type: string
+              client_ca_file_reload:
+                type: bool
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          translation_strategy:
+            type: string
+          write_timeout:
+            type: duration
     prometheusremotewrite:
       type: prometheusremotewrite
       signals:
@@ -296,6 +954,174 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusremotewriteexporter
+      fields:
+        type: map
+        children:
+          add_metric_suffixes:
+            type: bool
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+          compression:
+            type: string
+          compression_params:
+            type: map
+            children:
+              level:
+                type: int
+          cookies:
+            type: map
+            children:
+              enabled:
+                type: bool
+          disable_keep_alives:
+            type: bool
+          endpoint:
+            type: string
+          external_labels:
+            type: map
+            open: true
+          force_attempt_http2:
+            type: bool
+          headers: {}
+          http2_ping_timeout:
+            type: duration
+          http2_read_idle_timeout:
+            type: duration
+          idle_conn_timeout:
+            type: duration
+          max_batch_request_parallelism:
+            type: int
+          max_batch_size_bytes:
+            type: int
+          max_conns_per_host:
+            type: int
+          max_idle_conns:
+            type: int
+          max_idle_conns_per_host:
+            type: int
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          namespace:
+            type: string
+          protobuf_message:
+            type: map
+            open: true
+          proxy_url:
+            type: string
+          read_buffer_size:
+            type: int
+          remote_write_queue:
+            type: map
+            children:
+              enabled:
+                type: bool
+              num_consumers:
+                type: int
+              queue_size:
+                type: int
+          resource_to_telemetry_conversion:
+            type: map
+            children:
+              enabled:
+                type: bool
+          retry_on_failure:
+            type: map
+            children:
+              enabled:
+                type: bool
+              initial_interval:
+                type: duration
+              max_elapsed_time:
+                type: duration
+              max_interval:
+                type: duration
+              multiplier:
+                type: float
+              randomization_factor:
+                type: float
+          send_metadata:
+            type: bool
+          target_info:
+            type: map
+            children:
+              enabled:
+                type: bool
+          timeout:
+            type: duration
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              insecure:
+                type: bool
+              insecure_skip_verify:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              server_name_override:
+                type: string
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          wal:
+            type: map
+            children:
+              buffer_size:
+                type: int
+              directory:
+                type: string
+              lag_record_frequency:
+                type: duration
+              truncate_frequency:
+                type: duration
+          write_buffer_size:
+            type: int
     zipkin:
       type: zipkin
       signals:
@@ -306,6 +1132,163 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/zipkinexporter
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+          compression:
+            type: string
+          compression_params:
+            type: map
+            children:
+              level:
+                type: int
+          cookies:
+            type: map
+            children:
+              enabled:
+                type: bool
+          default_service_name:
+            type: string
+          disable_keep_alives:
+            type: bool
+          endpoint:
+            type: string
+          force_attempt_http2:
+            type: bool
+          format:
+            type: string
+          headers: {}
+          http2_ping_timeout:
+            type: duration
+          http2_read_idle_timeout:
+            type: duration
+          idle_conn_timeout:
+            type: duration
+          max_conns_per_host:
+            type: int
+          max_idle_conns:
+            type: int
+          max_idle_conns_per_host:
+            type: int
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          proxy_url:
+            type: string
+          read_buffer_size:
+            type: int
+          retry_on_failure:
+            type: map
+            children:
+              enabled:
+                type: bool
+              initial_interval:
+                type: duration
+              max_elapsed_time:
+                type: duration
+              max_interval:
+                type: duration
+              multiplier:
+                type: float
+              randomization_factor:
+                type: float
+          sending_queue:
+            type: map
+            children:
+              batch:
+                type: map
+                children:
+                  flush_timeout:
+                    type: duration
+                  max_size:
+                    type: int
+                  min_size:
+                    type: int
+                  sizer:
+                    type: map
+                    open: true
+              block_on_overflow:
+                type: bool
+              enabled:
+                type: bool
+              num_consumers:
+                type: int
+              queue_size:
+                type: int
+              sizer:
+                type: map
+                open: true
+              storage:
+                type: map
+                open: true
+              wait_for_result:
+                type: bool
+          timeout:
+            type: duration
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              insecure:
+                type: bool
+              insecure_skip_verify:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              server_name_override:
+                type: string
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          write_buffer_size:
+            type: int
   extension:
     health_check:
       type: health_check
@@ -316,6 +1299,132 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+              request_params:
+                type: list
+                children:
+                  item:
+                    type: string
+          check_collector_pipeline:
+            type: map
+            children:
+              enabled:
+                type: bool
+              exporter_failure_threshold:
+                type: int
+              interval:
+                type: string
+          compression_algorithms:
+            type: list
+            children:
+              item:
+                type: string
+          cors:
+            type: map
+            children:
+              allowed_headers:
+                type: list
+                children:
+                  item:
+                    type: string
+              allowed_origins:
+                type: list
+                children:
+                  item:
+                    type: string
+              max_age:
+                type: int
+          endpoint:
+            type: string
+          idle_timeout:
+            type: duration
+          include_metadata:
+            type: bool
+          keep_alives_enabled:
+            type: bool
+          max_request_body_size:
+            type: int
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          path:
+            type: string
+          read_header_timeout:
+            type: duration
+          read_timeout:
+            type: duration
+          response_body:
+            type: map
+            children:
+              healthy:
+                type: string
+              unhealthy:
+                type: string
+          response_headers: {}
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              client_ca_file:
+                type: string
+              client_ca_file_reload:
+                type: bool
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          write_timeout:
+            type: duration
     memory_limiter:
       type: memory_limiter
       stability:
@@ -323,6 +1432,23 @@ components:
       distributions:
         - core
       module: go.opentelemetry.io/collector/extension/memorylimiterextension
+      fields:
+        type: map
+        children:
+          check_interval:
+            type: duration
+          limit_mib:
+            type: int
+          limit_percentage:
+            type: int
+          min_gc_interval_when_hard_limited:
+            type: duration
+          min_gc_interval_when_soft_limited:
+            type: duration
+          spike_limit_mib:
+            type: int
+          spike_limit_percentage:
+            type: int
     pprof:
       type: pprof
       stability:
@@ -332,6 +1458,22 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension
+      fields:
+        type: map
+        children:
+          block_profile_fraction:
+            type: int
+          dialer:
+            type: map
+            children:
+              timeout:
+                type: duration
+          endpoint:
+            type: string
+          mutex_profile_fraction:
+            type: int
+          save_to_file:
+            type: string
     xextension:
       type: xextension
       signals:
@@ -350,6 +1492,119 @@ components:
         - contrib
         - k8s
       module: go.opentelemetry.io/collector/extension/zpagesextension
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+              request_params:
+                type: list
+                children:
+                  item:
+                    type: string
+          compression_algorithms:
+            type: list
+            children:
+              item:
+                type: string
+          cors:
+            type: map
+            children:
+              allowed_headers:
+                type: list
+                children:
+                  item:
+                    type: string
+              allowed_origins:
+                type: list
+                children:
+                  item:
+                    type: string
+              max_age:
+                type: int
+          endpoint:
+            type: string
+          expvar:
+            type: map
+            children:
+              enabled:
+                type: bool
+          idle_timeout:
+            type: duration
+          include_metadata:
+            type: bool
+          keep_alives_enabled:
+            type: bool
+          max_request_body_size:
+            type: int
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          read_header_timeout:
+            type: duration
+          read_timeout:
+            type: duration
+          response_headers: {}
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              client_ca_file:
+                type: string
+              client_ca_file_reload:
+                type: bool
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          write_timeout:
+            type: duration
   processor:
     attributes:
       type: attributes
@@ -366,6 +1621,192 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor
+      fields:
+        type: map
+        children:
+          actions:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  action:
+                    type: string
+                  converted_type:
+                    type: string
+                  from_attribute:
+                    type: string
+                  from_context:
+                    type: string
+                  key:
+                    type: string
+                  pattern:
+                    type: string
+                  value:
+                    type: map
+                    open: true
+          exclude:
+            type: map
+            children:
+              attributes:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              libraries:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      name:
+                        type: string
+                      version:
+                        type: string
+              log_bodies:
+                type: list
+                children:
+                  item:
+                    type: string
+              log_severity_number:
+                type: map
+                children:
+                  match_undefined:
+                    type: bool
+                  min:
+                    type: int
+              log_severity_texts:
+                type: list
+                children:
+                  item:
+                    type: string
+              match_type:
+                type: string
+              metric_names:
+                type: list
+                children:
+                  item:
+                    type: string
+              regexp:
+                type: map
+                children:
+                  cacheenabled:
+                    type: bool
+                  cachemaxnumentries:
+                    type: int
+              resources:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              services:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_kinds:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_names:
+                type: list
+                children:
+                  item:
+                    type: string
+          include:
+            type: map
+            children:
+              attributes:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              libraries:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      name:
+                        type: string
+                      version:
+                        type: string
+              log_bodies:
+                type: list
+                children:
+                  item:
+                    type: string
+              log_severity_number:
+                type: map
+                children:
+                  match_undefined:
+                    type: bool
+                  min:
+                    type: int
+              log_severity_texts:
+                type: list
+                children:
+                  item:
+                    type: string
+              match_type:
+                type: string
+              metric_names:
+                type: list
+                children:
+                  item:
+                    type: string
+              regexp:
+                type: map
+                children:
+                  cacheenabled:
+                    type: bool
+                  cachemaxnumentries:
+                    type: int
+              resources:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              services:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_kinds:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_names:
+                type: list
+                children:
+                  item:
+                    type: string
     batch:
       type: batch
       signals:
@@ -419,6 +1860,399 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor
+      fields:
+        type: map
+        children:
+          error_mode:
+            type: string
+          logs:
+            type: map
+            children:
+              exclude:
+                type: map
+                children:
+                  bodies:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  match_type:
+                    type: string
+                  record_attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  resource_attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  severity_number:
+                    type: map
+                    children:
+                      match_undefined:
+                        type: bool
+                      min:
+                        type: string
+                  severity_texts:
+                    type: list
+                    children:
+                      item:
+                        type: string
+              include:
+                type: map
+                children:
+                  bodies:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  match_type:
+                    type: string
+                  record_attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  resource_attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  severity_number:
+                    type: map
+                    children:
+                      match_undefined:
+                        type: bool
+                      min:
+                        type: string
+                  severity_texts:
+                    type: list
+                    children:
+                      item:
+                        type: string
+              log_record:
+                type: list
+                children:
+                  item:
+                    type: string
+              resource:
+                type: list
+                children:
+                  item:
+                    type: string
+          metrics:
+            type: map
+            children:
+              datapoint:
+                type: list
+                children:
+                  item:
+                    type: string
+              exclude:
+                type: map
+                children:
+                  expressions:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  match_type:
+                    type: string
+                  metric_names:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  regexp:
+                    type: map
+                    children:
+                      cacheenabled:
+                        type: bool
+                      cachemaxnumentries:
+                        type: int
+                  resource_attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+              include:
+                type: map
+                children:
+                  expressions:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  match_type:
+                    type: string
+                  metric_names:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  regexp:
+                    type: map
+                    children:
+                      cacheenabled:
+                        type: bool
+                      cachemaxnumentries:
+                        type: int
+                  resource_attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+              metric:
+                type: list
+                children:
+                  item:
+                    type: string
+              regexp:
+                type: map
+                children:
+                  cacheenabled:
+                    type: bool
+                  cachemaxnumentries:
+                    type: int
+              resource:
+                type: list
+                children:
+                  item:
+                    type: string
+          profiles:
+            type: map
+            children:
+              profile:
+                type: list
+                children:
+                  item:
+                    type: string
+              resource:
+                type: list
+                children:
+                  item:
+                    type: string
+          spans:
+            type: map
+            children:
+              exclude:
+                type: map
+                children:
+                  attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  libraries:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          name:
+                            type: string
+                          version:
+                            type: string
+                  log_bodies:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  log_severity_number:
+                    type: map
+                    children:
+                      match_undefined:
+                        type: bool
+                      min:
+                        type: int
+                  log_severity_texts:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  match_type:
+                    type: string
+                  metric_names:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  regexp:
+                    type: map
+                    children:
+                      cacheenabled:
+                        type: bool
+                      cachemaxnumentries:
+                        type: int
+                  resources:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  services:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  span_kinds:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  span_names:
+                    type: list
+                    children:
+                      item:
+                        type: string
+              include:
+                type: map
+                children:
+                  attributes:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  libraries:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          name:
+                            type: string
+                          version:
+                            type: string
+                  log_bodies:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  log_severity_number:
+                    type: map
+                    children:
+                      match_undefined:
+                        type: bool
+                      min:
+                        type: int
+                  log_severity_texts:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  match_type:
+                    type: string
+                  metric_names:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  regexp:
+                    type: map
+                    children:
+                      cacheenabled:
+                        type: bool
+                      cachemaxnumentries:
+                        type: int
+                  resources:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          key:
+                            type: string
+                          value:
+                            type: map
+                            open: true
+                  services:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  span_kinds:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  span_names:
+                    type: list
+                    children:
+                      item:
+                        type: string
+          traces:
+            type: map
+            children:
+              resource:
+                type: list
+                children:
+                  item:
+                    type: string
+              span:
+                type: list
+                children:
+                  item:
+                    type: string
+              spanevent:
+                type: list
+                children:
+                  item:
+                    type: string
     memory_limiter:
       type: memory_limiter
       signals:
@@ -469,6 +2303,25 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor
+      fields:
+        type: map
+        children:
+          attribute_source:
+            type: string
+          fail_closed:
+            type: bool
+          from_attribute:
+            type: string
+          hash_seed:
+            type: int
+          mode:
+            type: string
+          sampling_percentage:
+            type: float
+          sampling_precision:
+            type: int
+          sampling_priority:
+            type: string
     resource:
       type: resource
       signals:
@@ -486,6 +2339,30 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor
+      fields:
+        type: map
+        children:
+          attributes:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  action:
+                    type: string
+                  converted_type:
+                    type: string
+                  from_attribute:
+                    type: string
+                  from_context:
+                    type: string
+                  key:
+                    type: string
+                  pattern:
+                    type: string
+                  value:
+                    type: map
+                    open: true
     span:
       type: span
       signals:
@@ -496,6 +2373,200 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanprocessor
+      fields:
+        type: map
+        children:
+          exclude:
+            type: map
+            children:
+              attributes:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              libraries:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      name:
+                        type: string
+                      version:
+                        type: string
+              log_bodies:
+                type: list
+                children:
+                  item:
+                    type: string
+              log_severity_number:
+                type: map
+                children:
+                  match_undefined:
+                    type: bool
+                  min:
+                    type: int
+              log_severity_texts:
+                type: list
+                children:
+                  item:
+                    type: string
+              match_type:
+                type: string
+              metric_names:
+                type: list
+                children:
+                  item:
+                    type: string
+              regexp:
+                type: map
+                children:
+                  cacheenabled:
+                    type: bool
+                  cachemaxnumentries:
+                    type: int
+              resources:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              services:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_kinds:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_names:
+                type: list
+                children:
+                  item:
+                    type: string
+          include:
+            type: map
+            children:
+              attributes:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              libraries:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      name:
+                        type: string
+                      version:
+                        type: string
+              log_bodies:
+                type: list
+                children:
+                  item:
+                    type: string
+              log_severity_number:
+                type: map
+                children:
+                  match_undefined:
+                    type: bool
+                  min:
+                    type: int
+              log_severity_texts:
+                type: list
+                children:
+                  item:
+                    type: string
+              match_type:
+                type: string
+              metric_names:
+                type: list
+                children:
+                  item:
+                    type: string
+              regexp:
+                type: map
+                children:
+                  cacheenabled:
+                    type: bool
+                  cachemaxnumentries:
+                    type: int
+              resources:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      key:
+                        type: string
+                      value:
+                        type: map
+                        open: true
+              services:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_kinds:
+                type: list
+                children:
+                  item:
+                    type: string
+              span_names:
+                type: list
+                children:
+                  item:
+                    type: string
+          name:
+            type: map
+            children:
+              from_attributes:
+                type: list
+                children:
+                  item:
+                    type: string
+              separator:
+                type: string
+              to_attributes:
+                type: map
+                children:
+                  break_after_match:
+                    type: bool
+                  keep_original_name:
+                    type: bool
+                  rules:
+                    type: list
+                    children:
+                      item:
+                        type: string
+          status:
+            type: map
+            children:
+              code:
+                type: string
+              description:
+                type: string
   receiver:
     hostmetrics:
       type: hostmetrics
@@ -510,6 +2581,19 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver
+      fields:
+        type: map
+        children:
+          collection_interval:
+            type: duration
+          initial_delay:
+            type: duration
+          metadata_collection_interval:
+            type: duration
+          root_path:
+            type: string
+          timeout:
+            type: duration
     jaeger:
       type: jaeger
       signals:
@@ -521,6 +2605,352 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver
+      fields:
+        type: map
+        children:
+          protocols:
+            type: map
+            children:
+              grpc:
+                type: map
+                children:
+                  auth:
+                    type: map
+                    children:
+                      authenticator:
+                        type: map
+                        open: true
+                  dialer:
+                    type: map
+                    children:
+                      timeout:
+                        type: duration
+                  endpoint:
+                    type: string
+                  include_metadata:
+                    type: bool
+                  keepalive:
+                    type: map
+                    children:
+                      enforcement_policy:
+                        type: map
+                        children:
+                          min_time:
+                            type: duration
+                          permit_without_stream:
+                            type: bool
+                      server_parameters:
+                        type: map
+                        children:
+                          max_connection_age:
+                            type: duration
+                          max_connection_age_grace:
+                            type: duration
+                          max_connection_idle:
+                            type: duration
+                          time:
+                            type: duration
+                          timeout:
+                            type: duration
+                  max_concurrent_streams:
+                    type: int
+                  max_recv_msg_size_mib:
+                    type: int
+                  middlewares:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          id:
+                            type: map
+                            open: true
+                  read_buffer_size:
+                    type: int
+                  tls:
+                    type: map
+                    children:
+                      ca_file:
+                        type: string
+                      ca_pem:
+                        type: string
+                      cert_file:
+                        type: string
+                      cert_pem:
+                        type: string
+                      cipher_suites:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      client_ca_file:
+                        type: string
+                      client_ca_file_reload:
+                        type: bool
+                      curve_preferences:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      include_system_ca_certs_pool:
+                        type: bool
+                      key_file:
+                        type: string
+                      key_pem:
+                        type: string
+                      max_version:
+                        type: string
+                      min_version:
+                        type: string
+                      reload_interval:
+                        type: duration
+                      tpm:
+                        type: map
+                        children:
+                          auth:
+                            type: string
+                          enabled:
+                            type: bool
+                          owner_auth:
+                            type: string
+                          path:
+                            type: string
+                  transport:
+                    type: string
+                  write_buffer_size:
+                    type: int
+              thrift_binary:
+                type: map
+                children:
+                  endpoint:
+                    type: string
+                  max_packet_size:
+                    type: int
+                  queue_size:
+                    type: int
+                  socket_buffer_size:
+                    type: int
+                  workers:
+                    type: int
+              thrift_compact:
+                type: map
+                children:
+                  endpoint:
+                    type: string
+                  max_packet_size:
+                    type: int
+                  queue_size:
+                    type: int
+                  socket_buffer_size:
+                    type: int
+                  workers:
+                    type: int
+              thrift_http:
+                type: map
+                children:
+                  auth:
+                    type: map
+                    children:
+                      authenticator:
+                        type: map
+                        open: true
+                      request_params:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                  compression_algorithms:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  cors:
+                    type: map
+                    children:
+                      allowed_headers:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      allowed_origins:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      max_age:
+                        type: int
+                  endpoint:
+                    type: string
+                  idle_timeout:
+                    type: duration
+                  include_metadata:
+                    type: bool
+                  keep_alives_enabled:
+                    type: bool
+                  max_request_body_size:
+                    type: int
+                  middlewares:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          id:
+                            type: map
+                            open: true
+                  read_header_timeout:
+                    type: duration
+                  read_timeout:
+                    type: duration
+                  response_headers: {}
+                  tls:
+                    type: map
+                    children:
+                      ca_file:
+                        type: string
+                      ca_pem:
+                        type: string
+                      cert_file:
+                        type: string
+                      cert_pem:
+                        type: string
+                      cipher_suites:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      client_ca_file:
+                        type: string
+                      client_ca_file_reload:
+                        type: bool
+                      curve_preferences:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      include_system_ca_certs_pool:
+                        type: bool
+                      key_file:
+                        type: string
+                      key_pem:
+                        type: string
+                      max_version:
+                        type: string
+                      min_version:
+                        type: string
+                      reload_interval:
+                        type: duration
+                      tpm:
+                        type: map
+                        children:
+                          auth:
+                            type: string
+                          enabled:
+                            type: bool
+                          owner_auth:
+                            type: string
+                          path:
+                            type: string
+                  write_timeout:
+                    type: duration
+          remote_sampling:
+            type: map
+            children:
+              auth:
+                type: map
+                children:
+                  authenticator:
+                    type: map
+                    open: true
+              authority:
+                type: string
+              balancer_name:
+                type: string
+              compression:
+                type: string
+              endpoint:
+                type: string
+              headers: {}
+              host_endpoint:
+                type: string
+              keepalive:
+                type: map
+                children:
+                  permit_without_stream:
+                    type: bool
+                  time:
+                    type: duration
+                  timeout:
+                    type: duration
+              middlewares:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      id:
+                        type: map
+                        open: true
+              read_buffer_size:
+                type: int
+              strategy_file:
+                type: string
+              strategy_file_reload_interval:
+                type: duration
+              tls:
+                type: map
+                children:
+                  ca_file:
+                    type: string
+                  ca_pem:
+                    type: string
+                  cert_file:
+                    type: string
+                  cert_pem:
+                    type: string
+                  cipher_suites:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  curve_preferences:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  include_system_ca_certs_pool:
+                    type: bool
+                  insecure:
+                    type: bool
+                  insecure_skip_verify:
+                    type: bool
+                  key_file:
+                    type: string
+                  key_pem:
+                    type: string
+                  max_version:
+                    type: string
+                  min_version:
+                    type: string
+                  reload_interval:
+                    type: duration
+                  server_name_override:
+                    type: string
+                  tpm:
+                    type: map
+                    children:
+                      auth:
+                        type: string
+                      enabled:
+                        type: bool
+                      owner_auth:
+                        type: string
+                      path:
+                        type: string
+              wait_for_ready:
+                type: bool
+              write_buffer_size:
+                type: int
     kafka:
       type: kafka
       signals:
@@ -537,6 +2967,289 @@ components:
         - core
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              kerberos:
+                type: map
+                children:
+                  config_file:
+                    type: string
+                  disable_fast_negotiation:
+                    type: bool
+                  keytab_file:
+                    type: string
+                  password:
+                    type: string
+                  realm:
+                    type: string
+                  service_name:
+                    type: string
+                  use_keytab:
+                    type: bool
+                  username:
+                    type: string
+              plain_text:
+                type: map
+                children:
+                  password:
+                    type: string
+                  username:
+                    type: string
+              sasl:
+                type: map
+                children:
+                  aws_msk:
+                    type: map
+                    children:
+                      region:
+                        type: string
+                  mechanism:
+                    type: string
+                  password:
+                    type: string
+                  username:
+                    type: string
+                  version:
+                    type: int
+              tls:
+                type: map
+                children:
+                  ca_file:
+                    type: string
+                  ca_pem:
+                    type: string
+                  cert_file:
+                    type: string
+                  cert_pem:
+                    type: string
+                  cipher_suites:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  curve_preferences:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  include_system_ca_certs_pool:
+                    type: bool
+                  insecure:
+                    type: bool
+                  insecure_skip_verify:
+                    type: bool
+                  key_file:
+                    type: string
+                  key_pem:
+                    type: string
+                  max_version:
+                    type: string
+                  min_version:
+                    type: string
+                  reload_interval:
+                    type: duration
+                  server_name_override:
+                    type: string
+                  tpm:
+                    type: map
+                    children:
+                      auth:
+                        type: string
+                      enabled:
+                        type: bool
+                      owner_auth:
+                        type: string
+                      path:
+                        type: string
+          autocommit:
+            type: map
+            children:
+              enable:
+                type: bool
+              interval:
+                type: duration
+          brokers:
+            type: list
+            children:
+              item:
+                type: string
+          client_id:
+            type: string
+          default_fetch_size:
+            type: int
+          encoding:
+            type: string
+          error_backoff:
+            type: map
+            children:
+              enabled:
+                type: bool
+              initial_interval:
+                type: duration
+              max_elapsed_time:
+                type: duration
+              max_interval:
+                type: duration
+              multiplier:
+                type: float
+              randomization_factor:
+                type: float
+          group_id:
+            type: string
+          group_instance_id:
+            type: string
+          group_rebalance_strategy:
+            type: string
+          header_extraction:
+            type: map
+            children:
+              extract_headers:
+                type: bool
+              headers:
+                type: list
+                children:
+                  item:
+                    type: string
+          heartbeat_interval:
+            type: duration
+          initial_offset:
+            type: string
+          logs:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+          max_fetch_size:
+            type: int
+          max_fetch_wait:
+            type: duration
+          max_partition_fetch_size:
+            type: int
+          message_marking:
+            type: map
+            children:
+              after:
+                type: bool
+              on_error:
+                type: bool
+              on_permanent_error:
+                type: bool
+          metadata:
+            type: map
+            children:
+              full:
+                type: bool
+              refresh_interval:
+                type: duration
+              retry:
+                type: map
+                children:
+                  backoff:
+                    type: duration
+                  max:
+                    type: int
+          metrics:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+          min_fetch_size:
+            type: int
+          profiles:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+          protocol_version:
+            type: string
+          rack_id:
+            type: string
+          resolve_canonical_bootstrap_servers_only:
+            type: bool
+          session_timeout:
+            type: duration
+          telemetry:
+            type: map
+            children:
+              metrics:
+                type: map
+                children:
+                  kafka_receiver_records_delay:
+                    type: map
+                    children:
+                      enabled:
+                        type: bool
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              insecure:
+                type: bool
+              insecure_skip_verify:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              server_name_override:
+                type: string
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          topic:
+            type: string
+          traces:
+            type: map
+            children:
+              encoding:
+                type: string
+              topic:
+                type: string
+          use_leader_epoch:
+            type: bool
     nop:
       type: nop
       signals:
@@ -757,6 +3470,244 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver
+      fields:
+        type: map
+        children:
+          api_server:
+            type: map
+            children:
+              enabled:
+                type: bool
+              server_config:
+                type: map
+                children:
+                  auth:
+                    type: map
+                    children:
+                      authenticator:
+                        type: map
+                        open: true
+                      request_params:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                  compression_algorithms:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  cors:
+                    type: map
+                    children:
+                      allowed_headers:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      allowed_origins:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      max_age:
+                        type: int
+                  endpoint:
+                    type: string
+                  idle_timeout:
+                    type: duration
+                  include_metadata:
+                    type: bool
+                  keep_alives_enabled:
+                    type: bool
+                  max_request_body_size:
+                    type: int
+                  middlewares:
+                    type: list
+                    children:
+                      item:
+                        type: map
+                        children:
+                          id:
+                            type: map
+                            open: true
+                  read_header_timeout:
+                    type: duration
+                  read_timeout:
+                    type: duration
+                  response_headers: {}
+                  tls:
+                    type: map
+                    children:
+                      ca_file:
+                        type: string
+                      ca_pem:
+                        type: string
+                      cert_file:
+                        type: string
+                      cert_pem:
+                        type: string
+                      cipher_suites:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      client_ca_file:
+                        type: string
+                      client_ca_file_reload:
+                        type: bool
+                      curve_preferences:
+                        type: list
+                        children:
+                          item:
+                            type: string
+                      include_system_ca_certs_pool:
+                        type: bool
+                      key_file:
+                        type: string
+                      key_pem:
+                        type: string
+                      max_version:
+                        type: string
+                      min_version:
+                        type: string
+                      reload_interval:
+                        type: duration
+                      tpm:
+                        type: map
+                        children:
+                          auth:
+                            type: string
+                          enabled:
+                            type: bool
+                          owner_auth:
+                            type: string
+                          path:
+                            type: string
+                  write_timeout:
+                    type: duration
+          config: {}
+          report_extra_scrape_metrics:
+            type: bool
+          start_time_metric_regex:
+            type: string
+          target_allocator:
+            type: map
+            children:
+              auth:
+                type: map
+                children:
+                  authenticator:
+                    type: map
+                    open: true
+              collector_id:
+                type: string
+              compression:
+                type: string
+              compression_params:
+                type: map
+                children:
+                  level:
+                    type: int
+              cookies:
+                type: map
+                children:
+                  enabled:
+                    type: bool
+              disable_keep_alives:
+                type: bool
+              endpoint:
+                type: string
+              force_attempt_http2:
+                type: bool
+              headers: {}
+              http_scrape_config: {}
+              http_sd_config: {}
+              http2_ping_timeout:
+                type: duration
+              http2_read_idle_timeout:
+                type: duration
+              idle_conn_timeout:
+                type: duration
+              interval:
+                type: duration
+              max_conns_per_host:
+                type: int
+              max_idle_conns:
+                type: int
+              max_idle_conns_per_host:
+                type: int
+              middlewares:
+                type: list
+                children:
+                  item:
+                    type: map
+                    children:
+                      id:
+                        type: map
+                        open: true
+              proxy_url:
+                type: string
+              read_buffer_size:
+                type: int
+              timeout:
+                type: duration
+              tls:
+                type: map
+                children:
+                  ca_file:
+                    type: string
+                  ca_pem:
+                    type: string
+                  cert_file:
+                    type: string
+                  cert_pem:
+                    type: string
+                  cipher_suites:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  curve_preferences:
+                    type: list
+                    children:
+                      item:
+                        type: string
+                  include_system_ca_certs_pool:
+                    type: bool
+                  insecure:
+                    type: bool
+                  insecure_skip_verify:
+                    type: bool
+                  key_file:
+                    type: string
+                  key_pem:
+                    type: string
+                  max_version:
+                    type: string
+                  min_version:
+                    type: string
+                  reload_interval:
+                    type: duration
+                  server_name_override:
+                    type: string
+                  tpm:
+                    type: map
+                    children:
+                      auth:
+                        type: string
+                      enabled:
+                        type: bool
+                      owner_auth:
+                        type: string
+                      path:
+                        type: string
+              write_buffer_size:
+                type: int
+          trim_metric_suffixes:
+            type: bool
+          use_start_time_metric:
+            type: bool
     zipkin:
       type: zipkin
       signals:
@@ -768,3 +3719,113 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver
+      fields:
+        type: map
+        children:
+          auth:
+            type: map
+            children:
+              authenticator:
+                type: map
+                open: true
+              request_params:
+                type: list
+                children:
+                  item:
+                    type: string
+          compression_algorithms:
+            type: list
+            children:
+              item:
+                type: string
+          cors:
+            type: map
+            children:
+              allowed_headers:
+                type: list
+                children:
+                  item:
+                    type: string
+              allowed_origins:
+                type: list
+                children:
+                  item:
+                    type: string
+              max_age:
+                type: int
+          endpoint:
+            type: string
+          idle_timeout:
+            type: duration
+          include_metadata:
+            type: bool
+          keep_alives_enabled:
+            type: bool
+          max_request_body_size:
+            type: int
+          middlewares:
+            type: list
+            children:
+              item:
+                type: map
+                children:
+                  id:
+                    type: map
+                    open: true
+          parse_string_tags:
+            type: bool
+          read_header_timeout:
+            type: duration
+          read_timeout:
+            type: duration
+          response_headers: {}
+          tls:
+            type: map
+            children:
+              ca_file:
+                type: string
+              ca_pem:
+                type: string
+              cert_file:
+                type: string
+              cert_pem:
+                type: string
+              cipher_suites:
+                type: list
+                children:
+                  item:
+                    type: string
+              client_ca_file:
+                type: string
+              client_ca_file_reload:
+                type: bool
+              curve_preferences:
+                type: list
+                children:
+                  item:
+                    type: string
+              include_system_ca_certs_pool:
+                type: bool
+              key_file:
+                type: string
+              key_pem:
+                type: string
+              max_version:
+                type: string
+              min_version:
+                type: string
+              reload_interval:
+                type: duration
+              tpm:
+                type: map
+                children:
+                  auth:
+                    type: string
+                  enabled:
+                    type: bool
+                  owner_auth:
+                    type: string
+                  path:
+                    type: string
+          write_timeout:
+            type: duration
