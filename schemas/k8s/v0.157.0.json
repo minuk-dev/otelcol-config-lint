@@ -1,11 +1,7 @@
 {
   "collectorVersion": "v0.157.0",
   "distribution": "k8s",
-  "distributions": [
-    "core",
-    "contrib"
-  ],
-  "generatedAt": "2026-08-02T13:07:26Z",
+  "generatedAt": "2026-08-02T13:15:54Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -37,10 +33,6 @@
             "from": "traces",
             "to": "metrics"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/countconnector",
         "fields": {
@@ -89,10 +81,6 @@
             "from": "traces",
             "to": "metrics"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/exceptionsconnector",
         "fields": {
@@ -149,10 +137,6 @@
             "from": "traces",
             "to": "traces"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/failoverconnector",
         "fields": {
@@ -280,11 +264,6 @@
             "to": "traces"
           }
         ],
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/connector/forwardconnector"
       },
       "otlp_json": {
@@ -307,10 +286,6 @@
             "from": "logs",
             "to": "traces"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/otlpjsonconnector",
         "alias": "otlpjson"
@@ -335,10 +310,6 @@
             "from": "logs",
             "to": "traces"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/otlpjsonconnector",
         "deprecated": "renamed to \"otlp_json\" upstream; the old name still resolves for now",
@@ -365,10 +336,6 @@
             "to": "traces"
           }
         ],
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/roundrobinconnector",
         "alias": "roundrobin"
       },
@@ -392,10 +359,6 @@
             "from": "traces",
             "to": "traces"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/roundrobinconnector",
         "deprecated": "renamed to \"round_robin\" upstream; the old name still resolves for now",
@@ -421,10 +384,6 @@
             "from": "traces",
             "to": "traces"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/routingconnector",
         "fields": {
@@ -496,10 +455,6 @@
             "from": "traces",
             "to": "metrics"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/servicegraphconnector",
         "alias": "servicegraph",
@@ -594,10 +549,6 @@
             "from": "traces",
             "to": "metrics"
           }
-        ],
-        "distributions": [
-          "contrib",
-          "k8s"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/connector/servicegraphconnector",
         "deprecated": "renamed to \"service_graph\" upstream; the old name still resolves for now",
@@ -699,11 +650,6 @@
           "profiles": "alpha",
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/debugexporter",
         "fields": {
           "type": "map",
@@ -745,11 +691,6 @@
           "profiles": "development",
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter",
         "fields": {
           "type": "map",
@@ -852,10 +793,6 @@
           "metrics": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter",
         "alias": "loadbalancing",
         "fields": {
@@ -1338,10 +1275,6 @@
           "metrics": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter",
         "deprecated": "renamed to \"load_balancing\" upstream; the old name still resolves for now",
         "aliasOf": "load_balancing",
@@ -1827,11 +1760,6 @@
           "profiles": "alpha",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/nopexporter"
       },
       "otelarrow": {
@@ -1846,10 +1774,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/otelarrowexporter",
         "fields": {
           "type": "map",
@@ -2232,12 +2156,6 @@
           "profiles": "alpha",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
         "deprecated": "renamed to \"otlp_grpc\" upstream; the old name still resolves for now",
         "aliasOf": "otlp_grpc",
@@ -2440,12 +2358,6 @@
           "profiles": "alpha",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
         "alias": "otlp",
         "fields": {
@@ -2768,12 +2680,6 @@
           "profiles": "alpha",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
         "alias": "otlphttp",
         "fields": {
@@ -3135,12 +3041,6 @@
           "profiles": "alpha",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
         "deprecated": "renamed to \"otlp_http\" upstream; the old name still resolves for now",
         "aliasOf": "otlp_http",
@@ -3496,10 +3396,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/ackextension",
         "fields": {
           "type": "map",
@@ -3526,10 +3422,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/basicauthextension",
         "fields": {
           "type": "map",
@@ -3578,10 +3470,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/bearertokenauthextension",
         "fields": {
           "type": "map",
@@ -3621,10 +3509,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage",
         "fields": {
           "type": "map",
@@ -3687,10 +3571,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/headerssetterextension",
         "fields": {
           "type": "map",
@@ -3740,11 +3620,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension",
         "fields": {
           "type": "map",
@@ -4373,10 +4248,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/hostobserver",
         "fields": {
           "type": "map",
@@ -4392,10 +4263,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/httpforwarderextension",
         "fields": {
           "type": "map",
@@ -4873,10 +4740,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/k8sleaderelector",
         "fields": {
           "type": "map",
@@ -4921,10 +4784,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/k8sobserver",
         "fields": {
           "type": "map",
@@ -4972,10 +4831,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/oauth2clientauthextension",
         "fields": {
           "type": "map",
@@ -5162,10 +5017,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/oidcauthextension",
         "fields": {
           "type": "map",
@@ -5250,10 +5101,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampextension",
         "fields": {
           "type": "map",
@@ -5553,11 +5400,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension",
         "fields": {
           "type": "map",
@@ -5597,11 +5439,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/extension/zpagesextension",
         "fields": {
           "type": "map",
@@ -5872,11 +5709,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor",
         "fields": {
           "type": "map",
@@ -6249,11 +6081,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/processor/batchprocessor",
         "fields": {
           "type": "map",
@@ -6294,10 +6121,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor",
         "alias": "cumulativetodelta",
         "fields": {
@@ -6403,10 +6226,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor",
         "deprecated": "renamed to \"cumulative_to_delta\" upstream; the old name still resolves for now",
         "aliasOf": "cumulative_to_delta",
@@ -6513,10 +6332,6 @@
         "stability": {
           "metrics": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatocumulativeprocessor",
         "fields": {
           "type": "map",
@@ -6538,10 +6353,6 @@
         "stability": {
           "metrics": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor",
         "fields": {
           "type": "map",
@@ -6567,10 +6378,6 @@
         "stability": {
           "logs": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/drainprocessor",
         "fields": {
           "type": "map",
@@ -6650,11 +6457,6 @@
           "profiles": "development",
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor",
         "fields": {
           "type": "map",
@@ -7509,10 +7311,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbyattrsprocessor",
         "fields": {
           "type": "map",
@@ -7538,10 +7336,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbytraceprocessor",
         "fields": {
           "type": "map",
@@ -7578,10 +7372,6 @@
         "stability": {
           "metrics": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/intervalprocessor",
         "fields": {
           "type": "map",
@@ -7622,10 +7412,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor",
         "alias": "k8sattributes",
         "fields": {
@@ -7881,10 +7667,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor",
         "deprecated": "renamed to \"k8s_attributes\" upstream; the old name still resolves for now",
         "aliasOf": "k8s_attributes",
@@ -8135,10 +7917,6 @@
         "stability": {
           "logs": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/logdedupprocessor",
         "alias": "logdedup",
         "fields": {
@@ -8201,10 +7979,6 @@
         "stability": {
           "logs": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/logdedupprocessor",
         "deprecated": "renamed to \"log_dedup\" upstream; the old name still resolves for now",
         "aliasOf": "log_dedup",
@@ -8274,11 +8048,6 @@
           "profiles": "alpha",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/processor/memorylimiterprocessor",
         "fields": {
           "type": "map",
@@ -8317,10 +8086,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor",
         "alias": "metricstransform",
         "fields": {
@@ -8459,10 +8224,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor",
         "deprecated": "renamed to \"metrics_transform\" upstream; the old name still resolves for now",
         "aliasOf": "metrics_transform",
@@ -8604,11 +8365,6 @@
           "logs": "alpha",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor",
         "fields": {
           "type": "map",
@@ -8660,10 +8416,6 @@
           "metrics": "alpha",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/redactionprocessor",
         "fields": {
           "type": "map",
@@ -8907,10 +8659,6 @@
           "metrics": "alpha",
           "traces": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/remotetapprocessor",
         "fields": {
           "type": "map",
@@ -9176,11 +8924,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor",
         "fields": {
           "type": "map",
@@ -9249,10 +8992,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor",
         "alias": "resourcedetection",
         "fields": {
@@ -11755,10 +11494,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor",
         "deprecated": "renamed to \"resource_detection\" upstream; the old name still resolves for now",
         "aliasOf": "resource_detection",
@@ -14256,10 +13991,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor",
         "fields": {
           "type": "map",
@@ -16401,10 +16132,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor",
         "fields": {
           "type": "map",
@@ -16562,10 +16289,6 @@
         "stability": {
           "logs": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
         "alias": "filelog",
         "fields": {
@@ -16806,10 +16529,6 @@
         "stability": {
           "logs": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver",
         "deprecated": "renamed to \"file_log\" upstream; the old name still resolves for now",
         "aliasOf": "file_log",
@@ -17051,10 +16770,6 @@
         "stability": {
           "logs": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver",
         "alias": "fluentforward",
         "fields": {
@@ -17076,10 +16791,6 @@
         "stability": {
           "logs": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver",
         "deprecated": "renamed to \"fluent_forward\" upstream; the old name still resolves for now",
         "aliasOf": "fluent_forward",
@@ -17104,11 +16815,6 @@
           "logs": "development",
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver",
         "alias": "hostmetrics",
         "fields": {
@@ -17165,11 +16871,6 @@
           "logs": "development",
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver",
         "deprecated": "renamed to \"host_metrics\" upstream; the old name still resolves for now",
         "aliasOf": "host_metrics",
@@ -17225,10 +16926,6 @@
         "stability": {
           "metrics": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpcheckreceiver",
         "alias": "httpcheck",
         "fields": {
@@ -17899,10 +17596,6 @@
         "stability": {
           "metrics": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpcheckreceiver",
         "deprecated": "renamed to \"http_check\" upstream; the old name still resolves for now",
         "aliasOf": "http_check",
@@ -18574,11 +18267,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver",
         "fields": {
           "type": "map",
@@ -19676,10 +19364,6 @@
         "stability": {
           "logs": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/journaldreceiver",
         "fields": {
           "type": "map",
@@ -19817,10 +19501,6 @@
           "logs": "development",
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver",
         "fields": {
           "type": "map",
@@ -22758,10 +22438,6 @@
         "stability": {
           "logs": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8seventsreceiver",
         "fields": {
           "type": "map",
@@ -22816,10 +22492,6 @@
         "stability": {
           "logs": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sobjectsreceiver",
         "alias": "k8sobjects",
         "fields": {
@@ -22938,10 +22610,6 @@
         "stability": {
           "logs": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sobjectsreceiver",
         "deprecated": "renamed to \"k8s_objects\" upstream; the old name still resolves for now",
         "aliasOf": "k8s_objects",
@@ -23061,10 +22729,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver",
         "alias": "kubeletstats",
         "fields": {
@@ -24667,10 +24331,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver",
         "deprecated": "renamed to \"kubelet_stats\" upstream; the old name still resolves for now",
         "aliasOf": "kubelet_stats",
@@ -26278,10 +25938,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/otelarrowreceiver",
         "fields": {
           "type": "map",
@@ -26757,12 +26413,6 @@
           "profiles": "alpha",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/receiver/otlpreceiver",
         "fields": {
           "type": "map",
@@ -27039,11 +26689,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver",
         "fields": {
           "type": "map",
@@ -28740,10 +28385,6 @@
           "profiles": "alpha",
           "traces": "alpha"
         },
-        "distributions": [
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator",
         "fields": {
           "type": "map",
@@ -28797,11 +28438,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver",
         "fields": {
           "type": "map",

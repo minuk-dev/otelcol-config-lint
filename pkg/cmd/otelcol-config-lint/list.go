@@ -3,7 +3,6 @@ package otelcolconfiglint
 import (
 	"fmt"
 	"io"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -121,8 +120,7 @@ func (o *Options) runListVersions(cmd *cobra.Command) error {
 			note = "(latest)"
 		}
 
-		w.row(v, fmt.Sprintf("%d components", cat.Count()),
-			strings.Join(cat.Distributions, "+")+" "+note)
+		w.row(v, fmt.Sprintf("%d components", cat.Count()), cat.Distribution+" "+note)
 	}
 
 	w.flush()

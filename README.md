@@ -160,7 +160,6 @@ components:
         metrics: stable
         logs: stable
         profiles: alpha
-      distributions: [core, contrib, k8s, otlp]
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
 ```
 

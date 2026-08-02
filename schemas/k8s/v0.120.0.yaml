@@ -1,9 +1,6 @@
 collectorVersion: v0.120.0
 distribution: k8s
-distributions:
-  - core
-  - contrib
-generatedAt: "2026-08-02T13:05:37Z"
+generatedAt: "2026-08-02T13:15:51Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -22,9 +19,6 @@ components:
           to: metrics
         - from: traces
           to: metrics
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/countconnector
       fields:
         type: map
@@ -54,9 +48,6 @@ components:
           to: logs
         - from: traces
           to: metrics
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/exceptionsconnector
       fields:
         type: map
@@ -89,9 +80,6 @@ components:
           to: metrics
         - from: traces
           to: traces
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/failoverconnector
       fields:
         type: map
@@ -124,10 +112,6 @@ components:
           to: metrics
         - from: traces
           to: traces
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/connector/forwardconnector
     otlpjson:
       type: otlpjson
@@ -142,9 +126,6 @@ components:
           to: metrics
         - from: logs
           to: traces
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/otlpjsonconnector
     roundrobin:
       type: roundrobin
@@ -159,9 +140,6 @@ components:
           to: metrics
         - from: traces
           to: traces
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/roundrobinconnector
     routing:
       type: routing
@@ -176,9 +154,6 @@ components:
           to: metrics
         - from: traces
           to: traces
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/routingconnector
       fields:
         type: map
@@ -216,9 +191,6 @@ components:
       pairs:
         - from: traces
           to: metrics
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/servicegraphconnector
       fields:
         type: map
@@ -270,10 +242,6 @@ components:
         metrics: development
         profiles: development
         traces: development
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/exporter/debugexporter
       fields:
         type: map
@@ -305,10 +273,6 @@ components:
         metrics: alpha
         profiles: development
         traces: alpha
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter
       fields:
         type: map
@@ -356,9 +320,6 @@ components:
         logs: beta
         metrics: development
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter
       fields:
         type: map
@@ -577,10 +538,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/exporter/nopexporter
     otelarrow:
       type: otelarrow
@@ -592,9 +549,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/otelarrowexporter
       fields:
         type: map
@@ -755,11 +709,6 @@ components:
         metrics: stable
         profiles: development
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlpexporter
       fields:
         type: map
@@ -899,11 +848,6 @@ components:
         metrics: stable
         profiles: development
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
       fields:
         type: map
@@ -1034,9 +978,6 @@ components:
       type: ack
       stability:
         extension: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/ackextension
       fields:
         type: map
@@ -1052,9 +993,6 @@ components:
       type: basicauth
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/basicauthextension
       fields:
         type: map
@@ -1077,9 +1015,6 @@ components:
       type: bearertokenauth
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/bearertokenauthextension
       fields:
         type: map
@@ -1094,9 +1029,6 @@ components:
       type: file_storage
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage
       fields:
         type: map
@@ -1134,9 +1066,6 @@ components:
       type: headers_setter
       stability:
         extension: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/headerssetterextension
       fields:
         type: map
@@ -1161,10 +1090,6 @@ components:
       type: health_check
       stability:
         extension: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension
       fields:
         type: map
@@ -1276,9 +1201,6 @@ components:
       type: host_observer
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/hostobserver
       fields:
         type: map
@@ -1289,9 +1211,6 @@ components:
       type: http_forwarder
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/httpforwarderextension
       fields:
         type: map
@@ -1475,9 +1394,6 @@ components:
       type: k8s_observer
       stability:
         extension: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/k8sobserver
       fields:
         type: map
@@ -1500,9 +1416,6 @@ components:
       type: oauth2client
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/oauth2clientauthextension
       fields:
         type: map
@@ -1572,9 +1485,6 @@ components:
       type: oidc
       stability:
         extension: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/oidcauthextension
       fields:
         type: map
@@ -1595,9 +1505,6 @@ components:
       type: opamp
       stability:
         extension: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampextension
       fields:
         type: map
@@ -1730,10 +1637,6 @@ components:
       type: pprof
       stability:
         extension: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension
       fields:
         type: map
@@ -1755,10 +1658,6 @@ components:
       type: zpages
       stability:
         extension: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/extension/zpagesextension
       fields:
         type: map
@@ -1859,10 +1758,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor
       fields:
         type: map
@@ -2060,10 +1955,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/processor/batchprocessor
       fields:
         type: map
@@ -2092,9 +1983,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor
       fields:
         type: map
@@ -2153,9 +2041,6 @@ components:
         - metrics
       stability:
         metrics: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatocumulativeprocessor
       fields:
         type: map
@@ -2170,9 +2055,6 @@ components:
         - metrics
       stability:
         metrics: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor
       fields:
         type: map
@@ -2192,10 +2074,6 @@ components:
         logs: alpha
         metrics: alpha
         traces: alpha
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor
       fields:
         type: map
@@ -2572,9 +2450,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbyattrsprocessor
       fields:
         type: map
@@ -2590,9 +2465,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbytraceprocessor
       fields:
         type: map
@@ -2613,9 +2485,6 @@ components:
         - metrics
       stability:
         metrics: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/intervalprocessor
       fields:
         type: map
@@ -2641,9 +2510,6 @@ components:
         metrics: beta
         profiles: development
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor
       fields:
         type: map
@@ -2764,9 +2630,6 @@ components:
         - logs
       stability:
         logs: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/logdedupprocessor
       fields:
         type: map
@@ -2802,10 +2665,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/processor/memorylimiterprocessor
       fields:
         type: map
@@ -2833,9 +2692,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor
       fields:
         type: map
@@ -2912,10 +2768,6 @@ components:
       stability:
         logs: alpha
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor
       fields:
         type: map
@@ -2946,9 +2798,6 @@ components:
         logs: alpha
         metrics: alpha
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/redactionprocessor
       fields:
         type: map
@@ -2987,9 +2836,6 @@ components:
         logs: alpha
         metrics: alpha
         traces: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/remotetapprocessor
       fields:
         type: map
@@ -3092,10 +2938,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor
       fields:
         type: map
@@ -3133,9 +2975,6 @@ components:
         metrics: beta
         profiles: development
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor
       fields:
         type: map
@@ -3959,9 +3798,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor
       fields:
         type: map
@@ -4435,9 +4271,6 @@ components:
         logs: alpha
         metrics: alpha
         traces: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor
       fields:
         type: map
@@ -4513,9 +4346,6 @@ components:
         - logs
       stability:
         logs: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver
     fluentforward:
       type: fluentforward
@@ -4523,9 +4353,6 @@ components:
         - logs
       stability:
         logs: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver
       fields:
         type: map
@@ -4540,10 +4367,6 @@ components:
       stability:
         logs: development
         metrics: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver
       fields:
         type: map
@@ -4564,9 +4387,6 @@ components:
         - metrics
       stability:
         metrics: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpcheckreceiver
       fields:
         type: map
@@ -4698,10 +4518,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver
       fields:
         type: map
@@ -4997,9 +4813,6 @@ components:
         - logs
       stability:
         logs: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/journaldreceiver
     k8s_cluster:
       type: k8s_cluster
@@ -5009,9 +4822,6 @@ components:
       stability:
         logs: development
         metrics: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver
       fields:
         type: map
@@ -6200,9 +6010,6 @@ components:
         - logs
       stability:
         logs: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8seventsreceiver
       fields:
         type: map
@@ -6222,9 +6029,6 @@ components:
         - logs
       stability:
         logs: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sobjectsreceiver
       fields:
         type: map
@@ -6270,9 +6074,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver
       fields:
         type: map
@@ -7034,10 +6835,6 @@ components:
       stability:
         metrics: deprecated
         traces: deprecated
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/opencensusreceiver
       fields:
         type: map
@@ -7142,9 +6939,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/otelarrowreceiver
       fields:
         type: map
@@ -7277,11 +7071,6 @@ components:
         metrics: stable
         profiles: development
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
       fields:
         type: map
@@ -7466,10 +7255,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver
       fields:
         type: map
@@ -7586,9 +7371,6 @@ components:
         logs: alpha
         metrics: beta
         traces: alpha
-      distributions:
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator
       fields:
         type: map
@@ -7616,10 +7398,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver
       fields:
         type: map

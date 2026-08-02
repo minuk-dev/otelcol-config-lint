@@ -22,13 +22,14 @@ import (
 type Schema struct {
 	// CollectorVersion is the upstream release tag, e.g. "v0.157.0".
 	CollectorVersion string `json:"collectorVersion" yaml:"collectorVersion"`
-	// Distribution names the binary this schema describes, e.g. "core". The
-	// special value "all" is the union of every distribution.
+	// Distribution names the binary this schema describes, e.g. "core". It is
+	// the one place a distribution is recorded: the components below carry no
+	// membership of their own, since a second answer could only disagree.
 	Distribution string `json:"distribution,omitempty" yaml:"distribution,omitempty"`
-	// Distributions lists which upstream distributions were merged in.
-	Distributions []string `json:"distributions"         yaml:"distributions"`
-	GeneratedAt   string   `json:"generatedAt,omitempty" yaml:"generatedAt,omitempty"`
-	// Sources maps each distribution to the module it was generated from.
+	GeneratedAt  string `json:"generatedAt,omitempty"  yaml:"generatedAt,omitempty"`
+	// Sources maps each upstream repository harvested to the module it was
+	// generated from. It is provenance, not distribution membership: both
+	// repositories are read whichever distribution is being written.
 	Sources map[string]string `json:"sources,omitempty" yaml:"sources,omitempty"`
 	// Components is indexed by kind ("receiver", "processor", ...) and then by
 	// component type ("otlp", "batch", ...).
@@ -47,6 +48,9 @@ type Component struct {
 	// Pairs lists the signal conversions a connector supports.
 	Pairs []Pair `json:"pairs,omitempty" yaml:"pairs,omitempty"`
 	// Distributions lists the upstream distributions shipping the component.
+	// It is what schemagen splits a release on and is not written to the
+	// published files, where the directory already names the distribution and
+	// a second answer could only disagree with it.
 	Distributions []string `json:"distributions,omitempty" yaml:"distributions,omitempty"`
 	// Module is the Go module path the component lives in.
 	Module string `json:"module,omitempty" yaml:"module,omitempty"`
