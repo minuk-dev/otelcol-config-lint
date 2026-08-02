@@ -7,7 +7,7 @@ release you target is a first-class input, the way `kubeconform` treats the
 Kubernetes version.
 
 ```console
-$ otelcol-config-lint -collector-version v0.157.0 config.yaml
+$ otelcol-config-lint --collector-version v0.157.0 config.yaml
 config.yaml:6:3: error: unknown receiver type "prometheusreceiver" in collector v0.157.0 [unknown-component]
     hint: checked against collector v0.157.0; did you mean "prometheus"?
 config.yaml:11:14: error: "timeout" must be a duration such as 5s, 200ms or 1m30s [invalid-value]
@@ -32,7 +32,7 @@ Or run it as a container, mounting the configs to check:
 
 ```sh
 docker run --rm -v "$PWD:/workspace" \
-  ghcr.io/minuk-dev/otelcol-config-lint:latest -summary ./configs
+  ghcr.io/minuk-dev/otelcol-config-lint:latest --summary ./configs
 ```
 
 Tagged releases publish binaries for Linux, macOS and Windows on amd64 and
@@ -46,36 +46,36 @@ otelcol-config-lint [flags] <file|dir|->...
 
 | Flag | Meaning |
 | --- | --- |
-| `-collector-version` | release to validate against, e.g. `v0.157.0` (default `latest`) |
-| `-catalog-location` | where to find catalogs: a directory, a `{{.Version}}` template, a URL, or `default`. Repeat to search several in order |
-| `-output` | `text`, `json`, `junit`, `tap` or `github` |
-| `-strict` | unknown component settings become errors instead of warnings |
-| `-ignore-missing-schemas` | do not fail on components absent from the catalog (custom distributions) |
-| `-min-severity` | lowest severity to report: `error`, `warning`, `info` |
-| `-fail-on` | severity that makes a file invalid (default `error`) |
-| `-disable` | comma-separated rules to turn off |
-| `-severity` | comma-separated `rule=level` overrides |
-| `-exclude` | glob patterns to skip when walking directories |
+| `--collector-version` | release to validate against, e.g. `v0.157.0` (default `latest`) |
+| `--catalog-location` | where to find catalogs: a directory, a `{{.Version}}` template, a URL, or `default`. Repeat to search several in order |
+| `--output` | `text`, `json`, `junit`, `tap` or `github` |
+| `--strict` | unknown component settings become errors instead of warnings |
+| `--ignore-missing-schemas` | do not fail on components absent from the catalog (custom distributions) |
+| `--min-severity` | lowest severity to report: `error`, `warning`, `info` |
+| `--fail-on` | severity that makes a file invalid (default `error`) |
+| `--disable` | comma-separated rules to turn off |
+| `--severity` | comma-separated `rule=level` overrides |
+| `--exclude` | glob patterns to skip when walking directories |
 | `-n` | files checked in parallel |
-| `-summary`, `-verbose`, `-no-color`, `-exit-on-error` | output control |
-| `-list-rules`, `-list-versions`, `-version` | print and exit |
+| `--summary`, `--verbose`, `--no-color`, `--exit-on-error` | output control |
+| `--list-rules`, `--list-versions`, `--version` | print and exit |
 
 Exit codes: `0` everything passed, `1` at least one file failed, `2` the command
 could not run.
 
 ```sh
-otelcol-config-lint config.yaml                              # lint one file
-otelcol-config-lint -summary ./configs                       # walk a directory
-cat config.yaml | otelcol-config-lint -                      # read stdin
-otelcol-config-lint -output json ./configs > report.json     # machine-readable
-otelcol-config-lint -output github ./configs                 # PR annotations
-otelcol-config-lint -collector-version v0.110.0 config.yaml  # target an older release
+otelcol-config-lint config.yaml                               # lint one file
+otelcol-config-lint --summary ./configs                       # walk a directory
+cat config.yaml | otelcol-config-lint -                       # read stdin
+otelcol-config-lint --output json ./configs > report.json     # machine-readable
+otelcol-config-lint --output github ./configs                 # PR annotations
+otelcol-config-lint --collector-version v0.110.0 config.yaml  # target an older release
 ```
 
 ### Settings file
 
 Commit the policy instead of repeating flags. `.otelcol-config-lint.yaml` in the
-working directory is picked up automatically; `-config` names another file.
+working directory is picked up automatically; `--config` names another file.
 Explicit flags win over the file.
 
 ```yaml
@@ -95,7 +95,7 @@ catalogLocations:
 
 ## What it checks
 
-`otelcol-config-lint -list-rules` prints the current set with default severities.
+`otelcol-config-lint --list-rules` prints the current set with default severities.
 
 **Structure** — `unknown-top-level-key`, `service-required`,
 `unknown-service-key`, `invalid-pipeline-key`, `empty-pipeline`,
@@ -144,7 +144,7 @@ Because the catalogs sit at the repository root, they can be consumed without
 installing or cloning anything:
 
 ```sh
-otelcol-config-lint -catalog-location \
+otelcol-config-lint --catalog-location \
   https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs/{{.Version}}.yaml \
   config.yaml
 ```
@@ -191,13 +191,13 @@ between releases. Components without an overlay are simply not field-checked.
 ## Layout
 
 ```
-cmd/otelcol-config-lint/  the command
+cmd/otelcol-config-lint/  the entry point
+pkg/cmd/otelcol-config-lint/  the cobra command: flags, file discovery, settings files
 pkg/config/               YAML parsing that keeps positions, so findings have line numbers
 pkg/catalog/              catalog types, version resolution and location lookup
 pkg/rule/                 the rules and the registry
 pkg/lint/                 the engine and the output formatters
 pkg/diag/                 diagnostics, severities and positions
-internal/cli/             flag parsing, file discovery, settings files
 catalogs/                 generated per-release catalogs (yaml + json), embedded
 overlays/                 hand-written field schemas
 tools/schemagen/          catalog generator

@@ -45,9 +45,9 @@ jobs:
           go-version: 1.25
       - name: Check the catalogs are readable and consistent
         run: |
-          go run ./cmd/otelcol-config-lint -list-versions
+          go run ./cmd/otelcol-config-lint --list-versions
           for f in catalogs/*.yaml; do
             version="$(basename "${f}" .yaml)"
             go run ./cmd/otelcol-config-lint \
-              -collector-version "${version}" -min-severity error testdata/valid
+              --collector-version "${version}" --min-severity error testdata/valid
           done

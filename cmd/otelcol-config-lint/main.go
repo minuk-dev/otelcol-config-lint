@@ -3,11 +3,25 @@
 package main
 
 import (
+	"errors"
 	"os"
 
-	"github.com/minuk-dev/otelcol-config-lint/internal/cli"
+	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 )
 
 func main() {
-	os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	cmd := otelcolconfiglint.NewCommand(nil)
+	cmd.SetArgs(os.Args[1:])
+	cmd.SetIn(os.Stdin)
+	cmd.SetOut(os.Stdout)
+	cmd.SetErr(os.Stderr)
+
+	err := cmd.Execute()
+	if err != nil && !errors.Is(err, otelcolconfiglint.ErrFilesInvalid) {
+		// Findings have already been printed by the formatter, so only
+		// command-level failures are worth a message here.
+		cmd.PrintErrf("otelcol-config-lint: %v\n", err)
+	}
+
+	os.Exit(otelcolconfiglint.ExitCode(err))
 }
