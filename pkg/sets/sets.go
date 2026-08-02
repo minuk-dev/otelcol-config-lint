@@ -43,18 +43,6 @@ func (s Set[T]) Insert(items ...T) Set[T] {
 	return s
 }
 
-// InsertNew adds item and reports whether it was absent before, which is what
-// de-duplicating a stream while keeping first-seen order needs.
-func (s Set[T]) InsertNew(item T) bool {
-	if _, ok := s[item]; ok {
-		return false
-	}
-
-	s[item] = Empty{}
-
-	return true
-}
-
 // Delete removes items from the set and returns it, so calls can be chained.
 // Items that are not present are ignored.
 func (s Set[T]) Delete(items ...T) Set[T] {

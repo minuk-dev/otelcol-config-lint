@@ -251,7 +251,7 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 		return err
 	}
 
-	if len(files) == 0 {
+	if files.Len() == 0 {
 		return fmt.Errorf("%w in %s", ErrNoYAMLFiles, strings.Join(paths, ", "))
 	}
 
@@ -277,37 +277,33 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 	return nil
 }
 
-// lintAll checks every file and reports the results in argument order,
-// returning ErrFilesInvalid when the gate was not met.
+// stdinMarker is the argument that asks for the config on standard input.
+const stdinMarker = "-"
+
+// lintAll checks every file and reports the results in path order, returning
+// ErrFilesInvalid when the gate was not met.
 func (o *Options) lintAll(
 	cmd *cobra.Command,
 	linter *lint.Linter,
 	formatter lint.Formatter,
-	files []string,
+	files sets.Set[string],
 ) error {
 	var summary lint.Summary
 
-	// Results are buffered so output stays in file order even though the files
+	// Results are buffered so output stays in path order even though the files
 	// are checked concurrently.
-	results := make(map[string]lint.Result, len(files))
+	results := make(map[string]lint.Result, files.Len())
 
-	var toLint []string
-
-	for _, f := range files {
-		if f == "-" {
-			results[f] = linter.LintReader("stdin", cmd.InOrStdin())
-
-			continue
-		}
-
-		toLint = append(toLint, f)
+	if files.Has(stdinMarker) {
+		results[stdinMarker] = linter.LintReader("stdin", cmd.InOrStdin())
 	}
 
-	for r := range linter.LintAll(toLint, o.workers) {
+	onDisk := sets.List(files.Difference(sets.New(stdinMarker)))
+	for r := range linter.LintAll(onDisk, o.workers) {
 		results[r.Path] = r
 	}
 
-	for _, f := range files {
+	for _, f := range sets.List(files) {
 		r := results[f]
 
 		summary.Add(r)
@@ -579,23 +575,16 @@ func isConfigExt(ext string) bool {
 	return ext == ".yaml" || ext == ".yml"
 }
 
-// collect expands the command line arguments into a list of files to lint.
-// Directories are walked recursively; "-" is kept as a marker for stdin.
-func collect(args []string, exclude []string) ([]string, error) {
-	var out []string
-
-	// The same file can be named twice, or named and also walked into. Keep
-	// the first mention, so the report follows the order of the arguments.
-	seen := sets.New[string]()
-	add := func(p string) {
-		if seen.InsertNew(p) {
-			out = append(out, p)
-		}
-	}
+// collect expands the command line arguments into the files to lint.
+// Directories are walked recursively; "-" is kept as a marker for stdin. The
+// same file can be named twice, or named and also walked into, so the result
+// is a set. It carries no order: that is the reporting side's decision.
+func collect(args []string, exclude []string) (sets.Set[string], error) {
+	files := sets.New[string]()
 
 	for _, arg := range args {
-		if arg == "-" {
-			add("-")
+		if arg == stdinMarker {
+			files.Insert(stdinMarker)
 
 			continue
 		}
@@ -608,7 +597,7 @@ func collect(args []string, exclude []string) ([]string, error) {
 		if !info.IsDir() {
 			// An explicitly named file is linted even if it would be excluded
 			// by a directory walk, matching how other linters behave.
-			add(filepath.Clean(arg))
+			files.Insert(filepath.Clean(arg))
 
 			continue
 		}
@@ -635,7 +624,7 @@ func collect(args []string, exclude []string) ([]string, error) {
 				return nil
 			}
 
-			add(filepath.Clean(path))
+			files.Insert(filepath.Clean(path))
 
 			return nil
 		})
@@ -644,7 +633,7 @@ func collect(args []string, exclude []string) ([]string, error) {
 		}
 	}
 
-	return out, nil
+	return files, nil
 }
 
 // excluded reports whether a path matches any exclude pattern. Patterns are

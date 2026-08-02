@@ -45,24 +45,6 @@ func TestKeySet(t *testing.T) {
 	}
 }
 
-func TestInsertNewReportsNovelty(t *testing.T) {
-	t.Parallel()
-
-	s := sets.New[string]()
-
-	if !s.InsertNew("a") {
-		t.Error("the first insert should report the element as new")
-	}
-
-	if s.InsertNew("a") {
-		t.Error("the second insert should report the element as already present")
-	}
-
-	if s.Len() != 1 {
-		t.Errorf("Len() = %d, want 1", s.Len())
-	}
-}
-
 func TestInsertAndDeleteChain(t *testing.T) {
 	t.Parallel()
 

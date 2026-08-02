@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	validConfig = "../../../testdata/valid"
-	badConfig   = "../../../testdata/invalid/typos.yaml"
+	validConfig   = "../../../testdata/valid"
+	badConfig     = "../../../testdata/invalid/typos.yaml"
+	invalidConfig = "../../../testdata/invalid"
 )
 
 // run executes the command and returns its exit code and streams. The wiring
@@ -489,5 +491,44 @@ func TestSummaryCountsFiles(t *testing.T) {
 	_, out, _ := run(t, "", "--summary", "--min-severity", "error", validConfig, badConfig)
 	if !strings.Contains(out, "2 file(s) checked, 1 valid, 1 invalid") {
 		t.Errorf("unexpected summary:\n%s", out)
+	}
+}
+
+// TestAFileNamedTwiceIsCheckedOnce pins that naming a file directly and also
+// walking into the directory holding it does not check it twice.
+func TestAFileNamedTwiceIsCheckedOnce(t *testing.T) {
+	t.Parallel()
+
+	_, out, _ := run(t, "", "--summary", "--min-severity", "error",
+		validConfig, filepath.Join(validConfig, "agent.yaml"))
+	if !strings.Contains(out, "1 file(s) checked") {
+		t.Errorf("the file should have been de-duplicated:\n%s", out)
+	}
+}
+
+// TestReportOrderDoesNotDependOnArgumentOrder pins that results come out in
+// path order, so the same set of files reads the same however it was named.
+func TestReportOrderDoesNotDependOnArgumentOrder(t *testing.T) {
+	t.Parallel()
+
+	_, forwards, _ := run(t, "", "--output", "tap", validConfig, invalidConfig)
+	_, backwards, _ := run(t, "", "--output", "tap", invalidConfig, validConfig)
+
+	if forwards != backwards {
+		t.Errorf("argument order changed the report:\n%s\nvs\n%s", forwards, backwards)
+	}
+
+	// The paths themselves must be sorted, not merely stable.
+	var got []string
+
+	for line := range strings.SplitSeq(forwards, "\n") {
+		_, path, found := strings.Cut(line, " - ")
+		if found {
+			got = append(got, path)
+		}
+	}
+
+	if !slices.IsSorted(got) {
+		t.Errorf("results are not in path order: %v", got)
 	}
 }
