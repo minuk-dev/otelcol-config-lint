@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Version is the linter's own version.
@@ -566,7 +566,7 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 
 	if len(s.Severity) > 0 {
 		pairs := make([]string, 0, len(s.Severity))
-		for _, name := range sortedKeys(s.Severity) {
+		for _, name := range sets.List(sets.KeySet(s.Severity)) {
 			pairs = append(pairs, name+"="+s.Severity[name])
 		}
 		// Later pairs win, so file overrides are listed first.
@@ -584,10 +584,11 @@ func isConfigExt(ext string) bool {
 func collect(args []string, exclude []string) ([]string, error) {
 	var out []string
 
-	seen := map[string]bool{}
+	// The same file can be named twice, or named and also walked into. Keep
+	// the first mention, so the report follows the order of the arguments.
+	seen := sets.New[string]()
 	add := func(p string) {
-		if !seen[p] {
-			seen[p] = true
+		if seen.InsertNew(p) {
 			out = append(out, p)
 		}
 	}
@@ -712,17 +713,6 @@ func joinList(a, b string) string {
 	default:
 		return a + "," + b
 	}
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-
-	sort.Strings(out)
-
-	return out
 }
 
 func defaultWorkers() int {
