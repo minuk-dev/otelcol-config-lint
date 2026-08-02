@@ -40,6 +40,8 @@ var (
 	ErrNoInput = errors.New("no files or directories specified")
 	// ErrNoCatalogs reports that no catalog version could be found.
 	ErrNoCatalogs = errors.New("no catalogs available")
+	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
+	ErrNoYAMLFiles = errors.New("no YAML files found")
 
 	// errFilesInvalid ends the run with the "at least one file failed" exit
 	// code. It carries no message of its own: the formatter has already
@@ -140,7 +142,12 @@ func NewCommand(opts *Options) *cobra.Command {
 				return err
 			}
 
-			return opts.Run(cmd, args)
+			err = opts.Run(cmd, args)
+			if err != nil {
+				return err
+			}
+
+			return nil
 		},
 	}
 
@@ -216,9 +223,19 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 
 		return nil
 	case o.listVersions:
-		return o.runListVersions(cmd)
+		err := o.runListVersions(cmd)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	case o.listRules:
-		return o.runListRules(cmd)
+		err := o.runListRules(cmd)
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	if len(args) == 0 {
@@ -227,7 +244,12 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 		return ErrNoInput
 	}
 
-	return o.runLint(cmd, args)
+	err := o.runLint(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // runLint resolves what to check and how to report it, then does the work.
@@ -238,7 +260,7 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 	}
 
 	if len(files) == 0 {
-		return fmt.Errorf("no YAML files found in %s", strings.Join(paths, ", ")) //nolint:err113 // reported verbatim
+		return fmt.Errorf("%w in %s", ErrNoYAMLFiles, strings.Join(paths, ", "))
 	}
 
 	linter, err := o.newLinter(cmd)
@@ -255,7 +277,12 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 		return fmt.Errorf("create formatter: %w", err)
 	}
 
-	return o.lintAll(cmd, linter, formatter, files)
+	err = o.lintAll(cmd, linter, formatter, files)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // lintAll checks every file and reports the results in argument order,
