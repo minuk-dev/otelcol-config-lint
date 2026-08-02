@@ -390,12 +390,26 @@ func classKind(class string) (config.Kind, bool) {
 	return "", false
 }
 
-func convert(meta metadata, src source, tarPath string) (*catalog.Component, config.Kind, bool) {
+// configurable resolves the component kind for an upstream metadata file and
+// reports whether the file describes something a config can declare at all.
+func configurable(meta metadata, tarPath string) (config.Kind, bool) {
 	kind, ok := classKind(meta.Status.Class)
-	if !ok || meta.Type == "" || meta.Parent != "" {
-		// A parent means this is a sub-component such as a hostmetrics
-		// scraper, which is configured inside its parent rather than declared
-		// on its own.
+	if !ok || meta.Type == "" {
+		return "", false
+	}
+
+	// A parent means this is a sub-component such as a hostmetrics scraper,
+	// which is configured inside its parent rather than declared on its own.
+	if meta.Parent != "" || !declarable(tarPath) {
+		return "", false
+	}
+
+	return kind, true
+}
+
+func convert(meta metadata, src source, tarPath string) (*catalog.Component, config.Kind, bool) {
+	kind, ok := configurable(meta, tarPath)
+	if !ok {
 		return nil, "", false
 	}
 
@@ -452,6 +466,30 @@ func convert(meta metadata, src source, tarPath string) (*catalog.Component, con
 	}
 
 	return comp, kind, true
+}
+
+// declarable reports whether an in-archive metadata path belongs to a component
+// that can be declared in a config. A real component sits directly at
+// "<kind>/<name>", never under "cmd" — mdatagen ships sample components to
+// exercise its own code generation — and never under "internal", which holds a
+// component's sub-parts, such as the resourcedetection providers that are
+// configured inside their parent's "detectors" list. Upstream leaves the
+// metadata "parent" field unset for both, so the path is what tells them apart.
+func declarable(tarPath string) bool {
+	dir := path.Dir(tarPath)
+
+	_, rest, found := strings.Cut(dir, "/") // drop the archive root
+	if !found {
+		return false
+	}
+
+	for seg := range strings.SplitSeq(rest, "/") {
+		if seg == "cmd" || seg == "internal" {
+			return false
+		}
+	}
+
+	return true
 }
 
 // modulePath turns an in-archive path such as
