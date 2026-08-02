@@ -5,7 +5,7 @@
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-08-02T06:54:59Z",
+  "generatedAt": "2026-08-02T13:05:37Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -325,7 +325,177 @@
           "contrib",
           "k8s"
         ],
-        "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter"
+        "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
+        "fields": {
+          "type": "map",
+          "children": {
+            "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "map",
+                  "open": true
+                }
+              }
+            },
+            "compression": {
+              "type": "string"
+            },
+            "cookies": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                }
+              }
+            },
+            "disable_keep_alives": {
+              "type": "bool"
+            },
+            "encoding": {
+              "type": "string"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "headers": {
+              "type": "map",
+              "open": true
+            },
+            "http2_ping_timeout": {
+              "type": "duration"
+            },
+            "http2_read_idle_timeout": {
+              "type": "duration"
+            },
+            "idle_conn_timeout": {
+              "type": "duration"
+            },
+            "logs_endpoint": {
+              "type": "string"
+            },
+            "max_conns_per_host": {
+              "type": "int"
+            },
+            "max_idle_conns": {
+              "type": "int"
+            },
+            "max_idle_conns_per_host": {
+              "type": "int"
+            },
+            "metrics_endpoint": {
+              "type": "string"
+            },
+            "proxy_url": {
+              "type": "string"
+            },
+            "read_buffer_size": {
+              "type": "int"
+            },
+            "retry_on_failure": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "initial_interval": {
+                  "type": "duration"
+                },
+                "max_elapsed_time": {
+                  "type": "duration"
+                },
+                "max_interval": {
+                  "type": "duration"
+                },
+                "multiplier": {
+                  "type": "float"
+                },
+                "randomization_factor": {
+                  "type": "float"
+                }
+              }
+            },
+            "sending_queue": {
+              "type": "map",
+              "children": {
+                "enabled": {
+                  "type": "bool"
+                },
+                "num_consumers": {
+                  "type": "int"
+                },
+                "queue_size": {
+                  "type": "int"
+                },
+                "storage": {
+                  "type": "map",
+                  "open": true
+                }
+              }
+            },
+            "timeout": {
+              "type": "duration"
+            },
+            "tls": {
+              "type": "map",
+              "children": {
+                "ca_file": {
+                  "type": "string"
+                },
+                "ca_pem": {
+                  "type": "string"
+                },
+                "cert_file": {
+                  "type": "string"
+                },
+                "cert_pem": {
+                  "type": "string"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool"
+                },
+                "insecure": {
+                  "type": "bool"
+                },
+                "insecure_skip_verify": {
+                  "type": "bool"
+                },
+                "key_file": {
+                  "type": "string"
+                },
+                "key_pem": {
+                  "type": "string"
+                },
+                "max_version": {
+                  "type": "string"
+                },
+                "min_version": {
+                  "type": "string"
+                },
+                "reload_interval": {
+                  "type": "duration"
+                },
+                "server_name_override": {
+                  "type": "string"
+                }
+              }
+            },
+            "traces_endpoint": {
+              "type": "string"
+            },
+            "write_buffer_size": {
+              "type": "int"
+            }
+          }
+        }
       }
     },
     "extension": {
@@ -339,7 +509,135 @@
           "contrib",
           "k8s"
         ],
-        "module": "go.opentelemetry.io/collector/extension/zpagesextension"
+        "module": "go.opentelemetry.io/collector/extension/zpagesextension",
+        "fields": {
+          "type": "map",
+          "children": {
+            "auth": {
+              "type": "map",
+              "children": {
+                "authenticator": {
+                  "type": "map",
+                  "open": true
+                },
+                "request_params": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "compression_algorithms": {
+              "type": "list",
+              "children": {
+                "item": {
+                  "type": "string"
+                }
+              }
+            },
+            "cors": {
+              "type": "map",
+              "children": {
+                "allowed_headers": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "allowed_origins": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "max_age": {
+                  "type": "int"
+                }
+              }
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "idle_timeout": {
+              "type": "duration"
+            },
+            "include_metadata": {
+              "type": "bool"
+            },
+            "max_request_body_size": {
+              "type": "int"
+            },
+            "read_header_timeout": {
+              "type": "duration"
+            },
+            "read_timeout": {
+              "type": "duration"
+            },
+            "response_headers": {
+              "type": "map",
+              "open": true
+            },
+            "tls": {
+              "type": "map",
+              "children": {
+                "ca_file": {
+                  "type": "string"
+                },
+                "ca_pem": {
+                  "type": "string"
+                },
+                "cert_file": {
+                  "type": "string"
+                },
+                "cert_pem": {
+                  "type": "string"
+                },
+                "cipher_suites": {
+                  "type": "list",
+                  "children": {
+                    "item": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "client_ca_file": {
+                  "type": "string"
+                },
+                "client_ca_file_reload": {
+                  "type": "bool"
+                },
+                "include_system_ca_certs_pool": {
+                  "type": "bool"
+                },
+                "key_file": {
+                  "type": "string"
+                },
+                "key_pem": {
+                  "type": "string"
+                },
+                "max_version": {
+                  "type": "string"
+                },
+                "min_version": {
+                  "type": "string"
+                },
+                "reload_interval": {
+                  "type": "duration"
+                }
+              }
+            },
+            "write_timeout": {
+              "type": "duration"
+            }
+          }
+        }
       }
     },
     "processor": {

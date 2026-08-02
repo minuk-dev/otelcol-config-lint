@@ -89,8 +89,28 @@ components:
 ```
 
 Renamed components appear under both names; the legacy one carries `aliasOf`
-and a `deprecated` note. Components covered by an overlay also carry a `fields`
-schema — see [`../overlays`](../overlays).
+and a `deprecated` note.
+
+Components also carry a `fields` schema describing the settings they accept.
+It is read from the component's `Config` struct — the `mapstructure` tags name
+the settings, and embedded types are followed across both upstream repositories
+— then enriched with the `config.schema.yaml` upstream publishes, which
+contributes descriptions and enum constraints the sources cannot.
+
+The sources decide the shape rather than the published schemas, because those
+are lossy in a way that matters: an embedded field carrying a name, such as
+``configretry.BackOffConfig `mapstructure:"retry_on_failure"` ``, is emitted as
+an `allOf` that merges those settings into the parent and loses the key they
+live under. Taken alone it would report a valid `retry_on_failure:` as unknown.
+
+**Every file here stands on its own** — all references are resolved at
+generation time, so nothing carries a `$ref` or needs a second file to be read.
+What cannot be resolved, a third-party config such as Prometheus's own or a
+reference cycle in the stanza operators, is left `open` so its keys go
+unchecked rather than being reported as unknown.
+
+Coverage is 92-96% of components on every release. The hand-written overlays in
+[`../overlays`](../overlays) are applied last and override both sources.
 
 ## Regenerating
 
