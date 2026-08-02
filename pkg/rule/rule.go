@@ -37,6 +37,8 @@ type Context struct {
 	Index *Index
 	// Avail reports which other releases ship a component. It may be nil.
 	Avail Availability
+	// Dists reports which other distributions ship a component. It may be nil.
+	Dists Distributions
 	// Strict makes lenient checks report at their strict severity, mirroring
 	// kubeconform's -strict flag.
 	Strict bool
