@@ -99,7 +99,7 @@ func logf(format string, args ...any) {
 
 func main() {
 	versions := flag.String("version", "", "comma-separated collector releases, e.g. v0.157.0")
-	out := flag.String("out", "schemas", "directory to write schemas into")
+	out := flag.String("out", "schemas", "registry directory to write schemas into")
 	overlays := flag.String("overlays", "overlays", "directory of field-schema overlays")
 	formats := flag.String("formats", "yaml,json", "schema formats to write")
 	cache := flag.String("cache", filepath.Join(os.TempDir(), "otelcol-config-lint-schemagen"),

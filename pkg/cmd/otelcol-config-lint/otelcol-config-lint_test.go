@@ -14,10 +14,10 @@ import (
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 )
 
-// repoSchemas is this repository's registry. The binary reads the published one
-// over HTTP, so every test that needs schemas injects this instead -- which is
-// also the path CI exercises.
-const repoSchemas = "../../../schemas"
+// repoSchemas is the committed schema fixture. The binary reads the published
+// registry over HTTP, so every test that needs schemas injects this instead --
+// one release, enough to exercise every path, and no network.
+const repoSchemas = "../../../testdata/schemas"
 
 const (
 	validConfig   = "../../../testdata/valid"

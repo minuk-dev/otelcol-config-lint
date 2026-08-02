@@ -50,8 +50,9 @@ jobs:
         with:
           go-version: 1.25
       - name: Lint the example configs
-        # The checked-out schemas, not the published ones: a pull request has
-        # to be linted against the schemas it carries, not against main's.
+        # The committed fixture, not the published registry: a pull request has
+        # to be linted against schemas it carries, not against another repo's
+        # current state.
         run: |
-          go run ./cmd/otelcol-config-lint run --schema-location schemas \
+          go run ./cmd/otelcol-config-lint run --schema-location testdata/schemas \
             --output github --summary testdata/valid
