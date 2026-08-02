@@ -48,6 +48,8 @@ const dirPerm = 0o750
 
 // Limits and sentinel errors for the harvest.
 const (
+	// maxSchemaBytes bounds one config schema read out of an archive.
+	maxSchemaBytes = 4 << 20
 	// maxMetadataBytes bounds how much of a metadata.yaml is read.
 	maxMetadataBytes = 1 << 20
 	// downloadTimeout bounds a single source archive download.
@@ -136,12 +138,20 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 		Jar:           nil,
 	}
 
+	var skipped []string
+
 	for _, v := range versions {
 		v = schema.Normalize(v)
 
+		// A release is skipped rather than fatal: generating the full tag
+		// history means asking for versions one repository tagged and the
+		// other did not, and one gap should not discard the rest of the run.
 		cat, err := build(client, v, cacheDir)
 		if err != nil {
-			return fmt.Errorf("%s: %w", v, err)
+			logf("  %s: skipped (%v)\n", v, err)
+			skipped = append(skipped, v)
+
+			continue
 		}
 
 		applyOverlays(cat, loaded)
@@ -150,6 +160,10 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 		if err != nil {
 			return err
 		}
+	}
+
+	if len(skipped) > 0 {
+		logf("skipped %d of %d releases: %s\n", len(skipped), len(versions), strings.Join(skipped, ", "))
 	}
 
 	return writeIndex(outDir)
@@ -162,6 +176,12 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 func writeDistributions(outDir string, cat *schema.Schema, formats []string) error {
 	for _, dist := range distributionsIn(cat) {
 		sub := filterDistribution(cat, dist)
+
+		// An empty schema would report every component as unknown, which is
+		// worse than having no schema for the release at all.
+		if sub.Count() == 0 {
+			continue
+		}
 
 		dir := filepath.Join(outDir, dist)
 
@@ -317,6 +337,10 @@ func write(dest string, cat *schema.Schema, format schema.Format) error {
 }
 
 func build(client *http.Client, version, cacheDir string) (*schema.Schema, error) {
+	// References cross from contrib into core, so every schema has to be in
+	// hand before any of them is resolved.
+	set := newSchemaSet()
+
 	cat := &schema.Schema{
 		CollectorVersion: version,
 		GeneratedAt:      time.Now().UTC().Format(time.RFC3339),
@@ -329,7 +353,7 @@ func build(client *http.Client, version, cacheDir string) (*schema.Schema, error
 			return nil, err
 		}
 
-		n, err := harvest(cat, src, archive)
+		n, err := harvest(cat, set, src, archive)
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +363,33 @@ func build(client *http.Client, version, cacheDir string) (*schema.Schema, error
 		logf("  %s: %d components\n", src.name, n)
 	}
 
+	logf("  %d config schemas -> %d components with fields\n", set.count(), attachFields(cat, set))
+
 	return cat, nil
+}
+
+// readConfigSchema records one config schema out of the archive.
+func readConfigSchema(r io.Reader, set *schemaSet, src source, tarPath string) error {
+	raw, err := io.ReadAll(io.LimitReader(r, maxSchemaBytes))
+	if err != nil {
+		return fmt.Errorf("read %s: %w", tarPath, err)
+	}
+
+	set.add(src, archiveDir(tarPath), raw)
+
+	return nil
+}
+
+// archiveDir is the component directory inside an archive, with the archive
+// root stripped: "opentelemetry-collector-contrib-0.157.0/receiver/x/y.yaml"
+// becomes "receiver/x".
+func archiveDir(tarPath string) string {
+	dir := path.Dir(tarPath)
+	if _, rest, found := strings.Cut(dir, "/"); found {
+		return rest
+	}
+
+	return ""
 }
 
 // fetch downloads a source archive, caching it so regenerating several versions
@@ -425,7 +475,7 @@ type metadata struct {
 // harvest reads every metadata.yaml in an archive and adds the components it
 // finds to the schema. Components already present keep their first definition,
 // so core wins over contrib for the handful of types shipped by both.
-func harvest(cat *schema.Schema, src source, archive string) (int, error) {
+func harvest(cat *schema.Schema, set *schemaSet, src source, archive string) (int, error) {
 	f, err := os.Open(archive)
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", archive, err)
@@ -453,7 +503,20 @@ func harvest(cat *schema.Schema, src source, archive string) (int, error) {
 			return count, fmt.Errorf("read %s: %w", archive, err)
 		}
 
-		if hdr.Typeflag != tar.TypeReg || path.Base(hdr.Name) != "metadata.yaml" {
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+
+		if path.Base(hdr.Name) == configSchemaFile {
+			err := readConfigSchema(archiveReader, set, src, hdr.Name)
+			if err != nil {
+				return count, fmt.Errorf("%s: %w", archive, err)
+			}
+
+			continue
+		}
+
+		if path.Base(hdr.Name) != "metadata.yaml" {
 			continue
 		}
 

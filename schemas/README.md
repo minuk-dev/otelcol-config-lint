@@ -89,8 +89,20 @@ components:
 ```
 
 Renamed components appear under both names; the legacy one carries `aliasOf`
-and a `deprecated` note. Components covered by an overlay also carry a `fields`
-schema — see [`../overlays`](../overlays).
+and a `deprecated` note.
+
+Components also carry a `fields` schema describing the settings they accept,
+read from the `config.schema.yaml` upstream publishes alongside each
+`metadata.yaml`. Upstream's references between those files are resolved at
+generation time, so **every file here stands on its own** — no `$ref`, nothing
+to fetch alongside it. A reference cycle, which the stanza operators genuinely
+contain, stops expansion and leaves that subtree `open` rather than reporting
+its keys as unknown.
+
+Coverage is 86% of components from v0.150.0, the first release carrying these
+files. Earlier releases have only the hand-written overlays in
+[`../overlays`](../overlays), which are applied afterwards and so also override
+upstream where one exists.
 
 ## Regenerating
 

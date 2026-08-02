@@ -129,9 +129,11 @@ that only does traces used in a metrics pipeline), `component-stability`,
 `deprecated-component`.
 
 **Settings** — `unknown-field`, `required-field`, `invalid-value`,
-`deprecated-field`. These only run for components with a field schema, so
-partial coverage never produces false positives. `${env:...}` expansions are
-left alone.
+`deprecated-field`. Field schemas come from the `config.schema.yaml` upstream
+publishes with each component, which covers 86% of them from v0.157.0. Releases
+before v0.150.0 predate those files and carry only the hand-written overlays, so
+the settings rules stay quiet there — partial coverage never produces false
+positives. `${env:...}` expansions are left alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `insecure-tls`.
