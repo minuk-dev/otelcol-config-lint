@@ -20,7 +20,7 @@ builds:
       - arm64
     ldflags:
       - "-s -w"
-      - "-X github.com/minuk-dev/otelcol-config-lint/internal/cli.Version={{.Version}}"
+      - "-X github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint.Version={{.Version}}"
 
 archives:
   - id: otelcol-config-lint

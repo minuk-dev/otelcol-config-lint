@@ -1,3 +1,5 @@
+// Package otelcolconfiglint implements the otelcol-config-lint command: flag
+// parsing, file discovery, settings files and result reporting.
 package otelcolconfiglint
 
 import (
@@ -9,34 +11,63 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/samber/mo"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
-	"github.com/samber/lo"
-	"github.com/samber/mo"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
-
-var ErrUnknownRule = errors.New("unknown rule")
 
 // Version is the linter's own version.
 //
 //nolint:gochecknoglobals // injected at build time with -ldflags
 var Version = "dev"
 
+// Errors reported for bad flag values.
+var (
+	// ErrUnknownRule names a rule that does not exist.
+	ErrUnknownRule = errors.New("unknown rule")
+	// ErrBadSeverityPair reports a --severity argument that is not rule=level.
+	ErrBadSeverityPair = errors.New("not in rule=level form")
+	// ErrNoInput reports that no file, directory or "-" was given.
+	ErrNoInput = errors.New("no files or directories specified")
+	// ErrNoCatalogs reports that no catalog version could be found.
+	ErrNoCatalogs = errors.New("no catalogs available")
+
+	// errFilesInvalid ends the run with the "at least one file failed" exit
+	// code. It carries no message of its own: the formatter has already
+	// reported every finding.
+	errFilesInvalid = errors.New("at least one file is invalid")
+)
+
+// Exit codes, following the convention linters are expected to use in CI.
+const (
+	exitOK      = 0
+	exitInvalid = 1
+	exitUsage   = 2
+)
+
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
 // by reading files, not by checking them.
 const maxDefaultWorkers = 8
 
+// DefaultSettingsFile is looked for in the working directory when no
+// --config flag is given.
+const DefaultSettingsFile = ".otelcol-config-lint.yaml"
+
+// Options holds everything the command was asked to do. The fields are filled
+// in by RegisterFlags and then by the settings file, in that order.
 type Options struct {
 	// flags
 	collectorVersion string
-	catalogLocations multiFlag
+	catalogLocations []string
 	output           string
 	settingsFile     string
 	disable          string
@@ -56,47 +87,88 @@ type Options struct {
 	showVersion      bool
 
 	// internal state
-	store *catalog.Store
+	store catalog.Store
 }
 
+// Execute runs the command against the given streams and returns the process
+// exit code. It is the entry point for both main and the tests.
+func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	cmd := NewCommand(nil)
+	cmd.SetArgs(args)
+	cmd.SetIn(stdin)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+
+	err := cmd.Execute()
+
+	switch {
+	case err == nil:
+		return exitOK
+	case errors.Is(err, errFilesInvalid):
+		// Every finding has already been printed by the formatter.
+		return exitInvalid
+	default:
+		cmd.PrintErrf("otelcol-config-lint: %v\n", err)
+
+		return exitUsage
+	}
+}
+
+// NewCommand builds the cobra command. A nil opts is allowed, in which case a
+// zero value is used.
 func NewCommand(opts *Options) *cobra.Command {
 	if opts == nil {
-		opts = &Options{}
+		opts = &Options{} //nolint:exhaustruct // every field is filled in by RegisterFlags
 	}
-	cmd := &cobra.Command{
-		Use:   "otelcol-config-lint [flags] [file-or-directory ...]",
+
+	cmd := &cobra.Command{ //nolint:exhaustruct // cobra's zero values are the defaults we want
+		Use:   "otelcol-config-lint [flags] <file|dir|->...",
 		Short: "Validate OpenTelemetry Collector config files against a specific collector release",
-		Example: `otelcol-config-lint config.yaml
-  otelcol-config-lint -collector-version v0.157.0 -summary ./configs
+		Example: `  otelcol-config-lint config.yaml
+  otelcol-config-lint --collector-version v0.157.0 --summary ./configs
   cat config.yaml | otelcol-config-lint -
-  otelcol-config-lint -output json -strict ./configs > report.json
-`,
+  otelcol-config-lint --output json --strict ./configs > report.json`,
+		Args: cobra.ArbitraryArgs,
+		// Findings are not usage errors, so the usage text is printed only
+		// where it helps: bad flags and a missing argument.
+		SilenceUsage: true,
+		// Execute formats command-level errors itself, with the tool prefix.
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := opts.Prepare(cmd, args)
+			err := opts.Prepare(cmd)
 			if err != nil {
-				return fmt.Errorf("failed to prepare: %w", err)
+				return err
 			}
 
-			err = opts.Run(cmd, args)
-			if err != nil {
-				return fmt.Errorf("failed to run: %w", err)
-			}
-
-			return nil
+			return opts.Run(cmd, args)
 		},
 	}
+
+	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		cmd.PrintErr(cmd.UsageString())
+
+		return err
+	})
+
+	cmd.SetUsageTemplate(cmd.UsageTemplate() + fmt.Sprintf(`
+Exit codes:
+  %d  every file passed
+  %d  at least one file failed
+  %d  the command could not run
+`, exitOK, exitInvalid, exitUsage))
 
 	opts.RegisterFlags(cmd)
 
 	return cmd
 }
 
+// RegisterFlags declares every command line flag on the command.
 func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
 	flags.StringVar(&o.collectorVersion, "collector-version", catalog.Latest,
 		"collector release to validate against, e.g. v0.157.0")
-	flags.Var(&o.catalogLocations, "catalog-location",
+	flags.StringSliceVar(&o.catalogLocations, "catalog-location", nil,
 		"where to find catalogs: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
 			"repeat to search several in order (default: the built-in catalogs)")
 	flags.StringVar(&o.output, "output", "text", "output format: text, json, junit, tap or github")
@@ -107,7 +179,8 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.exclude, "exclude", "", "comma-separated glob patterns to skip when walking directories")
 	flags.StringVar(&o.minSeverity, "min-severity", "info", "lowest severity to report: error, warning or info")
 	flags.StringVar(&o.failOn, "fail-on", "error", "severity that makes a file invalid: error, warning or info")
-	flags.IntVar(&o.workers, "n", defaultWorkers(), "number of files to check in parallel")
+	// Spelled -n before cobra; the shorthand keeps that working.
+	flags.IntVarP(&o.workers, "n", "n", defaultWorkers(), "number of files to check in parallel")
 	flags.BoolVar(&o.strict, "strict", false, "report unknown component settings as errors")
 	flags.BoolVar(&o.ignoreMissing, "ignore-missing-schemas", false,
 		"do not fail on components missing from the catalog")
@@ -120,21 +193,22 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.showVersion, "version", false, "print the linter version, then exit")
 }
 
-func (opts *Options) Prepare(cmd *cobra.Command, args []string) error {
-	fileSettings, err := loadSettings(opts.settingsFile)
+// Prepare folds the settings file into the parsed flags and builds the catalog
+// store. Flags given on the command line win over the file.
+func (o *Options) Prepare(cmd *cobra.Command) error {
+	fileSettings, err := loadSettings(o.settingsFile)
 	if err != nil {
-		fmt.Errorf("failed to load settings: %w", err)
+		return err
 	}
 
-	opts.applySettings(fileSettings)
+	o.applySettings(fileSettings, cmd.Flags().Changed)
 
-	opts.store = &catalog.Store{
-		Locations: opts.catalogLocations,
-	}
+	o.store = catalog.Store{Locations: o.catalogLocations}
 
 	return nil
 }
 
+// Run dispatches to whichever mode the flags asked for.
 func (o *Options) Run(cmd *cobra.Command, args []string) error {
 	switch {
 	case o.showVersion:
@@ -142,100 +216,124 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 
 		return nil
 	case o.listVersions:
-		err := o.showlistVersions(cmd)
-		if err != nil {
-			return fmt.Errorf("failed to list versions: %w", err)
-		}
-		return nil
+		return o.runListVersions(cmd)
 	case o.listRules:
-		err := o.showlistRules(cmd)
-		if err != nil {
-			return fmt.Errorf("failed to list rules: %w", err)
-		}
-		return nil
+		return o.runListRules(cmd)
 	}
 
-	paths := args
-	if len(paths) == 0 {
-		return errors.New("no files or directories specified")
+	if len(args) == 0 {
+		cmd.PrintErr(cmd.UsageString())
+
+		return ErrNoInput
 	}
 
-	err := o.runLint(cmd, paths)
-	if err != nil {
-		return fmt.Errorf("failed to lint: %w", err)
-	}
-
-	return nil
+	return o.runLint(cmd, args)
 }
 
-func (o *Options) showlistRules(cmd *cobra.Command) error {
-	overrides, err := o.severityOverrides()
-	if err != nil {
-		return fmt.Errorf("invalid severity overrides: %w", err)
-	}
-
-	w := newColumns(cmd.OutOrStdout())
-
-	for _, r := range rule.All() {
-		sev := r.Severity()
-
-		note := ""
-		if s, ok := overrides[r.Name()]; ok && s != sev {
-			sev, note = s, " (overridden)"
-		}
-
-		w.row(r.Name(), string(sev)+note, r.Description())
-	}
-
-	w.flush()
-	return nil
-}
-
+// runLint resolves what to check and how to report it, then does the work.
 func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 	files, err := collect(paths, splitList(o.exclude))
 	if err != nil {
-		return fmt.Errorf("failed to collect files: %w", err)
+		return err
 	}
 
 	if len(files) == 0 {
-		return fmt.Errorf("no YAML files found in %s", strings.Join(paths, ", "))
+		return fmt.Errorf("no YAML files found in %s", strings.Join(paths, ", ")) //nolint:err113 // reported verbatim
 	}
 
 	linter, err := o.newLinter(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to create linter: %w", err)
+		return err
 	}
 
 	formatter, err := lint.NewFormatter(o.output, cmd.OutOrStdout(), lint.FormatterOptions{
 		Verbose: o.verbose,
 		Summary: o.summary,
-		Color:   !o.noColor && o.output == "text" && isTerminal(cmd.OutOrstdout()),
+		Color:   !o.noColor && o.output == "text" && isTerminal(cmd.OutOrStdout()),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create formatter: %w", err)
+		return fmt.Errorf("create formatter: %w", err)
 	}
-	return lintAll(linter, formatter, files, o, stdin, stderr)
+
+	return o.lintAll(cmd, linter, formatter, files)
+}
+
+// lintAll checks every file and reports the results in argument order,
+// returning errFilesInvalid when the gate was not met.
+func (o *Options) lintAll(
+	cmd *cobra.Command,
+	linter *lint.Linter,
+	formatter lint.Formatter,
+	files []string,
+) error {
+	var summary lint.Summary
+
+	// Results are buffered so output stays in file order even though the files
+	// are checked concurrently.
+	results := make(map[string]lint.Result, len(files))
+
+	var toLint []string
+
+	for _, f := range files {
+		if f == "-" {
+			results[f] = linter.LintReader("stdin", cmd.InOrStdin())
+
+			continue
+		}
+
+		toLint = append(toLint, f)
+	}
+
+	for r := range linter.LintAll(toLint, o.workers) {
+		results[r.Path] = r
+	}
+
+	for _, f := range files {
+		r := results[f]
+
+		summary.Add(r)
+
+		err := formatter.Result(r)
+		if err != nil {
+			return fmt.Errorf("report %s: %w", r.Path, err)
+		}
+
+		if o.exitOnError && (r.Status == lint.Invalid || r.Status == lint.Error) {
+			break
+		}
+	}
+
+	err := formatter.Finish(summary)
+	if err != nil {
+		return fmt.Errorf("finish report: %w", err)
+	}
+
+	if summary.Failed() {
+		return errFilesInvalid
+	}
+
+	return nil
 }
 
 func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	cat, err := o.loadCatalog(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load catalog: %w", err)
+		return nil, err
 	}
 
 	severities, err := o.severityOverrides()
 	if err != nil {
-		return nil, fmt.Errorf("invalid severity overrides: %w", err)
+		return nil, err
 	}
 
 	minSeverity, err := diag.ParseSeverity(o.minSeverity)
 	if err != nil {
-		return nil, fmt.Errorf("invalid -min-severity: %w", err)
+		return nil, fmt.Errorf("--min-severity: %w", err)
 	}
 
 	failOn, err := diag.ParseSeverity(o.failOn)
 	if err != nil {
-		return nil, fmt.Errorf("invalid -fail-on: %w", err)
+		return nil, fmt.Errorf("--fail-on: %w", err)
 	}
 
 	return lint.New(lint.Options{
@@ -249,6 +347,8 @@ func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	}), nil
 }
 
+// loadCatalog resolves the targeted release, falling back to the newest
+// catalog that is not newer than the request when there is no exact match.
 func (o *Options) loadCatalog(cmd *cobra.Command) (*catalog.Catalog, error) {
 	cat, err := o.store.Load(o.collectorVersion)
 	if err == nil {
@@ -275,117 +375,34 @@ func (o *Options) loadCatalog(cmd *cobra.Command) (*catalog.Catalog, error) {
 	return cat, nil
 }
 
-func splitList(s string) []string {
-	var out []string
-
-	for part := range strings.SplitSeq(s, ",") {
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
-		}
-	}
-
-	return out
-}
-
-func collect(paths []string, exclude []string) ([]string, error) {
-	var out []string
-
-	seen := map[string]bool{}
-	add := func(p string) {
-		if !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-
-	errs := lo.Map(paths, func(path string, _ int) error {
-		if path == "-" {
-			add("-")
-			return nil
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-
-		if !info.IsDir() {
-			// An explicitly named file is linted even if it would be excluded
-			// by a directory walk, matching how other linters behave.
-			add(filepath.Clean(path))
-			return nil
-		}
-		err = filepath.WalkDir(path, func(subPath string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			name := d.Name()
-			if d.IsDir() {
-				if subPath != path && (strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules") {
-					return fs.SkipDir
-				}
-
-				return nil
-			}
-
-			if !isConfigExt(strings.ToLower(filepath.Ext(name))) {
-				return nil
-			}
-
-			if excluded(path, exclude) {
-				return nil
-			}
-
-			add(filepath.Clean(path))
-
-			return nil
-		})
-		if err != nil {
-			return fmt.Errorf("walk %s: %w", path, err)
-		}
-
-		return nil
-	})
-
-	err := errors.Join(errs...)
+func (o *Options) runListRules(cmd *cobra.Command) error {
+	overrides, err := o.severityOverrides()
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect files: %w", err)
+		return err
 	}
 
-	return out, nil
-}
+	w := newColumns(cmd.OutOrStdout())
 
-// isConfigExt reports whether a file extension is one a directory walk picks up.
-func isConfigExt(ext string) bool {
-	return ext == ".yaml" || ext == ".yml"
-}
+	for _, r := range rule.All() {
+		sev := r.Severity()
 
-// excluded reports whether a path matches any exclude pattern. Patterns are
-// matched against both the full path and the base name.
-func excluded(path string, patterns []string) bool {
-	base := filepath.Base(path)
-	for _, p := range patterns {
-		if ok, _ := filepath.Match(p, base); ok {
-			return true
+		note := ""
+		if s, ok := overrides[r.Name()]; ok && s != sev {
+			sev, note = s, " (overridden)"
 		}
 
-		if ok, _ := filepath.Match(p, path); ok {
-			return true
-		}
-
-		if strings.Contains(path, strings.Trim(p, "*")) && strings.Contains(p, "*") {
-			return true
-		}
+		w.row(r.Name(), string(sev)+note, r.Description())
 	}
 
-	return false
+	w.flush()
+
+	return nil
 }
 
-func (o *Options) showlistVersions(cmd *cobra.Command) error {
+func (o *Options) runListVersions(cmd *cobra.Command) error {
 	versions := o.store.Versions()
 	if len(versions) == 0 {
-		cmd.PrintErrf("no catalog versions found in %v", o.store.Locations)
-		return errors.New("no catalog versions found")
+		return ErrNoCatalogs
 	}
 
 	w := newColumns(cmd.OutOrStdout())
@@ -412,9 +429,38 @@ func (o *Options) showlistVersions(cmd *cobra.Command) error {
 	return nil
 }
 
-// DefaultSettingsFile is looked for in the working directory when no
-// -config flag is given.
-const DefaultSettingsFile = ".otelcol-config-lint.yaml"
+// severityOverrides builds the rule severity map from --disable and --severity.
+func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
+	out := map[string]diag.Severity{}
+
+	for _, name := range splitList(o.disable) {
+		if _, ok := rule.Lookup(name); !ok {
+			return nil, fmt.Errorf("--disable: %w %q", ErrUnknownRule, name)
+		}
+
+		out[name] = diag.Off
+	}
+
+	for _, pair := range splitList(o.severity) {
+		name, level, found := strings.Cut(pair, "=")
+		if !found {
+			return nil, fmt.Errorf("--severity: %q is %w", pair, ErrBadSeverityPair)
+		}
+
+		if _, ok := rule.Lookup(name); !ok {
+			return nil, fmt.Errorf("--severity: %w %q", ErrUnknownRule, name)
+		}
+
+		sev, err := diag.ParseSeverity(level)
+		if err != nil {
+			return nil, fmt.Errorf("--severity %s: %w", name, err)
+		}
+
+		out[name] = sev
+	}
+
+	return out, nil
+}
 
 // settings is the file form of the command line options, so a repository can
 // commit its linting policy instead of repeating flags in CI.
@@ -433,9 +479,10 @@ type settings struct {
 	Exclude              []string          `yaml:"exclude"`
 }
 
+// loadSettings reads a settings file. When path is empty the default file is
+// used if it exists, and a missing default is not an error.
 func loadSettings(path string) (*settings, error) {
 	required := path != ""
-
 	if path == "" {
 		path = DefaultSettingsFile
 	}
@@ -462,35 +509,146 @@ func loadSettings(path string) (*settings, error) {
 	return &s, nil
 }
 
-func (o *Options) applySettings(s *settings) {
-	o.collectorVersion = mo.Some(s.CollectorVersion).OrElse(o.collectorVersion)
-	o.catalogLocations = append(o.catalogLocations, s.CatalogLocations...)
-	o.output = mo.Some(s.Output).OrElse(o.output)
-	o.minSeverity = mo.Some(s.MinSeverity).OrElse(o.minSeverity)
-	o.failOn = mo.Some(s.FailOn).OrElse(o.failOn)
-	o.strict = mo.PointerToOption(s.Strict).OrElse(o.strict)
-	o.ignoreMissing = mo.PointerToOption(s.IgnoreMissingSchemas).OrElse(o.ignoreMissing)
-	o.summary = mo.PointerToOption(s.Summary).OrElse(o.summary)
-	o.exclude = mo.Some(strings.Join(s.Exclude, ",")).OrElse(o.exclude)
-	o.disable = mo.Some(strings.Join(s.Disable, ",")).OrElse(o.disable)
-	o.severity = mo.Some(
-		strings.Join(
-			lo.MapEntries(s.Severity, func(k, v string) string {
-				return fmt.Sprintf("%s=%s", k, v)
-			}).Slices().Sort(),
-			",",
-		)).OrElse(o.severity)
-}
-
-func defaultWorkers() int {
-	if n := runtime.NumCPU(); n < maxDefaultWorkers {
-		return n
+// applySettings folds a settings file into the options. changed reports whether
+// a flag was given on the command line; those always win over the file.
+func (o *Options) applySettings(s *settings, changed func(name string) bool) {
+	str := func(name string, dst *string, v string) {
+		if !changed(name) {
+			*dst = mo.EmptyableToOption(v).OrElse(*dst)
+		}
+	}
+	boolean := func(name string, dst *bool, v *bool) {
+		if !changed(name) {
+			*dst = mo.PointerToOption(v).OrElse(*dst)
+		}
 	}
 
-	return maxDefaultWorkers
+	str("collector-version", &o.collectorVersion, s.CollectorVersion)
+	str("output", &o.output, s.Output)
+	str("min-severity", &o.minSeverity, s.MinSeverity)
+	str("fail-on", &o.failOn, s.FailOn)
+	boolean("strict", &o.strict, s.Strict)
+	boolean("ignore-missing-schemas", &o.ignoreMissing, s.IgnoreMissingSchemas)
+	boolean("summary", &o.summary, s.Summary)
+
+	if !changed("catalog-location") && len(s.CatalogLocations) > 0 {
+		o.catalogLocations = append(o.catalogLocations, s.CatalogLocations...)
+	}
+
+	if !changed("exclude") && len(s.Exclude) > 0 {
+		o.exclude = joinList(o.exclude, strings.Join(s.Exclude, ","))
+	}
+
+	// Rule lists merge instead of replacing: the file states the project
+	// policy and the flags add to it for a single run.
+	if len(s.Disable) > 0 {
+		o.disable = joinList(o.disable, strings.Join(s.Disable, ","))
+	}
+
+	if len(s.Severity) > 0 {
+		pairs := make([]string, 0, len(s.Severity))
+		for _, name := range sortedKeys(s.Severity) {
+			pairs = append(pairs, name+"="+s.Severity[name])
+		}
+		// Later pairs win, so file overrides are listed first.
+		o.severity = joinList(strings.Join(pairs, ","), o.severity)
+	}
 }
 
-// columns renders aligned help output for -list-rules and -list-versions.
+// isConfigExt reports whether a file extension is one a directory walk picks up.
+func isConfigExt(ext string) bool {
+	return ext == ".yaml" || ext == ".yml"
+}
+
+// collect expands the command line arguments into a list of files to lint.
+// Directories are walked recursively; "-" is kept as a marker for stdin.
+func collect(args []string, exclude []string) ([]string, error) {
+	var out []string
+
+	seen := map[string]bool{}
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+
+	for _, arg := range args {
+		if arg == "-" {
+			add("-")
+
+			continue
+		}
+
+		info, err := os.Stat(arg)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", arg, err)
+		}
+
+		if !info.IsDir() {
+			// An explicitly named file is linted even if it would be excluded
+			// by a directory walk, matching how other linters behave.
+			add(filepath.Clean(arg))
+
+			continue
+		}
+
+		err = filepath.WalkDir(arg, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+
+			name := d.Name()
+			if d.IsDir() {
+				if path != arg && (strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules") {
+					return fs.SkipDir
+				}
+
+				return nil
+			}
+
+			if !isConfigExt(strings.ToLower(filepath.Ext(name))) {
+				return nil
+			}
+
+			if excluded(path, exclude) {
+				return nil
+			}
+
+			add(filepath.Clean(path))
+
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("walk %s: %w", arg, err)
+		}
+	}
+
+	return out, nil
+}
+
+// excluded reports whether a path matches any exclude pattern. Patterns are
+// matched against both the full path and the base name.
+func excluded(path string, patterns []string) bool {
+	base := filepath.Base(path)
+	for _, p := range patterns {
+		if ok, _ := filepath.Match(p, base); ok {
+			return true
+		}
+
+		if ok, _ := filepath.Match(p, path); ok {
+			return true
+		}
+
+		if strings.Contains(path, strings.Trim(p, "*")) && strings.Contains(p, "*") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// columns renders aligned help output for --list-rules and --list-versions.
 type columns struct{ w *tabwriter.Writer }
 
 // columnPadding is the gap between columns, in spaces.
@@ -514,37 +672,46 @@ func (c columns) row(cells ...string) {
 
 func (c columns) flush() { _ = c.w.Flush() }
 
-// severityOverrides builds the rule severity map from -disable and -severity.
-func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
-	out := map[string]diag.Severity{}
+func splitList(s string) []string {
+	var out []string
 
-	for _, name := range splitList(o.disable) {
-		if _, ok := rule.Lookup(name); !ok {
-			return nil, fmt.Errorf("-disable: %w %q", ErrUnknownRule, name)
+	for part := range strings.SplitSeq(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
 		}
-
-		out[name] = diag.Off
 	}
 
-	for _, pair := range splitList(o.severity) {
-		name, level, found := strings.Cut(pair, "=")
-		if !found {
-			return nil, fmt.Errorf("-severity: %q is %w", pair, ErrBadSeverityPair)
-		}
+	return out
+}
 
-		if _, ok := rule.Lookup(name); !ok {
-			return nil, fmt.Errorf("-severity: %w %q", ErrUnknownRule, name)
-		}
+func joinList(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + "," + b
+	}
+}
 
-		sev, err := diag.ParseSeverity(level)
-		if err != nil {
-			return nil, fmt.Errorf("-severity %s: %w", name, err)
-		}
-
-		out[name] = sev
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
 
-	return out, nil
+	sort.Strings(out)
+
+	return out
+}
+
+func defaultWorkers() int {
+	if n := runtime.NumCPU(); n < maxDefaultWorkers {
+		return n
+	}
+
+	return maxDefaultWorkers
 }
 
 // isTerminal reports whether w is a character device, so colour is only used
@@ -558,64 +725,4 @@ func isTerminal(w io.Writer) bool {
 	info, err := f.Stat()
 
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-func (o *Options) lintAll(
-	cmd *cobra.Command,
-	linter *lint.Linter,
-	formatter lint.Formatter,
-	files []string,
-) (int, error) {
-	var summary lint.Summary
-
-	report := func(r lint.Result) error {
-		summary.Add(r)
-
-		return formatter.Result(r)
-	}
-
-	// Results are buffered so output stays in file order even though the files
-	// are checked concurrently.
-	results := make(map[string]lint.Result, len(files))
-
-	var toLint []string
-
-	for _, f := range files {
-		if f == "-" {
-			results[f] = linter.LintReader("stdin", cmd.InOrStdin())
-
-			continue
-		}
-
-		toLint = append(toLint, f)
-	}
-
-	for r := range linter.LintAll(toLint, o.workers) {
-		results[r.Path] = r
-	}
-
-	for _, f := range files {
-		r := results[f]
-
-		err := report(r)
-		if err != nil {
-			return 0, fmt.Errorf("failed to report result for %s: %w", r.Path, err)
-		}
-
-		if o.exitOnError && (r.Status == lint.Invalid || r.Status == lint.Error) {
-			break
-		}
-	}
-
-	err := formatter.Finish(summary)
-	if err != nil {
-		return 0, fmt.Errorf("failed to finish formatter: %w", err)
-	}
-
-	if summary.Failed() {
-		// TODO: return error to send exitCode
-		return 0, nil
-	}
-
-	return 0, nil
 }

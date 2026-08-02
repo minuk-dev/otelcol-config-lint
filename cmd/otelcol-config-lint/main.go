@@ -9,11 +9,5 @@ import (
 )
 
 func main() {
-	cmd := otelcolconfiglint.NewCommand(
-		&otelcolconfiglint.Options{},
-	)
-	err := cmd.Execute()
-	if err != nil {
-		os.Exit(1)
-	}
+	os.Exit(otelcolconfiglint.Execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
