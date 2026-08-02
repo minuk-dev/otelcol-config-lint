@@ -11,7 +11,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/samber/mo"
 	"github.com/spf13/cobra"
@@ -95,8 +94,6 @@ type Options struct {
 	verbose          bool
 	noColor          bool
 	exitOnError      bool
-	listRules        bool
-	listVersions     bool
 
 	// internal state
 	store catalog.Store
@@ -143,7 +140,7 @@ func NewCommand(opts *Options) *cobra.Command {
 	// this keeps it printing what the "version" subcommand prints.
 	cmd.SetVersionTemplate(versionTemplate)
 
-	cmd.AddCommand(newVersionCommand())
+	cmd.AddCommand(newVersionCommand(), newListCommand(opts))
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		cmd.PrintErr(cmd.UsageString())
@@ -165,18 +162,17 @@ Exit codes:
 
 // RegisterFlags declares every command line flag on the command.
 func (o *Options) RegisterFlags(cmd *cobra.Command) {
+	// The groups below are shared with the list subcommands, which take only
+	// the flags that change what they print.
+	o.registerSettingsFlag(cmd)
+	o.registerCatalogLocationFlag(cmd)
+	o.registerRuleFlags(cmd)
+
 	flags := cmd.Flags()
 
 	flags.StringVar(&o.collectorVersion, "collector-version", catalog.Latest,
 		"collector release to validate against, e.g. v0.157.0")
-	flags.StringSliceVar(&o.catalogLocations, "catalog-location", nil,
-		"where to find catalogs: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
-			"repeat to search several in order (default: the built-in catalogs)")
 	flags.StringVar(&o.output, "output", "text", "output format: text, json, junit, tap or github")
-	flags.StringVar(&o.settingsFile, "config", "", "settings file (default "+DefaultSettingsFile+" if present)")
-	flags.StringVar(&o.disable, "disable", "", "comma-separated rules to turn off")
-	flags.StringVar(&o.severity, "severity", "",
-		"comma-separated rule=level overrides, e.g. missing-batch=warning")
 	flags.StringVar(&o.exclude, "exclude", "", "comma-separated glob patterns to skip when walking directories")
 	flags.StringVar(&o.minSeverity, "min-severity", "info", "lowest severity to report: error, warning or info")
 	flags.StringVar(&o.failOn, "fail-on", "error", "severity that makes a file invalid: error, warning or info")
@@ -189,8 +185,6 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.verbose, "verbose", false, "also report files that passed")
 	flags.BoolVar(&o.noColor, "no-color", false, "disable coloured output")
 	flags.BoolVar(&o.exitOnError, "exit-on-error", false, "stop at the first file that fails")
-	flags.BoolVar(&o.listRules, "list-rules", false, "print the rules and their default severities, then exit")
-	flags.BoolVar(&o.listVersions, "list-versions", false, "print the available catalog versions, then exit")
 }
 
 // Prepare folds the settings file into the parsed flags and builds the catalog
@@ -208,25 +202,8 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 	return nil
 }
 
-// Run dispatches to whichever mode the flags asked for.
+// Run lints the given paths.
 func (o *Options) Run(cmd *cobra.Command, args []string) error {
-	switch {
-	case o.listVersions:
-		err := o.runListVersions(cmd)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	case o.listRules:
-		err := o.runListRules(cmd)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
 	if len(args) == 0 {
 		cmd.PrintErr(cmd.UsageString())
 
@@ -239,6 +216,30 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// registerSettingsFlag declares --config. Every command honours it: the
+// settings file states rule and catalog policy, not only lint options.
+func (o *Options) registerSettingsFlag(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.settingsFile, "config", "",
+		"settings file (default "+DefaultSettingsFile+" if present)")
+}
+
+// registerCatalogLocationFlag declares --catalog-location, shared with
+// "list versions".
+func (o *Options) registerCatalogLocationFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSliceVar(&o.catalogLocations, "catalog-location", nil,
+		"where to find catalogs: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
+			"repeat to search several in order (default: the built-in catalogs)")
+}
+
+// registerRuleFlags declares the severity overrides, shared with "list rules".
+func (o *Options) registerRuleFlags(cmd *cobra.Command) {
+	flags := cmd.Flags()
+
+	flags.StringVar(&o.disable, "disable", "", "comma-separated rules to turn off")
+	flags.StringVar(&o.severity, "severity", "",
+		"comma-separated rule=level overrides, e.g. missing-batch=warning")
 }
 
 // runLint resolves what to check and how to report it, then does the work.
@@ -384,60 +385,6 @@ func (o *Options) loadCatalog(cmd *cobra.Command) (*catalog.Catalog, error) {
 	return cat, nil
 }
 
-func (o *Options) runListRules(cmd *cobra.Command) error {
-	overrides, err := o.severityOverrides()
-	if err != nil {
-		return err
-	}
-
-	w := newColumns(cmd.OutOrStdout())
-
-	for _, r := range rule.All() {
-		sev := r.Severity()
-
-		note := ""
-		if s, ok := overrides[r.Name()]; ok && s != sev {
-			sev, note = s, " (overridden)"
-		}
-
-		w.row(r.Name(), string(sev)+note, r.Description())
-	}
-
-	w.flush()
-
-	return nil
-}
-
-func (o *Options) runListVersions(cmd *cobra.Command) error {
-	versions := o.store.Versions()
-	if len(versions) == 0 {
-		return ErrNoCatalogs
-	}
-
-	w := newColumns(cmd.OutOrStdout())
-
-	for i, v := range versions {
-		cat, err := o.store.Load(v)
-		if err != nil {
-			w.row(v, "unreadable: "+err.Error(), "")
-
-			continue
-		}
-
-		note := ""
-		if i == 0 {
-			note = "(latest)"
-		}
-
-		w.row(v, fmt.Sprintf("%d components", cat.Count()),
-			strings.Join(cat.Distributions, "+")+" "+note)
-	}
-
-	w.flush()
-
-	return nil
-}
-
 // severityOverrides builds the rule severity map from --disable and --severity.
 func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
 	out := map[string]diag.Severity{}
@@ -563,30 +510,6 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 		o.severity = joinList(strings.Join(pairs, ","), o.severity)
 	}
 }
-
-// columns renders aligned help output for --list-rules and --list-versions.
-type columns struct{ w *tabwriter.Writer }
-
-// columnPadding is the gap between columns, in spaces.
-const columnPadding = 2
-
-func newColumns(w io.Writer) columns {
-	return columns{w: tabwriter.NewWriter(w, 0, 0, columnPadding, ' ', 0)}
-}
-
-func (c columns) row(cells ...string) {
-	for i, cell := range cells {
-		if i > 0 {
-			_, _ = io.WriteString(c.w, "\t")
-		}
-
-		_, _ = io.WriteString(c.w, cell)
-	}
-
-	_, _ = io.WriteString(c.w, "\n")
-}
-
-func (c columns) flush() { _ = c.w.Flush() }
 
 func splitList(s string) []string {
 	var out []string
