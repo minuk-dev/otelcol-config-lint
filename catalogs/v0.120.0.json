@@ -4,7 +4,7 @@
     "core",
     "contrib"
   ],
-  "generatedAt": "2026-07-31T13:05:51Z",
+  "generatedAt": "2026-08-02T06:26:58Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -1923,23 +1923,6 @@
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor"
       },
-      "dynatracedetector": {
-        "type": "dynatracedetector",
-        "signals": [
-          "traces",
-          "metrics",
-          "logs"
-        ],
-        "stability": {
-          "logs": "alpha",
-          "metrics": "alpha",
-          "traces": "alpha"
-        },
-        "distributions": [
-          "contrib"
-        ],
-        "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/dynatrace"
-      },
       "filter": {
         "type": "filter",
         "signals": [
@@ -2264,23 +2247,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/routingprocessor"
-      },
-      "sample": {
-        "type": "sample",
-        "signals": [
-          "traces",
-          "metrics",
-          "logs"
-        ],
-        "stability": {
-          "logs": "development",
-          "metrics": "stable",
-          "traces": "beta"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/cmd/mdatagen/internal/sampleprocessor"
       },
       "schema": {
         "type": "schema",
@@ -3756,23 +3722,6 @@
           "contrib"
         ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/riakreceiver"
-      },
-      "sample": {
-        "type": "sample",
-        "signals": [
-          "traces",
-          "metrics",
-          "logs"
-        ],
-        "stability": {
-          "logs": "development",
-          "metrics": "stable",
-          "traces": "beta"
-        },
-        "distributions": [
-          "core"
-        ],
-        "module": "go.opentelemetry.io/collector/cmd/mdatagen/internal/samplereceiver"
       },
       "saphana": {
         "type": "saphana",

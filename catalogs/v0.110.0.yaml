@@ -2,7 +2,7 @@ collectorVersion: v0.110.0
 distributions:
   - core
   - contrib
-generatedAt: "2026-07-31T13:05:51Z"
+generatedAt: "2026-08-02T06:26:57Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -2484,19 +2484,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/riakreceiver
-    sample:
-      type: sample
-      signals:
-        - traces
-        - metrics
-        - logs
-      stability:
-        logs: development
-        metrics: stable
-        traces: beta
-      distributions:
-        - core
-      module: go.opentelemetry.io/collector/cmd/mdatagen/internal/samplereceiver
     saphana:
       type: saphana
       signals:

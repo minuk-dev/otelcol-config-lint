@@ -134,7 +134,7 @@ left alone.
 [`catalogs/`](catalogs) holds one file per collector release, in both YAML (the
 readable form, meant to be reviewed in pull requests) and JSON. They are
 generated from the `metadata.yaml` that every upstream component ships, across
-**both core and contrib** — 342 components for v0.157.0.
+**both core and contrib** — 324 components for v0.157.0.
 
 ```yaml
 components:

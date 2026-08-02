@@ -2,7 +2,7 @@ collectorVersion: v0.150.0
 distributions:
   - core
   - contrib
-generatedAt: "2026-07-31T13:05:52Z"
+generatedAt: "2026-08-02T06:27:08Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -164,19 +164,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/connector/routingconnector
-    sample:
-      type: sample
-      stability:
-        metrics_to_metrics: development
-        profiles_to_profiles: development
-      pairs:
-        - from: metrics
-          to: metrics
-        - from: profiles
-          to: profiles
-      distributions:
-        - core
-      module: go.opentelemetry.io/collector/cmd/mdatagen/internal/sampleconnector
     servicegraph:
       type: servicegraph
       stability:
@@ -1489,36 +1476,6 @@ components:
         - k8s
       module: go.opentelemetry.io/collector/extension/zpagesextension
   processor:
-    akamaidetector:
-      type: akamaidetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/akamai
-    alibabaecsdetector:
-      type: alibabaecsdetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/alibaba/ecs
     attributes:
       type: attributes
       signals:
@@ -1534,21 +1491,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor
-    azuredetector:
-      type: azuredetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: beta
-        metrics: beta
-        profiles: development
-        traces: beta
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/azure
     batch:
       type: batch
       signals:
@@ -1624,21 +1566,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor
-    digitaloceandetector:
-      type: digitaloceandetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/digitalocean
     dnslookup:
       type: dnslookup
       signals:
@@ -1652,19 +1579,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/dnslookupprocessor
-    dynatracedetector:
-      type: dynatracedetector
-      signals:
-        - traces
-        - metrics
-        - logs
-      stability:
-        logs: alpha
-        metrics: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/dynatrace
     filter:
       type: filter
       signals:
@@ -1719,51 +1633,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbytraceprocessor
-    hetznerdetector:
-      type: hetznerdetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/hetzner
-    ibmcloudclassicdetector:
-      type: ibmcloudclassicdetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: development
-        metrics: development
-        profiles: development
-        traces: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/ibmcloud/classic
-    ibmcloudvpcdetector:
-      type: ibmcloudvpcdetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: development
-        metrics: development
-        profiles: development
-        traces: development
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/ibmcloud/vpc
     interval:
       type: interval
       signals:
@@ -1927,36 +1796,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor
-    novadetector:
-      type: novadetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/openstack/nova
-    oracleclouddetector:
-      type: oracleclouddetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/oraclecloud
     probabilistic_sampler:
       type: probabilistic_sampler
       signals:
@@ -2031,36 +1870,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor
-    sample:
-      type: sample
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: development
-        metrics: stable
-        profiles: development
-        traces: beta
-      distributions:
-        - core
-      module: go.opentelemetry.io/collector/cmd/mdatagen/internal/sampleprocessor
-    scalewaydetector:
-      type: scalewaydetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/scaleway
     schema:
       type: schema
       signals:
@@ -2116,21 +1925,6 @@ components:
         - contrib
         - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor
-    tencentcvmdetector:
-      type: tencentcvmdetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/tencent/cvm
     transform:
       type: transform
       signals:
@@ -2156,36 +1950,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/unrollprocessor
-    upclouddetector:
-      type: upclouddetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/upcloud
-    vultrdetector:
-      type: vultrdetector
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: alpha
-        metrics: alpha
-        profiles: alpha
-        traces: alpha
-      distributions:
-        - contrib
-      module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/vultr
   receiver:
     active_directory_ds:
       type: active_directory_ds
@@ -3370,31 +3134,6 @@ components:
       distributions:
         - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/riakreceiver
-    sample:
-      type: sample
-      signals:
-        - traces
-        - metrics
-        - logs
-        - profiles
-      stability:
-        logs: development
-        metrics: stable
-        profiles: deprecated
-        traces: beta
-      distributions:
-        - core
-      module: go.opentelemetry.io/collector/cmd/mdatagen/internal/samplefactoryreceiver
-      deprecated: no migration needed
-    sampleentity:
-      type: sampleentity
-      signals:
-        - metrics
-      stability:
-        metrics: development
-      distributions:
-        - core
-      module: go.opentelemetry.io/collector/cmd/mdatagen/internal/sampleentityreceiver
     saphana:
       type: saphana
       signals:
