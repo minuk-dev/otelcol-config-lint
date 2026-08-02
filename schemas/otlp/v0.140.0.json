@@ -1,11 +1,7 @@
 {
   "collectorVersion": "v0.140.0",
   "distribution": "otlp",
-  "distributions": [
-    "core",
-    "contrib"
-  ],
-  "generatedAt": "2026-08-02T13:05:39Z",
+  "generatedAt": "2026-08-02T13:15:53Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -26,12 +22,6 @@
           "profiles": "development",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
         "fields": {
           "type": "map",
@@ -232,12 +222,6 @@
           "profiles": "development",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
         "fields": {
           "type": "map",
@@ -504,12 +488,6 @@
           "profiles": "development",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/receiver/otlpreceiver",
         "fields": {
           "type": "map",

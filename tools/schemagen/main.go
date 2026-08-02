@@ -247,7 +247,13 @@ func filterDistribution(cat *schema.Schema, dist string) *schema.Schema {
 				out.Components[kind] = map[string]*schema.Component{}
 			}
 
-			out.Components[kind][typ] = comp
+			// The written component drops the distribution list: the
+			// directory it lands in already says which binary ships it. The
+			// copy matters because the merged catalogue is filtered once per
+			// distribution and still needs the list.
+			written := *comp
+			written.Distributions = nil
+			out.Components[kind][typ] = &written
 		}
 	}
 
@@ -362,7 +368,6 @@ func build(client *http.Client, version, cacheDir string) (*schema.Schema, error
 			return nil, err
 		}
 
-		cat.Distributions = append(cat.Distributions, src.name)
 		cat.Sources[src.name] = src.module
 		logf("  %s: %d components\n", src.name, n)
 	}

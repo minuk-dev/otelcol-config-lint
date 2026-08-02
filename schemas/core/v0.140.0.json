@@ -1,11 +1,7 @@
 {
   "collectorVersion": "v0.140.0",
   "distribution": "core",
-  "distributions": [
-    "core",
-    "contrib"
-  ],
-  "generatedAt": "2026-08-02T13:05:39Z",
+  "generatedAt": "2026-08-02T13:15:53Z",
   "sources": {
     "contrib": "github.com/open-telemetry/opentelemetry-collector-contrib",
     "core": "go.opentelemetry.io/collector"
@@ -38,11 +34,6 @@
             "to": "traces"
           }
         ],
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/connector/forwardconnector"
       }
     },
@@ -61,11 +52,6 @@
           "profiles": "development",
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/debugexporter",
         "fields": {
           "type": "map",
@@ -107,11 +93,6 @@
           "profiles": "development",
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter",
         "fields": {
           "type": "map",
@@ -183,10 +164,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter",
         "fields": {
           "type": "map",
@@ -663,11 +640,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/nopexporter"
       },
       "otlp": {
@@ -684,12 +656,6 @@
           "profiles": "development",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlpexporter",
         "fields": {
           "type": "map",
@@ -890,12 +856,6 @@
           "profiles": "development",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/exporter/otlphttpexporter",
         "fields": {
           "type": "map",
@@ -1154,10 +1114,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter",
         "fields": {
           "type": "map",
@@ -1411,10 +1367,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusremotewriteexporter",
         "fields": {
           "type": "map",
@@ -1682,10 +1634,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/zipkinexporter",
         "fields": {
           "type": "map",
@@ -1934,11 +1882,6 @@
         "stability": {
           "extension": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension",
         "fields": {
           "type": "map",
@@ -2141,9 +2084,6 @@
         "stability": {
           "extension": "development"
         },
-        "distributions": [
-          "core"
-        ],
         "module": "go.opentelemetry.io/collector/extension/memorylimiterextension",
         "fields": {
           "type": "map",
@@ -2177,11 +2117,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension",
         "fields": {
           "type": "map",
@@ -2217,9 +2152,6 @@
         "stability": {
           "profiles": "development"
         },
-        "distributions": [
-          "core"
-        ],
         "module": "go.opentelemetry.io/collector/extension/xextension"
       },
       "zpages": {
@@ -2227,11 +2159,6 @@
         "stability": {
           "extension": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/extension/zpagesextension",
         "fields": {
           "type": "map",
@@ -2423,11 +2350,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor",
         "fields": {
           "type": "map",
@@ -2735,11 +2657,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/processor/batchprocessor",
         "fields": {
           "type": "map",
@@ -2786,11 +2703,6 @@
           "profiles": "development",
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor",
         "fields": {
           "type": "map",
@@ -3429,11 +3341,6 @@
           "profiles": "alpha",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "go.opentelemetry.io/collector/processor/memorylimiterprocessor",
         "fields": {
           "type": "map",
@@ -3474,11 +3381,6 @@
           "logs": "alpha",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor",
         "fields": {
           "type": "map",
@@ -3524,11 +3426,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor",
         "fields": {
           "type": "map",
@@ -3576,10 +3473,6 @@
         "stability": {
           "traces": "alpha"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanprocessor",
         "fields": {
           "type": "map",
@@ -3901,11 +3794,6 @@
           "logs": "development",
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver",
         "fields": {
           "type": "map",
@@ -3936,11 +3824,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver",
         "fields": {
           "type": "map",
@@ -4491,10 +4374,6 @@
           "profiles": "development",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver",
         "fields": {
           "type": "map",
@@ -4948,10 +4827,6 @@
           "metrics": "beta",
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib"
-        ],
         "module": "go.opentelemetry.io/collector/receiver/nopreceiver"
       },
       "otlp": {
@@ -4968,12 +4843,6 @@
           "profiles": "development",
           "traces": "stable"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s",
-          "otlp"
-        ],
         "module": "go.opentelemetry.io/collector/receiver/otlpreceiver",
         "fields": {
           "type": "map",
@@ -5250,11 +5119,6 @@
         "stability": {
           "metrics": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver",
         "fields": {
           "type": "map",
@@ -5630,11 +5494,6 @@
         "stability": {
           "traces": "beta"
         },
-        "distributions": [
-          "core",
-          "contrib",
-          "k8s"
-        ],
         "module": "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver",
         "fields": {
           "type": "map",

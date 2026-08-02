@@ -2,7 +2,7 @@
 
 One file per OpenTelemetry Collector release **per distribution**, listing every
 component that release ships with the signals it supports, its per-signal
-stability, the distributions carrying it, and its Go module.
+stability, the settings it accepts, and its Go module.
 
 ```
 schemas/
@@ -65,12 +65,18 @@ used before schemas were split by distribution.
 The flag can be repeated to search several locations in order — put a private
 distribution's schema first and fall back to `default` for this registry.
 
+The distribution is recorded once, at the top of the file. Components carry no
+membership of their own: the file they sit in already answers that, and a second
+answer could only disagree with it.
+
 ## Shape
 
 ```yaml
 collectorVersion: v0.157.0
-distribution: core          # which binary this file describes
-distributions: [core, contrib]   # which upstream repos were harvested
+distribution: core                 # which binary this file describes
+sources:                           # which upstream repos were harvested
+  core: go.opentelemetry.io/collector
+  contrib: github.com/open-telemetry/opentelemetry-collector-contrib
 components:
   receiver:
     otlp:
@@ -79,7 +85,6 @@ components:
       stability:
         traces: stable
         profiles: alpha
-      distributions: [core, contrib, k8s, otlp]
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
   connector:
     spanmetrics:

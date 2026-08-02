@@ -1,9 +1,6 @@
 collectorVersion: v0.150.0
 distribution: core
-distributions:
-  - core
-  - contrib
-generatedAt: "2026-08-02T13:05:39Z"
+generatedAt: "2026-08-02T13:15:53Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -25,10 +22,6 @@ components:
           to: profiles
         - from: traces
           to: traces
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/connector/forwardconnector
   exporter:
     debug:
@@ -43,10 +36,6 @@ components:
         metrics: alpha
         profiles: alpha
         traces: alpha
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/exporter/debugexporter
       fields:
         type: map
@@ -78,10 +67,6 @@ components:
         metrics: alpha
         profiles: development
         traces: alpha
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter
       fields:
         type: map
@@ -153,9 +138,6 @@ components:
         metrics: beta
         profiles: development
         traces: beta
-      distributions:
-        - core
-        - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter
       fields:
         type: map
@@ -635,10 +617,6 @@ components:
         metrics: beta
         profiles: alpha
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/exporter/nopexporter
     otlp:
       type: otlp
@@ -652,11 +630,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlpexporter
       deprecated: renamed to "otlp_grpc" upstream; the old name still resolves for now
       aliasOf: otlp_grpc
@@ -798,11 +771,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlpexporter
       alias: otlp
       fields:
@@ -963,11 +931,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
       alias: otlphttp
       fields:
@@ -1149,11 +1112,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
       deprecated: renamed to "otlp_http" upstream; the old name still resolves for now
       aliasOf: otlp_http
@@ -1330,9 +1288,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - core
-        - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter
       fields:
         type: map
@@ -1592,9 +1547,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - core
-        - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusremotewriteexporter
       fields:
         type: map
@@ -1859,9 +1811,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - core
-        - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/exporter/zipkinexporter
       fields:
         type: map
@@ -2115,10 +2064,6 @@ components:
       type: health_check
       stability:
         extension: alpha
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension
       fields:
         type: map
@@ -2509,8 +2454,6 @@ components:
       type: memory_limiter
       stability:
         extension: development
-      distributions:
-        - core
       module: go.opentelemetry.io/collector/extension/memorylimiterextension
       fields:
         type: map
@@ -2533,10 +2476,6 @@ components:
       type: pprof
       stability:
         extension: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension
       fields:
         type: map
@@ -2565,10 +2504,6 @@ components:
       type: zpages
       stability:
         extension: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/extension/zpagesextension
       fields:
         type: map
@@ -2701,10 +2636,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor
       fields:
         type: map
@@ -2966,10 +2897,6 @@ components:
         logs: beta
         metrics: beta
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/processor/batchprocessor
       fields:
         type: map
@@ -3004,10 +2931,6 @@ components:
         metrics: alpha
         profiles: development
         traces: alpha
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor
       fields:
         type: map
@@ -3596,10 +3519,6 @@ components:
         metrics: beta
         profiles: alpha
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: go.opentelemetry.io/collector/processor/memorylimiterprocessor
       fields:
         type: map
@@ -3629,10 +3548,6 @@ components:
       stability:
         logs: alpha
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor
       fields:
         type: map
@@ -3673,10 +3588,6 @@ components:
         metrics: beta
         profiles: development
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor
       fields:
         type: map
@@ -3722,9 +3633,6 @@ components:
         - traces
       stability:
         traces: alpha
-      distributions:
-        - core
-        - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanprocessor
       fields:
         type: map
@@ -3990,10 +3898,6 @@ components:
       stability:
         logs: development
         metrics: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver
       fields:
         type: map
@@ -4020,10 +3924,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver
       fields:
         type: map
@@ -4758,9 +4658,6 @@ components:
         metrics: beta
         profiles: development
         traces: beta
-      distributions:
-        - core
-        - contrib
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver
       fields:
         type: map
@@ -5193,9 +5090,6 @@ components:
         metrics: beta
         profiles: alpha
         traces: beta
-      distributions:
-        - core
-        - contrib
       module: go.opentelemetry.io/collector/receiver/nopreceiver
     otlp:
       type: otlp
@@ -5209,11 +5103,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
       fields:
         type: map
@@ -5398,10 +5287,6 @@ components:
         - metrics
       stability:
         metrics: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver
       fields:
         type: map
@@ -5749,10 +5634,6 @@ components:
         - traces
       stability:
         traces: beta
-      distributions:
-        - core
-        - contrib
-        - k8s
       module: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver
       fields:
         type: map

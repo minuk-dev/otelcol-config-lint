@@ -1,9 +1,6 @@
 collectorVersion: v0.150.0
 distribution: otlp
-distributions:
-  - core
-  - contrib
-generatedAt: "2026-08-02T13:05:39Z"
+generatedAt: "2026-08-02T13:15:53Z"
 sources:
   contrib: github.com/open-telemetry/opentelemetry-collector-contrib
   core: go.opentelemetry.io/collector
@@ -21,11 +18,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlpexporter
       deprecated: renamed to "otlp_grpc" upstream; the old name still resolves for now
       aliasOf: otlp_grpc
@@ -167,11 +159,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlpexporter
       alias: otlp
       fields:
@@ -332,11 +319,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
       alias: otlphttp
       fields:
@@ -518,11 +500,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/exporter/otlphttpexporter
       deprecated: renamed to "otlp_http" upstream; the old name still resolves for now
       aliasOf: otlp_http
@@ -706,11 +683,6 @@ components:
         metrics: stable
         profiles: alpha
         traces: stable
-      distributions:
-        - core
-        - contrib
-        - k8s
-        - otlp
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
       fields:
         type: map
