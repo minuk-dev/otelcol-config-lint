@@ -52,6 +52,8 @@ type Options struct {
 	Schema *schema.Schema
 	// Availability lets diagnostics mention other releases. May be nil.
 	Availability rule.Availability
+	// Distributions lets diagnostics mention other distributions. May be nil.
+	Distributions rule.Distributions
 	// Severities overrides the level individual rules report at. A value of
 	// diag.Off disables the rule.
 	Severities map[string]diag.Severity
@@ -152,6 +154,7 @@ func (l *Linter) Lint(path string, src []byte) Result {
 		Schema: l.opts.Schema,
 		Index:  rule.NewIndex(f),
 		Avail:  l.opts.Availability,
+		Dists:  l.opts.Distributions,
 		Strict: l.opts.Strict,
 	}
 

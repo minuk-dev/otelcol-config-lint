@@ -28,6 +28,15 @@ type Availability interface {
 	Versions(k config.Kind, typ string) []string
 }
 
+// Distributions reports which distributions of the targeted release ship a
+// component type. A schema describes one distribution, so this is what lets a
+// rule say where a component the running binary lacks does ship.
+type Distributions interface {
+	// Distributions returns the distributions containing the component,
+	// sorted, excluding the one being checked against.
+	Distributions(k config.Kind, typ string) []string
+}
+
 // schemaReady reports whether a schema with components was resolved. Rules
 // that consult the schema stay silent otherwise rather than reporting every
 // component as unknown.
@@ -37,6 +46,10 @@ func (c *Context) schemaReady() bool { return c.Schema != nil && c.Schema.Count(
 func (c *Context) version() string {
 	if c.Schema == nil || c.Schema.CollectorVersion == "" {
 		return "the targeted release"
+	}
+
+	if c.Schema.Distribution != "" {
+		return "collector " + c.Schema.CollectorVersion + " (" + c.Schema.Distribution + ")"
 	}
 
 	return "collector " + c.Schema.CollectorVersion
@@ -70,7 +83,8 @@ func (r unknownComponent) Check(ctx *Context) {
 }
 
 // unknownHint explains an unknown component: it may be declared under the wrong
-// section, exist only in other releases, or simply be a typo.
+// section, ship only in other distributions, exist only in other releases, or
+// simply be a typo.
 func unknownHint(ctx *Context, kind config.Kind, typ string) string {
 	for _, other := range config.Kinds() {
 		if other == kind {
@@ -80,6 +94,15 @@ func unknownHint(ctx *Context, kind config.Kind, typ string) string {
 		if _, ok := ctx.Schema.Lookup(other, typ); ok {
 			return quote(typ) + " is " + article(string(other)) + " " + string(other) +
 				"; declare it under " + other.Section()
+		}
+	}
+
+	// A component the running binary does not ship is a different problem from
+	// a typo: the fix is switching distributions, not correcting the name.
+	if ctx.Dists != nil && ctx.Schema.Distribution != "" {
+		if dists := ctx.Dists.Distributions(kind, typ); len(dists) > 0 {
+			return quote(typ) + " is not in the " + ctx.Schema.Distribution +
+				" distribution; it ships in " + list(dists)
 		}
 	}
 

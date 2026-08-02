@@ -94,6 +94,26 @@ func (s Store) Versions() []string {
 	return out
 }
 
+// Distributions lists the distributions the store can serve, sorted. Only a
+// registry says what it carries, so other location kinds report none.
+func (s Store) Distributions() []string {
+	for _, loc := range s.locations() {
+		idx := s.indexAt(loc)
+		if idx != nil {
+			return idx.Names()
+		}
+	}
+
+	return nil
+}
+
+// WithDistribution returns a copy of the store serving another distribution.
+func (s Store) WithDistribution(distribution string) Store {
+	s.Distribution = distribution
+
+	return s
+}
+
 // Load returns the schema for a collector version. The special value "latest"
 // (or an empty string) selects the newest schema the store can enumerate.
 func (s Store) Load(version string) (*Schema, error) {
@@ -132,6 +152,28 @@ func (s Store) distribution() string {
 	}
 
 	return s.Distribution
+}
+
+// indexAt reads a location's index, or nil when it has none.
+func (s Store) indexAt(loc string) *Index {
+	switch kindOf(loc) {
+	case locRemote:
+		idx, err := s.fetchIndex(loc)
+		if err != nil {
+			return nil
+		}
+
+		return idx
+	case locDir:
+		idx, err := ReadIndexFile(filepath.Join(loc, IndexFile))
+		if err != nil {
+			return nil
+		}
+
+		return idx
+	default:
+		return nil
+	}
 }
 
 // versionsAt lists the versions one location can serve. A template names a

@@ -251,6 +251,47 @@ func TestCollectorVersionSelectsTheSchema(t *testing.T) {
 	}
 }
 
+// TestDistributionSelectsTheBinary is the bug #8 describes: filelog ships in
+// contrib but not in core, so a config using it starts fine on otelcol-contrib
+// and fails on plain otelcol with `unknown type: "filelog"`.
+func TestDistributionSelectsTheBinary(t *testing.T) {
+	t.Parallel()
+
+	src := "receivers:\n  filelog:\n    include: [/var/log/app.log]\nexporters:\n  debug:\n" +
+		"service:\n  pipelines:\n    logs:\n      receivers: [filelog]\n      exporters: [debug]\n"
+
+	if code, out, _ := lint(t, src, "--distribution", "contrib",
+		"--collector-version", "v0.157.0", "--min-severity", "error", "-"); code != 0 {
+		t.Errorf("filelog ships in contrib, got exit %d:\n%s", code, out)
+	}
+
+	code, out, _ := lint(t, src, "--distribution", "core",
+		"--collector-version", "v0.157.0", "--min-severity", "error", "-")
+	if code != 1 || !strings.Contains(out, "unknown-component") {
+		t.Fatalf("filelog is not in core, got exit %d:\n%s", code, out)
+	}
+
+	// The fix is switching binaries, not correcting a typo, so the hint has to
+	// say where it does ship rather than suggest a near-miss name.
+	if !strings.Contains(out, "not in the core distribution") || !strings.Contains(out, "contrib") {
+		t.Errorf("the hint should name the distributions that carry it:\n%s", out)
+	}
+}
+
+// TestTheDistributionIsNamedInDiagnostics keeps the report unambiguous: the
+// same config and release can pass or fail depending on the binary.
+func TestTheDistributionIsNamedInDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	src := "receivers:\n  nosuchreceiver:\nexporters:\n  debug:\n" +
+		"service:\n  pipelines:\n    logs:\n      receivers: [nosuchreceiver]\n      exporters: [debug]\n"
+
+	_, out, _ := lint(t, src, "--distribution", "core", "--collector-version", "v0.157.0", "-")
+	if !strings.Contains(out, "(core)") {
+		t.Errorf("the diagnostic should name the distribution checked against:\n%s", out)
+	}
+}
+
 func TestUnknownVersionFallsBackToTheNearestOlder(t *testing.T) {
 	t.Parallel()
 

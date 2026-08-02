@@ -71,6 +71,7 @@ func (o *Options) newListVersionsCommand() *cobra.Command {
 
 	o.registerSettingsFlag(cmd)
 	o.registerSchemaLocationFlag(cmd)
+	o.registerDistributionFlag(cmd)
 
 	return cmd
 }

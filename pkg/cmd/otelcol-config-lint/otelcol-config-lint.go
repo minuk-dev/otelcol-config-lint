@@ -79,6 +79,7 @@ const DefaultSettingsFile = ".otelcol-config-lint.yaml"
 type Options struct {
 	// flags
 	collectorVersion string
+	distribution     string
 	schemaLocations  []string
 	output           string
 	settingsFile     string
@@ -141,6 +142,7 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	// the flags that change what they print.
 	o.registerSettingsFlag(cmd)
 	o.registerSchemaLocationFlag(cmd)
+	o.registerDistributionFlag(cmd)
 	o.registerRuleFlags(cmd)
 
 	flags := cmd.Flags()
@@ -172,7 +174,7 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 
 	o.applySettings(fileSettings, cmd.Flags().Changed)
 
-	o.store = schema.Store{Locations: o.schemaLocations}
+	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution}
 
 	return nil
 }
@@ -198,6 +200,13 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 func (o *Options) registerSettingsFlag(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.settingsFile, "config", "",
 		"settings file (default "+DefaultSettingsFile+" if present)")
+}
+
+// registerDistributionFlag declares --distribution, shared with
+// "list versions": both answer differently depending on which binary is meant.
+func (o *Options) registerDistributionFlag(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.distribution, "distribution", schema.DefaultDistribution,
+		"collector distribution to validate against: core, contrib, k8s or otlp")
 }
 
 // registerSchemaLocationFlag declares --schema-location, shared with
@@ -324,6 +333,7 @@ func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	return lint.New(lint.Options{
 		Schema:               cat,
 		Availability:         lint.NewVersionIndex(o.store),
+		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
 		Severities:           severities,
 		Strict:               o.strict,
 		IgnoreMissingSchemas: o.ignoreMissing,
@@ -397,6 +407,8 @@ func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
 // commit its linting policy instead of repeating flags in CI.
 type settings struct {
 	CollectorVersion string `yaml:"collectorVersion"`
+	// Distribution names the collector binary the config will run on.
+	Distribution string `yaml:"distribution"`
 	// SchemaLocations are searched in order before the published registry.
 	SchemaLocations      []string          `yaml:"schemaLocations"`
 	Output               string            `yaml:"output"`
@@ -455,6 +467,7 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 	}
 
 	str("collector-version", &o.collectorVersion, s.CollectorVersion)
+	str("distribution", &o.distribution, s.Distribution)
 	str("output", &o.output, s.Output)
 	str("min-severity", &o.minSeverity, s.MinSeverity)
 	str("fail-on", &o.failOn, s.FailOn)

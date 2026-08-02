@@ -53,7 +53,7 @@ otelcol-config-lint version
 | --- | --- |
 | `run` | lint the given files, directories, or `-` for stdin |
 | `list rules` | the rules and their default severities, `--disable`/`--severity` applied |
-| `list versions` | the schema versions available, honouring `--schema-location` |
+| `list versions` | the schema versions available, honouring `--schema-location` and `--distribution` |
 | `version` | print the linter version (also available as `--version`) |
 
 The flags below belong to `run`:
@@ -61,6 +61,7 @@ The flags below belong to `run`:
 | Flag | Meaning |
 | --- | --- |
 | `--collector-version` | release to validate against, e.g. `v0.157.0` (default `latest`) |
+| `--distribution` | collector binary to validate against: `core`, `contrib` (default), `k8s` or `otlp` |
 | `--schema-location` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
 | `--output` | `text`, `json`, `junit`, `tap` or `github` |
 | `--strict` | unknown component settings become errors instead of warnings |
@@ -83,6 +84,7 @@ cat config.yaml | otelcol-config-lint run -                       # read stdin
 otelcol-config-lint run --output json ./configs > report.json     # machine-readable
 otelcol-config-lint run --output github ./configs                 # PR annotations
 otelcol-config-lint run --collector-version v0.110.0 config.yaml  # target an older release
+otelcol-config-lint run --distribution core config.yaml           # target plain otelcol
 ```
 
 ### Settings file
@@ -93,6 +95,7 @@ Explicit flags win over the file.
 
 ```yaml
 collectorVersion: v0.157.0
+distribution: contrib
 minSeverity: warning
 strict: true
 exclude:
@@ -118,8 +121,10 @@ schemaLocations:
 `connector-wiring` (a connector must export from one pipeline and receive into
 another, and must not close a loop).
 
-**Release compatibility** — `unknown-component` (with "exists in v0.110.0 but
-not in v0.157.0" when a component was removed), `signal-support` (a receiver
+**Release and distribution compatibility** — `unknown-component` (with "exists
+in v0.110.0 but not in v0.157.0" when a component was removed, or "not in the
+core distribution; it ships in contrib, k8s" when the binary simply does not
+carry it), `signal-support` (a receiver
 that only does traces used in a metrics pipeline), `component-stability`,
 `deprecated-component`.
 
