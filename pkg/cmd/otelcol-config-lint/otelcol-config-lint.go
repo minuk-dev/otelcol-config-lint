@@ -9,9 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -23,6 +21,8 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Version is the linter's own version.
@@ -246,12 +246,12 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 
 // runLint resolves what to check and how to report it, then does the work.
 func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
-	files, err := collect(paths, splitList(o.exclude))
+	files, err := scanner.New(splitList(o.exclude)).Scan(paths)
 	if err != nil {
-		return err
+		return fmt.Errorf("collect files: %w", err)
 	}
 
-	if len(files) == 0 {
+	if files.Len() == 0 {
 		return fmt.Errorf("%w in %s", ErrNoYAMLFiles, strings.Join(paths, ", "))
 	}
 
@@ -277,37 +277,30 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 	return nil
 }
 
-// lintAll checks every file and reports the results in argument order,
-// returning ErrFilesInvalid when the gate was not met.
+// lintAll checks every file and reports the results in path order, returning
+// ErrFilesInvalid when the gate was not met.
 func (o *Options) lintAll(
 	cmd *cobra.Command,
 	linter *lint.Linter,
 	formatter lint.Formatter,
-	files []string,
+	files sets.Set[string],
 ) error {
 	var summary lint.Summary
 
-	// Results are buffered so output stays in file order even though the files
+	// Results are buffered so output stays in path order even though the files
 	// are checked concurrently.
-	results := make(map[string]lint.Result, len(files))
+	results := make(map[string]lint.Result, files.Len())
 
-	var toLint []string
-
-	for _, f := range files {
-		if f == "-" {
-			results[f] = linter.LintReader("stdin", cmd.InOrStdin())
-
-			continue
-		}
-
-		toLint = append(toLint, f)
+	if files.Has(scanner.StdinMarker) {
+		results[scanner.StdinMarker] = linter.LintReader("stdin", cmd.InOrStdin())
 	}
 
-	for r := range linter.LintAll(toLint, o.workers) {
+	onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
+	for r := range linter.LintAll(onDisk, o.workers) {
 		results[r.Path] = r
 	}
 
-	for _, f := range files {
+	for _, f := range sets.List(files) {
 		r := results[f]
 
 		summary.Add(r)
@@ -566,105 +559,12 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 
 	if len(s.Severity) > 0 {
 		pairs := make([]string, 0, len(s.Severity))
-		for _, name := range sortedKeys(s.Severity) {
+		for _, name := range sets.List(sets.KeySet(s.Severity)) {
 			pairs = append(pairs, name+"="+s.Severity[name])
 		}
 		// Later pairs win, so file overrides are listed first.
 		o.severity = joinList(strings.Join(pairs, ","), o.severity)
 	}
-}
-
-// isConfigExt reports whether a file extension is one a directory walk picks up.
-func isConfigExt(ext string) bool {
-	return ext == ".yaml" || ext == ".yml"
-}
-
-// collect expands the command line arguments into a list of files to lint.
-// Directories are walked recursively; "-" is kept as a marker for stdin.
-func collect(args []string, exclude []string) ([]string, error) {
-	var out []string
-
-	seen := map[string]bool{}
-	add := func(p string) {
-		if !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-
-	for _, arg := range args {
-		if arg == "-" {
-			add("-")
-
-			continue
-		}
-
-		info, err := os.Stat(arg)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", arg, err)
-		}
-
-		if !info.IsDir() {
-			// An explicitly named file is linted even if it would be excluded
-			// by a directory walk, matching how other linters behave.
-			add(filepath.Clean(arg))
-
-			continue
-		}
-
-		err = filepath.WalkDir(arg, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			name := d.Name()
-			if d.IsDir() {
-				if path != arg && (strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules") {
-					return fs.SkipDir
-				}
-
-				return nil
-			}
-
-			if !isConfigExt(strings.ToLower(filepath.Ext(name))) {
-				return nil
-			}
-
-			if excluded(path, exclude) {
-				return nil
-			}
-
-			add(filepath.Clean(path))
-
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("walk %s: %w", arg, err)
-		}
-	}
-
-	return out, nil
-}
-
-// excluded reports whether a path matches any exclude pattern. Patterns are
-// matched against both the full path and the base name.
-func excluded(path string, patterns []string) bool {
-	base := filepath.Base(path)
-	for _, p := range patterns {
-		if ok, _ := filepath.Match(p, base); ok {
-			return true
-		}
-
-		if ok, _ := filepath.Match(p, path); ok {
-			return true
-		}
-
-		if strings.Contains(path, strings.Trim(p, "*")) && strings.Contains(p, "*") {
-			return true
-		}
-	}
-
-	return false
 }
 
 // columns renders aligned help output for --list-rules and --list-versions.
@@ -712,17 +612,6 @@ func joinList(a, b string) string {
 	default:
 		return a + "," + b
 	}
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-
-	sort.Strings(out)
-
-	return out
 }
 
 func defaultWorkers() int {
