@@ -10,7 +10,7 @@
 // without cloning or installing anything, by pointing the linter at the raw
 // files:
 //
-//	otelcol-config-lint -catalog-location \
+//	otelcol-config-lint --catalog-location \
 //	  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs/{{.Version}}.yaml \
 //	  config.yaml
 package catalogs
