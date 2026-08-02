@@ -40,9 +40,9 @@ service:
       receivers: [otlp]
 `
 
-// repoSchemas is this repository's registry. The binary reads the published one
-// over HTTP, so tests read the checked-out copy instead of the network.
-const repoSchemas = "../../schemas"
+// repoSchemas is the committed schema fixture. The binary reads the published
+// registry over HTTP, so tests read this instead of the network.
+const repoSchemas = "../../testdata/schemas"
 
 func repoStore() schema.Store {
 	return schema.Store{Locations: []string{repoSchemas}}

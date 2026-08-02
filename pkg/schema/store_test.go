@@ -192,9 +192,9 @@ func TestRemoteLocation(t *testing.T) {
 }
 
 // The distributions the registry helper below publishes.
-// repoSchemas is this repository's registry, which is what the published one
-// serves. Tests read it instead of the network.
-const repoSchemas = "../../schemas"
+// repoSchemas is the committed schema fixture, in the same layout the
+// published registry serves. Tests read it instead of the network.
+const repoSchemas = "../../testdata/schemas"
 
 const (
 	distCore    = "core"

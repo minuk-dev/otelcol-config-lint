@@ -141,9 +141,12 @@ alone.
 
 ## Schemas
 
-[`schemas/`](schemas) holds one file per collector release per distribution,
-in both YAML (the readable form, meant to be reviewed in pull requests) and
-JSON. They are
+Schemas are published at
+[minuk-dev/otelcol-config-schemas](https://github.com/minuk-dev/otelcol-config-schemas),
+one file per collector release per distribution, in both YAML (the readable
+form, meant to be reviewed in pull requests) and JSON. They live in a repository
+of their own because a registry grows without bound while a run reads one file
+from it; keeping them here would charge every clone for schemas it never opens. They are
 generated from the `metadata.yaml` that every upstream component ships, across
 **both core and contrib**, split into one schema per distribution:
 `contrib` (323 components for v0.157.0, the default), `core` (32), `k8s` (83)
@@ -163,13 +166,11 @@ components:
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
 ```
 
-Because the schemas sit at the repository root, they can be consumed without
-installing or cloning anything:
+They are read over HTTP by default, so nothing needs installing or cloning. To
+pin a copy, or to run without network access, point at a checkout:
 
 ```sh
-otelcol-config-lint run --schema-location \
-  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/schemas \
-  config.yaml
+otelcol-config-lint run --schema-location ../otelcol-config-schemas config.yaml
 ```
 
 A location is a registry directory or URL (one holding `index.json`, laid out
@@ -182,12 +183,13 @@ network is tried.
 ### Adding a release
 
 ```sh
-make schemas VERSIONS=v0.158.0
+make schemas VERSIONS=v0.158.0            # writes to ../otelcol-config-schemas
+make schemas VERSIONS=v0.158.0 SCHEMAS=/path/to/otelcol-config-schemas
 ```
 
 `tools/schemagen` downloads the core and contrib source archives for the tag,
-reads every `metadata.yaml`, and writes `schemas/<distribution>/<version>.yaml`
-and `.json` plus the `index.json` listing them. It needs no collector
+reads every `metadata.yaml`, and writes `<distribution>/<version>.yaml` and
+`.json` into the schema repository, plus the `index.json` listing them. It needs no collector
 dependencies, so the linter itself stays a two-package build.
 
 Component renames are carried through: upstream is moving types to snake_case,

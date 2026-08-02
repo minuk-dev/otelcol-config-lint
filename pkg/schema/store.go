@@ -29,13 +29,18 @@ const Latest = "latest"
 // locations to control where the published schemas are consulted.
 const Default = "default"
 
-// DefaultRegistry is where Default points: the schemas this project publishes
-// from its main branch.
+// DefaultRegistry is where Default points: the schemas published at
+// github.com/minuk-dev/otelcol-config-schemas.
+//
+// They live in a repository of their own because a registry grows without
+// bound -- one file per collector release per distribution -- while a run only
+// ever reads one of them. Keeping them beside the linter would charge every
+// clone for schemas it will never open.
 //
 // It tracks main rather than a release tag on purpose. A new collector release
 // only needs a schema commit to become lintable, with no linter release; the
 // cost is that a schema correction changes what an older binary reports.
-const DefaultRegistry = "https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/schemas"
+const DefaultRegistry = "https://raw.githubusercontent.com/minuk-dev/otelcol-config-schemas/main"
 
 // VersionPlaceholder is substituted with the collector version in a location
 // template, e.g. "https://example.com/otel/{{.Version}}.json".

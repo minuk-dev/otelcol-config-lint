@@ -43,23 +43,17 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: 1.25
-      - name: Check the schemas are readable and consistent
+      - name: Check the schema fixture is readable and consistent
         run: |
-          go run ./cmd/otelcol-config-lint list versions --schema-location schemas
-          # The index is the authoritative list, so this survives a layout
-          # change. Every distribution and format is read from disk rather than
-          # from the built-ins: the generated files are what this job checks.
-          # The fixture is not written for every distribution -- core does not
-          # ship what it uses -- so missing schemas are tolerated here. What is
-          # being checked is that each generated file parses and drives the
-          # rules, not that one config suits every binary.
+          # The published registry lives in otelcol-config-schemas; what this
+          # job checks is that the committed fixture still parses and drives
+          # the rules, in both the layout and the formats the registry serves.
+          go run ./cmd/otelcol-config-lint list versions --schema-location testdata/schemas
           jq -r '.distributions | to_entries[] | .key as $d | .value[] | "\($d) \(.)"' \
-            schemas/index.json |
+            testdata/schemas/index.json |
           while read -r distribution version; do
-            for format in yaml json; do
-              go run ./cmd/otelcol-config-lint run \
-                --schema-location "schemas/${distribution}/${version}.${format}" \
-                --collector-version "${version}" --min-severity error \
-                --ignore-missing-schemas testdata/valid
-            done
+            go run ./cmd/otelcol-config-lint run \
+              --schema-location "testdata/schemas" --distribution "${distribution}" \
+              --collector-version "${version}" --min-severity error \
+              --ignore-missing-schemas testdata/valid
           done
