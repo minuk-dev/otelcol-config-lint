@@ -1,16 +1,16 @@
-// Command schemagen builds component catalogs from the upstream collector
+// Command schemagen builds component schemas from the upstream collector
 // sources.
 //
 // Every collector component ships a metadata.yaml declaring its type, class and
 // per-signal stability. schemagen downloads the core and contrib source
-// archives for a release, reads those files, and writes a catalog JSON that the
+// archives for a release, reads those files, and writes a schema JSON that the
 // linter embeds. Field-level schemas come from the hand-written overlays in
-// catalog/overlays, which are merged on top.
+// schema/overlays, which are merged on top.
 //
 // Usage:
 //
 //	go run ./tools/schemagen -version v0.157.0
-//	go run ./tools/schemagen -version v0.150.0,v0.157.0 -out catalog/data
+//	go run ./tools/schemagen -version v0.150.0,v0.157.0 -out schema/data
 package main
 
 import (
@@ -33,11 +33,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
-// Exit codes: the command either produced catalogs or it did not.
+// Exit codes: the command either produced schemas or it did not.
 const (
 	exitFailure = 1
 	exitUsage   = 2
@@ -63,7 +63,7 @@ var (
 
 // source is one upstream repository to harvest components from.
 type source struct {
-	// name is the distribution label recorded in the catalog.
+	// name is the distribution label recorded in the schema.
 	name string
 	// repo is the GitHub "owner/name" the archive is downloaded from.
 	repo string
@@ -71,7 +71,7 @@ type source struct {
 	module string
 }
 
-// sources lists the upstream repositories a catalog is harvested from.
+// sources lists the upstream repositories a schema is harvested from.
 func sources() []source {
 	return []source{
 		{
@@ -95,9 +95,9 @@ func logf(format string, args ...any) {
 
 func main() {
 	versions := flag.String("version", "", "comma-separated collector releases, e.g. v0.157.0")
-	out := flag.String("out", "catalogs", "directory to write catalogs into")
+	out := flag.String("out", "schemas", "directory to write schemas into")
 	overlays := flag.String("overlays", "overlays", "directory of field-schema overlays")
-	formats := flag.String("formats", "yaml,json", "catalog formats to write")
+	formats := flag.String("formats", "yaml,json", "schema formats to write")
 	cache := flag.String("cache", filepath.Join(os.TempDir(), "otelcol-config-lint-schemagen"),
 		"directory to cache downloaded archives in")
 	timeout := flag.Duration("timeout", downloadTimeout, "per-download timeout")
@@ -137,7 +137,7 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 	}
 
 	for _, v := range versions {
-		v = catalog.Normalize(v)
+		v = schema.Normalize(v)
 
 		cat, err := build(client, v, cacheDir)
 		if err != nil {
@@ -155,11 +155,11 @@ func run(versions []string, outDir, overlayDir, cacheDir string, formats []strin
 	return writeIndex(outDir)
 }
 
-// writeDistributions splits a merged catalog into one file per distribution,
+// writeDistributions splits a merged schema into one file per distribution,
 // under "<out>/<distribution>/<version>.<format>". No union is written: it
 // would be exactly the distributions put back together, and no collector ships
 // it, so checking against one could only hide a component the binary lacks.
-func writeDistributions(outDir string, cat *catalog.Catalog, formats []string) error {
+func writeDistributions(outDir string, cat *schema.Schema, formats []string) error {
 	for _, dist := range distributionsIn(cat) {
 		sub := filterDistribution(cat, dist)
 
@@ -173,7 +173,7 @@ func writeDistributions(outDir string, cat *catalog.Catalog, formats []string) e
 		for _, format := range formats {
 			dest := filepath.Join(dir, sub.CollectorVersion+"."+format)
 
-			err := write(dest, sub, catalog.Format(format))
+			err := write(dest, sub, schema.Format(format))
 			if err != nil {
 				return err
 			}
@@ -185,9 +185,9 @@ func writeDistributions(outDir string, cat *catalog.Catalog, formats []string) e
 	return nil
 }
 
-// distributionsIn returns every distribution any component in the catalog
+// distributionsIn returns every distribution any component in the schema
 // ships in, sorted.
-func distributionsIn(cat *catalog.Catalog) []string {
+func distributionsIn(cat *schema.Schema) []string {
 	seen := map[string]bool{}
 
 	for _, byType := range cat.Components {
@@ -208,12 +208,12 @@ func distributionsIn(cat *catalog.Catalog) []string {
 	return out
 }
 
-// filterDistribution copies the catalog down to the components one
+// filterDistribution copies the schema down to the components one
 // distribution ships.
-func filterDistribution(cat *catalog.Catalog, dist string) *catalog.Catalog {
+func filterDistribution(cat *schema.Schema, dist string) *schema.Schema {
 	out := *cat
 	out.Distribution = dist
-	out.Components = map[config.Kind]map[string]*catalog.Component{}
+	out.Components = map[config.Kind]map[string]*schema.Component{}
 
 	for kind, byType := range cat.Components {
 		for typ, comp := range byType {
@@ -222,7 +222,7 @@ func filterDistribution(cat *catalog.Catalog, dist string) *catalog.Catalog {
 			}
 
 			if out.Components[kind] == nil {
-				out.Components[kind] = map[string]*catalog.Component{}
+				out.Components[kind] = map[string]*schema.Component{}
 			}
 
 			out.Components[kind][typ] = comp
@@ -243,7 +243,7 @@ func writeIndex(outDir string) error {
 		return fmt.Errorf("read %s: %w", outDir, err)
 	}
 
-	idx := &catalog.Index{Distributions: map[string][]string{}}
+	idx := &schema.Index{Distributions: map[string][]string{}}
 
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -259,7 +259,7 @@ func writeIndex(outDir string) error {
 		idx.Distributions[e.Name()] = versions
 	}
 
-	dest := filepath.Join(outDir, catalog.IndexFile)
+	dest := filepath.Join(outDir, schema.IndexFile)
 
 	f, err := os.Create(dest)
 	if err != nil {
@@ -281,13 +281,13 @@ func writeIndex(outDir string) error {
 }
 
 // versionsIn lists the releases a distribution directory holds, in any of the
-// formats a catalog may be written in.
+// formats a schema may be written in.
 func versionsIn(dir string) []string {
 	seen := map[string]bool{}
 
 	var out []string
 
-	for _, ext := range catalog.Extensions() {
+	for _, ext := range schema.Extensions() {
 		names, _ := filepath.Glob(filepath.Join(dir, "*"+ext))
 		for _, n := range names {
 			v := strings.TrimSuffix(filepath.Base(n), ext)
@@ -301,8 +301,8 @@ func versionsIn(dir string) []string {
 	return out
 }
 
-// write serialises a catalog to disk, replacing whatever was there before.
-func write(dest string, cat *catalog.Catalog, format catalog.Format) error {
+// write serialises a schema to disk, replacing whatever was there before.
+func write(dest string, cat *schema.Schema, format schema.Format) error {
 	f, err := os.Create(dest)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
@@ -316,12 +316,12 @@ func write(dest string, cat *catalog.Catalog, format catalog.Format) error {
 	return err
 }
 
-func build(client *http.Client, version, cacheDir string) (*catalog.Catalog, error) {
-	cat := &catalog.Catalog{
+func build(client *http.Client, version, cacheDir string) (*schema.Schema, error) {
+	cat := &schema.Schema{
 		CollectorVersion: version,
 		GeneratedAt:      time.Now().UTC().Format(time.RFC3339),
 		Sources:          map[string]string{},
-		Components:       map[config.Kind]map[string]*catalog.Component{},
+		Components:       map[config.Kind]map[string]*schema.Component{},
 	}
 	for _, src := range sources() {
 		archive, err := fetch(client, src, version, cacheDir)
@@ -402,7 +402,7 @@ func fetch(client *http.Client, src source, version, cacheDir string) (string, e
 	return dest, nil
 }
 
-// metadata is the subset of an upstream metadata.yaml the catalog needs.
+// metadata is the subset of an upstream metadata.yaml the schema needs.
 type metadata struct {
 	Type string `yaml:"type"`
 	// DeprecatedType is the legacy name a renamed component is still
@@ -412,7 +412,7 @@ type metadata struct {
 	Status         struct {
 		Class string `yaml:"class"`
 		// Stability maps a level to the signals at that level, which is the
-		// inverse of how the catalog stores it.
+		// inverse of how the schema stores it.
 		Stability     map[string][]string `yaml:"stability"`
 		Distributions []string            `yaml:"distributions"`
 		Deprecation   map[string]struct {
@@ -423,9 +423,9 @@ type metadata struct {
 }
 
 // harvest reads every metadata.yaml in an archive and adds the components it
-// finds to the catalog. Components already present keep their first definition,
+// finds to the schema. Components already present keep their first definition,
 // so core wins over contrib for the handful of types shipped by both.
-func harvest(cat *catalog.Catalog, src source, archive string) (int, error) {
+func harvest(cat *schema.Schema, src source, archive string) (int, error) {
 	f, err := os.Open(archive)
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", archive, err)
@@ -475,20 +475,20 @@ func harvest(cat *catalog.Catalog, src source, archive string) (int, error) {
 	return count, nil
 }
 
-// entriesWithAlias is how many catalog entries a renamed component produces:
+// entriesWithAlias is how many schema entries a renamed component produces:
 // its current name and the legacy one.
 const entriesWithAlias = 2
 
 // add records a component and, when it was renamed upstream, its legacy name.
-// It returns how many catalog entries it created.
-func add(cat *catalog.Catalog, meta metadata, src source, tarPath string) int {
+// It returns how many schema entries it created.
+func add(cat *schema.Schema, meta metadata, src source, tarPath string) int {
 	comp, kind, ok := convert(meta, src, tarPath)
 	if !ok {
 		return 0
 	}
 
 	if cat.Components[kind] == nil {
-		cat.Components[kind] = map[string]*catalog.Component{}
+		cat.Components[kind] = map[string]*schema.Component{}
 	}
 
 	if _, dup := cat.Components[kind][comp.Type]; dup {
@@ -498,7 +498,7 @@ func add(cat *catalog.Catalog, meta metadata, src source, tarPath string) int {
 	cat.Components[kind][comp.Type] = comp
 
 	// A renamed component stays configurable under its old name, so the
-	// catalog carries both and marks the legacy one deprecated.
+	// schema carries both and marks the legacy one deprecated.
 	if comp.Alias == "" {
 		return 1
 	}
@@ -548,16 +548,16 @@ func configurable(meta metadata, tarPath string) (config.Kind, bool) {
 	return kind, true
 }
 
-func convert(meta metadata, src source, tarPath string) (*catalog.Component, config.Kind, bool) {
+func convert(meta metadata, src source, tarPath string) (*schema.Component, config.Kind, bool) {
 	kind, ok := configurable(meta, tarPath)
 	if !ok {
 		return nil, "", false
 	}
 
-	comp := &catalog.Component{
+	comp := &schema.Component{
 		Type:          meta.Type,
 		Alias:         meta.DeprecatedType,
-		Stability:     map[string]catalog.Stability{},
+		Stability:     map[string]schema.Stability{},
 		Distributions: meta.Status.Distributions,
 		Module:        modulePath(src, tarPath),
 	}
@@ -569,13 +569,13 @@ func convert(meta metadata, src source, tarPath string) (*catalog.Component, con
 
 	for level, entries := range meta.Status.Stability {
 		for _, entry := range entries {
-			comp.Stability[entry] = catalog.Stability(level)
+			comp.Stability[entry] = schema.Stability(level)
 			switch {
 			case entry == "extension":
 				// Extensions have no signals.
 			case strings.Contains(entry, "_to_"):
 				from, to, _ := strings.Cut(entry, "_to_")
-				comp.Pairs = append(comp.Pairs, catalog.Pair{
+				comp.Pairs = append(comp.Pairs, schema.Pair{
 					From: config.Signal(from), To: config.Signal(to),
 				})
 			default:
@@ -650,11 +650,11 @@ func modulePath(src source, tarPath string) string {
 // overlay adds a field schema to a component the upstream metadata cannot
 // describe.
 type overlay struct {
-	Kind       config.Kind    `yaml:"kind"`
-	Type       string         `yaml:"type"`
-	MinVersion string         `yaml:"minVersion"`
-	MaxVersion string         `yaml:"maxVersion"`
-	Fields     *catalog.Field `yaml:"fields"`
+	Kind       config.Kind   `yaml:"kind"`
+	Type       string        `yaml:"type"`
+	MinVersion string        `yaml:"minVersion"`
+	MaxVersion string        `yaml:"maxVersion"`
+	Fields     *schema.Field `yaml:"fields"`
 }
 
 func loadOverlays(dir string) ([]overlay, error) {
@@ -702,13 +702,13 @@ func loadOverlays(dir string) ([]overlay, error) {
 	return out, nil
 }
 
-func applyOverlays(cat *catalog.Catalog, overlays []overlay) {
+func applyOverlays(cat *schema.Schema, overlays []overlay) {
 	for _, o := range overlays {
-		if o.MinVersion != "" && catalog.Compare(cat.CollectorVersion, o.MinVersion) < 0 {
+		if o.MinVersion != "" && schema.Compare(cat.CollectorVersion, o.MinVersion) < 0 {
 			continue
 		}
 
-		if o.MaxVersion != "" && catalog.Compare(cat.CollectorVersion, o.MaxVersion) > 0 {
+		if o.MaxVersion != "" && schema.Compare(cat.CollectorVersion, o.MaxVersion) > 0 {
 			continue
 		}
 

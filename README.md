@@ -20,7 +20,7 @@ config.yaml:29:30: error: service.extensions references "pprof" which is not dec
 ```
 
 No collector binary, no network access and no Go toolchain are needed at lint
-time: the component catalogs are compiled into the binary.
+time: the component schemas are compiled into the binary.
 
 ## Install
 
@@ -51,7 +51,7 @@ otelcol-config-lint version
 | --- | --- |
 | `run` | lint the given files, directories, or `-` for stdin |
 | `list rules` | the rules and their default severities, `--disable`/`--severity` applied |
-| `list versions` | the catalog versions available, honouring `--catalog-location` |
+| `list versions` | the schema versions available, honouring `--schema-location` |
 | `version` | print the linter version (also available as `--version`) |
 
 The flags below belong to `run`:
@@ -59,10 +59,10 @@ The flags below belong to `run`:
 | Flag | Meaning |
 | --- | --- |
 | `--collector-version` | release to validate against, e.g. `v0.157.0` (default `latest`) |
-| `--catalog-location` | where to find catalogs: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
+| `--schema-location` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
 | `--output` | `text`, `json`, `junit`, `tap` or `github` |
 | `--strict` | unknown component settings become errors instead of warnings |
-| `--ignore-missing-schemas` | do not fail on components absent from the catalog (custom distributions) |
+| `--ignore-missing-schemas` | do not fail on components absent from the schema (custom distributions) |
 | `--min-severity` | lowest severity to report: `error`, `warning`, `info` |
 | `--fail-on` | severity that makes a file invalid (default `error`) |
 | `--disable` | comma-separated rules to turn off |
@@ -99,8 +99,8 @@ disable:
   - missing-batch
 severity:
   missing-memory-limiter: warning
-catalogLocations:
-  - ./catalogs      # this project's own catalogs first
+schemaLocations:
+  - ./schemas      # this project's own schemas first
   - default         # then the built-in ones
 ```
 
@@ -129,13 +129,13 @@ left alone.
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `insecure-tls`.
 
-## Catalogs
+## Schemas
 
-[`catalogs/`](catalogs) holds one file per collector release per distribution,
+[`schemas/`](schemas) holds one file per collector release per distribution,
 in both YAML (the readable form, meant to be reviewed in pull requests) and
 JSON. They are
 generated from the `metadata.yaml` that every upstream component ships, across
-**both core and contrib**, split into one catalog per distribution:
+**both core and contrib**, split into one schema per distribution:
 `contrib` (323 components for v0.157.0, the default), `core` (32), `k8s` (83)
 and `otlp` (5).
 
@@ -154,29 +154,29 @@ components:
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
 ```
 
-Because the catalogs sit at the repository root, they can be consumed without
+Because the schemas sit at the repository root, they can be consumed without
 installing or cloning anything:
 
 ```sh
-otelcol-config-lint run --catalog-location \
-  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs \
+otelcol-config-lint run --schema-location \
+  https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/schemas \
   config.yaml
 ```
 
 A location is a registry directory or URL (one holding `index.json`, laid out
 as `<distribution>/<version>.<ext>`), a `{{.Version}}`/`{{.Distribution}}`
 template naming a single file, or `default` for the built-ins. Repeat the flag
-to search several in order, so a private distribution's catalog can take
+to search several in order, so a private distribution's schema can take
 precedence over the public ones.
 
 ### Adding a release
 
 ```sh
-make catalogs VERSIONS=v0.158.0
+make schemas VERSIONS=v0.158.0
 ```
 
 `tools/schemagen` downloads the core and contrib source archives for the tag,
-reads every `metadata.yaml`, and writes `catalogs/<distribution>/<version>.yaml`
+reads every `metadata.yaml`, and writes `schemas/<distribution>/<version>.yaml`
 and `.json` plus the `index.json` listing them. It needs no collector
 dependencies, so the linter itself stays a two-package build.
 
@@ -189,7 +189,7 @@ deprecated alias. Both resolve, and using the old name reports
 
 `metadata.yaml` describes components but not their settings, so field-level
 schemas come from hand-written overlays in [`overlays/`](overlays), merged into
-the catalog at generation time:
+the schema at generation time:
 
 ```yaml
 kind: processor
@@ -212,13 +212,13 @@ pkg/cmd/otelcol-config-lint/  the cobra command: flags, settings files, reportin
 pkg/scanner/              expands the given paths into the files to lint
 pkg/sets/                 a set built on a map, in the shape of k8s.io/apimachinery
 pkg/config/               YAML parsing that keeps positions, so findings have line numbers
-pkg/catalog/              catalog types, version resolution and location lookup
+pkg/schema/              schema types, version resolution and location lookup
 pkg/rule/                 the rules and the registry
 pkg/lint/                 the engine and the output formatters
 pkg/diag/                 diagnostics, severities and positions
-catalogs/                 generated per-release catalogs (yaml + json), embedded
+schemas/                 generated per-release schemas (yaml + json), embedded
 overlays/                 hand-written field schemas
-tools/schemagen/          catalog generator
+tools/schemagen/          schema generator
 ```
 
 ## Development
@@ -228,7 +228,7 @@ make test            # go test -race with coverage
 make lint            # golangci-lint
 make build           # ./bin/otelcol-config-lint
 make build-snapshot  # every release target, the way CI builds them
-make catalogs VERSIONS=v0.158.0
+make schemas VERSIONS=v0.158.0
 ```
 
 CI runs the tests with coverage reported on the pull request, builds every

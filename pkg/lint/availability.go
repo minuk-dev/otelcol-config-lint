@@ -3,15 +3,15 @@ package lint
 import (
 	"sync"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // VersionIndex answers which collector releases ship a component type, by
-// consulting every catalog a store can serve. It is built on first use, so runs
+// consulting every schema a store can serve. It is built on first use, so runs
 // that never hit an unknown component pay nothing for it.
 type VersionIndex struct {
-	store catalog.Store
+	store schema.Store
 
 	once  sync.Once
 	byKey map[versionKey][]string
@@ -22,12 +22,12 @@ type versionKey struct {
 	typ  string
 }
 
-// NewVersionIndex returns an index over the catalogs in store.
-func NewVersionIndex(store catalog.Store) *VersionIndex {
+// NewVersionIndex returns an index over the schemas in store.
+func NewVersionIndex(store schema.Store) *VersionIndex {
 	return &VersionIndex{store: store, once: sync.Once{}, byKey: nil}
 }
 
-// Versions returns the catalog versions containing the component, oldest first.
+// Versions returns the schema versions containing the component, oldest first.
 func (v *VersionIndex) Versions(k config.Kind, typ string) []string {
 	v.once.Do(v.build)
 

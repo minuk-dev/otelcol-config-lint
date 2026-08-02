@@ -8,9 +8,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // Rule is a single check run against a parsed config.
@@ -30,9 +30,9 @@ type Rule interface {
 type Context struct {
 	// File is the parsed config being checked.
 	File *config.File
-	// Catalog describes the collector release being targeted. It is never nil,
-	// but may be empty when no catalog could be resolved.
-	Catalog *catalog.Catalog
+	// Schema describes the collector release being targeted. It is never nil,
+	// but may be empty when no schema could be resolved.
+	Schema *schema.Schema
 	// Index resolves references between the service block and declarations.
 	Index *Index
 	// Avail reports which other releases ship a component. It may be nil.

@@ -1,4 +1,4 @@
-package catalog_test
+package schema_test
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 func TestCompare(t *testing.T) {
@@ -27,7 +27,7 @@ func TestCompare(t *testing.T) {
 		{"v1.0.0", "v0.999.0", 1},
 		{"v0.157.0-rc.1", "v0.157.0", -1},
 	} {
-		got := catalog.Compare(tt.a, tt.b)
+		got := schema.Compare(tt.a, tt.b)
 		if sign(got) != tt.want {
 			t.Errorf("Compare(%q, %q) = %d, want sign %d", tt.a, tt.b, got, tt.want)
 		}
@@ -54,29 +54,29 @@ func TestNormalize(t *testing.T) {
 		{" 0.157.0", "v0.157.0"}, // leading space is trimmed
 		{"latest", "latest"},
 	} {
-		if got := catalog.Normalize(tt.in); got != tt.want {
+		if got := schema.Normalize(tt.in); got != tt.want {
 			t.Errorf("Normalize(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }
 
-func TestEmbeddedCatalogsLoad(t *testing.T) {
+func TestEmbeddedSchemasLoad(t *testing.T) {
 	t.Parallel()
 
-	var store catalog.Store
+	var store schema.Store
 
 	versions := store.Versions()
 	if len(versions) == 0 {
-		t.Fatal("no catalogs are embedded")
+		t.Fatal("no schemas are embedded")
 	}
 
 	for i := 1; i < len(versions); i++ {
-		if catalog.Compare(versions[i-1], versions[i]) <= 0 {
+		if schema.Compare(versions[i-1], versions[i]) <= 0 {
 			t.Fatalf("versions are not sorted newest first: %v", versions)
 		}
 	}
 
-	latest, err := store.Load(catalog.Latest)
+	latest, err := store.Load(schema.Latest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestEmbeddedCatalogsLoad(t *testing.T) {
 	}
 
 	if latest.Count() < 100 {
-		t.Errorf("catalog looks too small: %d components", latest.Count())
+		t.Errorf("schema looks too small: %d components", latest.Count())
 	}
 
 	if _, ok := latest.Lookup(config.KindReceiver, "otlp"); !ok {
@@ -97,16 +97,16 @@ func TestEmbeddedCatalogsLoad(t *testing.T) {
 func TestUnknownVersionSuggestsTheNearestOlder(t *testing.T) {
 	t.Parallel()
 
-	var store catalog.Store
+	var store schema.Store
 
 	_, err := store.Load("v0.115.0")
 	if err == nil {
-		t.Fatal("want an error for a version with no catalog")
+		t.Fatal("want an error for a version with no schema")
 	}
 
-	var unknown *catalog.UnknownVersionError
+	var unknown *schema.UnknownVersionError
 	if !errors.As(err, &unknown) {
-		t.Fatalf("want *catalog.UnknownVersionError, got %T", err)
+		t.Fatalf("want *schema.UnknownVersionError, got %T", err)
 	}
 
 	near, found := unknown.Nearest()
@@ -114,7 +114,7 @@ func TestUnknownVersionSuggestsTheNearestOlder(t *testing.T) {
 		t.Fatal("want a nearest version")
 	}
 
-	if catalog.Compare(near, "v0.115.0") > 0 {
+	if schema.Compare(near, "v0.115.0") > 0 {
 		t.Errorf("nearest %q is newer than the request", near)
 	}
 }
@@ -126,7 +126,7 @@ func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 	write(t, filepath.Join(dir, "v0.157.0.json"),
 		`{"collectorVersion":"v0.157.0","components":{"receiver":{"custom":{"type":"custom","signals":["logs"]}}}}`)
 
-	store := catalog.Store{Locations: []string{dir, catalog.Default}}
+	store := schema.Store{Locations: []string{dir, schema.Default}}
 
 	cat, err := store.Load("v0.157.0")
 	if err != nil {
@@ -134,13 +134,13 @@ func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 	}
 
 	if cat.Count() != 1 {
-		t.Errorf("want the local catalog, got %d components", cat.Count())
+		t.Errorf("want the local schema, got %d components", cat.Count())
 	}
 
 	// Versions not present locally still fall through to the built-ins.
 	_, err = store.Load("v0.110.0")
 	if err != nil {
-		t.Errorf("fallthrough to the embedded catalogs failed: %v", err)
+		t.Errorf("fallthrough to the embedded schemas failed: %v", err)
 	}
 }
 
@@ -151,7 +151,7 @@ func TestTemplateLocation(t *testing.T) {
 	write(t, filepath.Join(dir, "otel-v0.150.0.json"),
 		`{"collectorVersion":"v0.150.0","components":{}}`)
 
-	store := catalog.Store{Locations: []string{filepath.Join(dir, "otel-{{.Version}}.json")}}
+	store := schema.Store{Locations: []string{filepath.Join(dir, "otel-{{.Version}}.json")}}
 
 	cat, err := store.Load("v0.150.0")
 	if err != nil {
@@ -159,7 +159,7 @@ func TestTemplateLocation(t *testing.T) {
 	}
 
 	if cat.CollectorVersion != "v0.150.0" {
-		t.Errorf("unexpected catalog: %+v", cat)
+		t.Errorf("unexpected schema: %+v", cat)
 	}
 }
 
@@ -177,7 +177,7 @@ func TestRemoteLocation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := catalog.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}}
+	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}}
 
 	_, err := store.Load("v0.140.0")
 	if err != nil {
@@ -199,7 +199,7 @@ const (
 	latestVersion = "v0.157.0"
 )
 
-// registry writes a registry root: an index plus one catalog per distribution.
+// registry writes a registry root: an index plus one schema per distribution.
 // "core" carries otlp alone, so filelog is the component that distinguishes the
 // distributions from each other.
 func registry(t *testing.T, root string) {
@@ -210,7 +210,7 @@ func registry(t *testing.T, root string) {
 		both = otlp + `,"filelog":{"type":"filelog","signals":["logs"]}`
 	)
 
-	write(t, filepath.Join(root, catalog.IndexFile),
+	write(t, filepath.Join(root, schema.IndexFile),
 		`{"distributions":{"core":["v0.157.0"],"contrib":["v0.157.0"]}}`)
 
 	for dist, comps := range map[string]string{
@@ -237,7 +237,7 @@ func TestRegistryDirectorySelectsTheDistribution(t *testing.T) {
 	registry(t, root)
 
 	for dist, want := range map[string]int{"": 2, distCore: 1, distContrib: 2} {
-		store := catalog.Store{Locations: []string{root}, Distribution: dist}
+		store := schema.Store{Locations: []string{root}, Distribution: dist}
 
 		cat, err := store.Load("v0.157.0")
 		if err != nil {
@@ -263,7 +263,7 @@ func TestRegistryDirectoryEnumeratesFromTheIndex(t *testing.T) {
 	root := t.TempDir()
 	registry(t, root)
 
-	store := catalog.Store{Locations: []string{root}}
+	store := schema.Store{Locations: []string{root}}
 	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
 		t.Errorf("Versions() = %v, want [%s]", got, latestVersion)
 	}
@@ -274,7 +274,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/" + catalog.IndexFile:
+		case "/" + schema.IndexFile:
 			_, _ = w.Write([]byte(`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`))
 		case "/core/v0.157.0.yaml":
 			_, _ = w.Write([]byte("collectorVersion: v0.157.0\ndistribution: core\ncomponents: {}\n"))
@@ -284,7 +284,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := catalog.Store{Locations: []string{srv.URL}, Distribution: distCore}
+	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore}
 
 	cat, err := store.Load("v0.157.0")
 	if err != nil {
@@ -292,7 +292,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 	}
 
 	if cat.Distribution != distCore {
-		t.Errorf("unexpected catalog: %+v", cat)
+		t.Errorf("unexpected schema: %+v", cat)
 	}
 
 	if got := store.Versions(); len(got) != 1 || got[0] != "v0.157.0" {
@@ -301,7 +301,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 }
 
 // TestIndexVersionsArePerDistribution pins that a distribution is never told
-// about a release it has no catalog for. Coverage really does differ: upstream
+// about a release it has no schema for. Coverage really does differ: upstream
 // had no otlp distribution before v0.120.0, and a version listed but not
 // servable poisons "latest" and the nearest-version fallback too.
 func TestIndexVersionsArePerDistribution(t *testing.T) {
@@ -310,40 +310,40 @@ func TestIndexVersionsArePerDistribution(t *testing.T) {
 	root := t.TempDir()
 	registry(t, root)
 
-	write(t, filepath.Join(root, catalog.IndexFile),
+	write(t, filepath.Join(root, schema.IndexFile),
 		`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`)
 
-	store := catalog.Store{Locations: []string{root}, Distribution: distCore}
+	store := schema.Store{Locations: []string{root}, Distribution: distCore}
 	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
 		t.Errorf("Versions() = %v, want only the release core has", got)
 	}
 
-	if got := (catalog.Store{Locations: []string{root}}).Versions(); len(got) != 2 {
+	if got := (schema.Store{Locations: []string{root}}).Versions(); len(got) != 2 {
 		t.Errorf("the default distribution should see both releases, got %v", got)
 	}
 }
 
 // TestTheBuiltInsRefuseAnotherDistribution pins that the embedded default is
 // never passed off as another distribution. "default" is also the usual
-// fallback in a repeated --catalog-location, so widening here would let a
+// fallback in a repeated --schema-location, so widening here would let a
 // contrib-only component pass a core check.
 func TestTheBuiltInsRefuseAnotherDistribution(t *testing.T) {
 	t.Parallel()
 
-	store := catalog.Store{Distribution: distCore}
+	store := schema.Store{Distribution: distCore}
 
 	_, err := store.Load(latestVersion)
 	if err == nil {
 		t.Fatal("the built-ins hold only the default distribution, so core must not resolve")
 	}
 
-	_, err = (catalog.Store{}).Load(latestVersion)
+	_, err = (schema.Store{}).Load(latestVersion)
 	if err != nil {
 		t.Errorf("the default distribution should still resolve: %v", err)
 	}
 }
 
-// TestRemoteFileLocation pins that a URL naming one catalog outright is read as
+// TestRemoteFileLocation pins that a URL naming one schema outright is read as
 // that file, not walked as a registry root.
 func TestRemoteFileLocation(t *testing.T) {
 	t.Parallel()
@@ -353,7 +353,7 @@ func TestRemoteFileLocation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asked = append(asked, r.URL.Path)
 
-		if r.URL.Path != "/catalogs/v0.157.0.yaml" {
+		if r.URL.Path != "/schemas/v0.157.0.yaml" {
 			w.WriteHeader(http.StatusNotFound)
 
 			return
@@ -363,7 +363,7 @@ func TestRemoteFileLocation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := catalog.Store{Locations: []string{srv.URL + "/catalogs/v0.157.0.yaml"}}
+	store := schema.Store{Locations: []string{srv.URL + "/schemas/v0.157.0.yaml"}}
 
 	_, err := store.Load("v0.157.0")
 	if err != nil {
@@ -388,7 +388,7 @@ func TestDistributionPlaceholderInATemplate(t *testing.T) {
 	write(t, filepath.Join(dir, distCore, "v0.150.0.json"),
 		`{"collectorVersion":"v0.150.0","distribution":"core","components":{}}`)
 
-	store := catalog.Store{
+	store := schema.Store{
 		Locations:    []string{filepath.Join(dir, "{{.Distribution}}", "{{.Version}}.json")},
 		Distribution: distCore,
 	}
@@ -399,16 +399,16 @@ func TestDistributionPlaceholderInATemplate(t *testing.T) {
 	}
 
 	if cat.Distribution != distCore {
-		t.Errorf("unexpected catalog: %+v", cat)
+		t.Errorf("unexpected schema: %+v", cat)
 	}
 }
 
 func TestAliasesAreMarkedDeprecated(t *testing.T) {
 	t.Parallel()
 
-	var store catalog.Store
+	var store schema.Store
 
-	cat, err := store.Load(catalog.Latest)
+	cat, err := store.Load(schema.Latest)
 	if err != nil {
 		t.Fatal(err)
 	}
