@@ -225,7 +225,7 @@ func TestDisableAndSeverityOverrides(t *testing.T) {
 	}
 }
 
-func TestCollectorVersionSelectsTheCatalog(t *testing.T) {
+func TestCollectorVersionSelectsTheSchema(t *testing.T) {
 	t.Parallel()
 
 	// The logging exporter was removed upstream, so it is valid in v0.110.0
@@ -256,17 +256,17 @@ func TestUnknownVersionFallsBackToTheNearestOlder(t *testing.T) {
 	}
 }
 
-func TestCatalogLocationOverridesTheBuiltins(t *testing.T) {
+func TestSchemaLocationOverridesTheBuiltins(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 
 	const component = `{"custom":{"type":"custom","signals":["logs"]}}`
 
-	catalogJSON := `{"collectorVersion":"v9.9.9","components":` +
+	schemaJSON := `{"collectorVersion":"v9.9.9","components":` +
 		`{"receiver":` + component + `,"exporter":` + component + `}}`
 
-	err := os.WriteFile(filepath.Join(dir, "v9.9.9.json"), []byte(catalogJSON), 0o600)
+	err := os.WriteFile(filepath.Join(dir, "v9.9.9.json"), []byte(schemaJSON), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,9 +275,9 @@ func TestCatalogLocationOverridesTheBuiltins(t *testing.T) {
 		"service:\n  pipelines:\n    logs:\n      receivers: [custom]\n      exporters: [custom]\n"
 
 	code, out, errOut := lint(t, src,
-		"--catalog-location", dir, "--collector-version", "v9.9.9", "--min-severity", "error", "-")
+		"--schema-location", dir, "--collector-version", "v9.9.9", "--min-severity", "error", "-")
 	if code != 0 {
-		t.Errorf("a project catalog should be honoured, got exit %d:\n%s%s", code, out, errOut)
+		t.Errorf("a project schema should be honoured, got exit %d:\n%s%s", code, out, errOut)
 	}
 }
 
@@ -470,27 +470,27 @@ func TestListRulesHonoursTheSeverityFlags(t *testing.T) {
 	}
 }
 
-// TestListVersionsHonoursTheCatalogLocation pins that the subcommand reports
-// the catalogs the run would actually use, not only the built-in ones.
-func TestListVersionsHonoursTheCatalogLocation(t *testing.T) {
+// TestListVersionsHonoursTheSchemaLocation pins that the subcommand reports
+// the schemas the run would actually use, not only the built-in ones.
+func TestListVersionsHonoursTheSchemaLocation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 
-	catalogJSON := `{"collectorVersion":"v9.9.9","components":{}}`
+	schemaJSON := `{"collectorVersion":"v9.9.9","components":{}}`
 
-	err := os.WriteFile(filepath.Join(dir, "v9.9.9.json"), []byte(catalogJSON), 0o600)
+	err := os.WriteFile(filepath.Join(dir, "v9.9.9.json"), []byte(schemaJSON), 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	code, out, errOut := run(t, "", "list", "versions", "--catalog-location", dir)
+	code, out, errOut := run(t, "", "list", "versions", "--schema-location", dir)
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
 
 	if !strings.Contains(out, "v9.9.9") {
-		t.Errorf("a project catalog should be listed:\n%s", out)
+		t.Errorf("a project schema should be listed:\n%s", out)
 	}
 }
 

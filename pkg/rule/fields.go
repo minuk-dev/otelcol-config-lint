@@ -7,9 +7,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/catalog"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // fieldRules check component settings against their field schema.
@@ -33,7 +33,7 @@ const (
 	typeList = "list"
 )
 
-// fieldWalker validates a component's settings against its catalog schema.
+// fieldWalker validates a component's settings against its schema schema.
 // Each rule supplies the callbacks it cares about and ignores the rest.
 type fieldWalker struct {
 	ctx        *Context
@@ -44,10 +44,10 @@ type fieldWalker struct {
 }
 
 // walkComponents validates every declared component that has a field schema.
-// Components without one are skipped entirely, so partial catalog coverage
+// Components without one are skipped entirely, so partial schema coverage
 // never produces false positives.
 func (w fieldWalker) walkComponents() {
-	if !w.ctx.catalogReady() {
+	if !w.ctx.schemaReady() {
 		return
 	}
 
@@ -58,7 +58,7 @@ func (w fieldWalker) walkComponents() {
 		}
 
 		for _, c := range sec.Components {
-			comp, ok := w.ctx.Catalog.Lookup(kind, c.ID.Type)
+			comp, ok := w.ctx.Schema.Lookup(kind, c.ID.Type)
 			if !ok || comp.Fields == nil {
 				continue
 			}
@@ -68,7 +68,7 @@ func (w fieldWalker) walkComponents() {
 	}
 }
 
-func (w fieldWalker) walk(schema *catalog.Field, node *yaml.Node, path string) {
+func (w fieldWalker) walk(schema *schema.Field, node *yaml.Node, path string) {
 	if schema == nil || node == nil {
 		return
 	}
@@ -101,7 +101,7 @@ func (w fieldWalker) walk(schema *catalog.Field, node *yaml.Node, path string) {
 }
 
 // walkMap validates a mapping's keys against the schema's children.
-func (w fieldWalker) walkMap(schema *catalog.Field, node *yaml.Node, path string) {
+func (w fieldWalker) walkMap(schema *schema.Field, node *yaml.Node, path string) {
 	if node.Kind != yaml.MappingNode {
 		return
 	}
@@ -130,7 +130,7 @@ func (w fieldWalker) walkMap(schema *catalog.Field, node *yaml.Node, path string
 
 // walkList validates every element against the schema's "item" child, which is
 // how a list schema describes what it holds.
-func (w fieldWalker) walkList(schema *catalog.Field, node *yaml.Node, path string) {
+func (w fieldWalker) walkList(schema *schema.Field, node *yaml.Node, path string) {
 	if node.Kind != yaml.SequenceNode {
 		return
 	}
@@ -145,7 +145,7 @@ func (w fieldWalker) walkList(schema *catalog.Field, node *yaml.Node, path strin
 	}
 }
 
-func (w fieldWalker) checkRequired(schema *catalog.Field, present map[string]bool, node *yaml.Node, path string) {
+func (w fieldWalker) checkRequired(schema *schema.Field, present map[string]bool, node *yaml.Node, path string) {
 	if w.onRequired == nil {
 		return
 	}
@@ -158,7 +158,7 @@ func (w fieldWalker) checkRequired(schema *catalog.Field, present map[string]boo
 }
 
 // checkType reports a type mismatch and returns whether it is safe to descend.
-func (w fieldWalker) checkType(schema *catalog.Field, node *yaml.Node, path string) bool {
+func (w fieldWalker) checkType(schema *schema.Field, node *yaml.Node, path string) bool {
 	if schema.Type == "" {
 		return true
 	}
@@ -186,7 +186,7 @@ func (w fieldWalker) checkType(schema *catalog.Field, node *yaml.Node, path stri
 	return true
 }
 
-func matchesType(schema *catalog.Field, node *yaml.Node) bool {
+func matchesType(schema *schema.Field, node *yaml.Node) bool {
 	switch schema.Type {
 	case typeMap:
 		return node.Kind == yaml.MappingNode
@@ -207,7 +207,7 @@ func matchesType(schema *catalog.Field, node *yaml.Node) bool {
 	}
 }
 
-func describeType(schema *catalog.Field) string {
+func describeType(schema *schema.Field) string {
 	switch schema.Type {
 	case "duration":
 		return "a duration such as 5s, 200ms or 1m30s"

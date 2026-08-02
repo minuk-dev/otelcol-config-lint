@@ -36,7 +36,7 @@ linters:
         # Option and result structs are meant to be partially set, with the
         # zero value carrying the default behaviour.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|FormatterOptions|Result|Summary)'
-        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/catalog\.(Store|Catalog|Component|Field)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/schema\.(Store|Schema|Component|Field)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'
         # cobra.Command has some forty fields and its zero values are the
         # defaults every command wants; each one sets only what it changes.
@@ -64,7 +64,7 @@ linters:
         # Receivers and idiomatic short names for tightly scoped values.
         - a # comparison operands
         - b
-        - c # catalog, component, context
+        - c # schema, component, context
         - d # diagnostic
         - e # entry
         - f # file, formatter, field
