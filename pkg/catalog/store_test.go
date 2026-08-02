@@ -195,6 +195,9 @@ const (
 	distAll     = "all"
 	distCore    = "core"
 	distContrib = "contrib"
+
+	// latestVersion is the release the registry helper publishes.
+	latestVersion = "v0.157.0"
 )
 
 // registry writes a registry root: an index plus one catalog per distribution.
@@ -209,7 +212,7 @@ func registry(t *testing.T, root string) {
 	)
 
 	write(t, filepath.Join(root, catalog.IndexFile),
-		`{"distributions":["all","core","contrib"],"versions":["v0.157.0"]}`)
+		`{"distributions":{"all":["v0.157.0"],"core":["v0.157.0"],"contrib":["v0.157.0"]}}`)
 
 	for dist, comps := range map[string]string{
 		distAll:     both,
@@ -263,8 +266,8 @@ func TestRegistryDirectoryEnumeratesFromTheIndex(t *testing.T) {
 	registry(t, root)
 
 	store := catalog.Store{Locations: []string{root}}
-	if got := store.Versions(); len(got) != 1 || got[0] != "v0.157.0" {
-		t.Errorf("Versions() = %v, want [v0.157.0]", got)
+	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
+		t.Errorf("Versions() = %v, want [%s]", got, latestVersion)
 	}
 }
 
@@ -274,7 +277,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/" + catalog.IndexFile:
-			_, _ = w.Write([]byte(`{"distributions":["all","core"],"versions":["v0.157.0"]}`))
+			_, _ = w.Write([]byte(`{"distributions":{"all":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`))
 		case "/core/v0.157.0.yaml":
 			_, _ = w.Write([]byte("collectorVersion: v0.157.0\ndistribution: core\ncomponents: {}\n"))
 		default:
@@ -296,6 +299,81 @@ func TestRemoteRegistryRoot(t *testing.T) {
 
 	if got := store.Versions(); len(got) != 1 || got[0] != "v0.157.0" {
 		t.Errorf("Versions() = %v, want [v0.157.0] from the index", got)
+	}
+}
+
+// TestIndexVersionsArePerDistribution pins that a distribution is never told
+// about a release it has no catalog for. Coverage really does differ: upstream
+// had no otlp distribution before v0.120.0, and a version listed but not
+// servable poisons "latest" and the nearest-version fallback too.
+func TestIndexVersionsArePerDistribution(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	registry(t, root)
+
+	write(t, filepath.Join(root, catalog.IndexFile),
+		`{"distributions":{"all":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`)
+
+	store := catalog.Store{Locations: []string{root}, Distribution: distCore}
+	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
+		t.Errorf("Versions() = %v, want only the release core has", got)
+	}
+
+	if got := (catalog.Store{Locations: []string{root}}).Versions(); len(got) != 2 {
+		t.Errorf("all should still see both releases, got %v", got)
+	}
+}
+
+// TestTheBuiltInsRefuseANarrowerDistribution pins that the embedded union is
+// never passed off as a narrower distribution. "default" is also the usual
+// fallback in a repeated --catalog-location, so widening here would let a
+// contrib-only component pass a core check.
+func TestTheBuiltInsRefuseANarrowerDistribution(t *testing.T) {
+	t.Parallel()
+
+	store := catalog.Store{Distribution: distCore}
+
+	_, err := store.Load(latestVersion)
+	if err == nil {
+		t.Fatal("the built-ins hold only the union, so core must not resolve")
+	}
+
+	_, err = (catalog.Store{}).Load(latestVersion)
+	if err != nil {
+		t.Errorf("the union should still resolve: %v", err)
+	}
+}
+
+// TestRemoteFileLocation pins that a URL naming one catalog outright is read as
+// that file, not walked as a registry root.
+func TestRemoteFileLocation(t *testing.T) {
+	t.Parallel()
+
+	var asked []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.Path)
+
+		if r.URL.Path != "/catalogs/v0.157.0.yaml" {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+
+		_, _ = w.Write([]byte("collectorVersion: v0.157.0\ncomponents: {}\n"))
+	}))
+	defer srv.Close()
+
+	store := catalog.Store{Locations: []string{srv.URL + "/catalogs/v0.157.0.yaml"}}
+
+	_, err := store.Load("v0.157.0")
+	if err != nil {
+		t.Fatalf("%v (requested %v)", err, asked)
+	}
+
+	if len(asked) != 1 {
+		t.Errorf("want one request for the named file, got %v", asked)
 	}
 }
 

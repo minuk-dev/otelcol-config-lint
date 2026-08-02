@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"sort"
 )
 
@@ -20,10 +19,29 @@ const AllDistributions = "all"
 // Index lists what a registry can serve. A directory can be listed to work that
 // out, but a remote registry cannot, so it publishes the answer as a file.
 type Index struct {
-	// Distributions are the binaries the registry has catalogs for.
-	Distributions []string `json:"distributions"`
-	// Versions are the collector releases it has catalogs for, newest first.
-	Versions []string `json:"versions"`
+	// Distributions maps each distribution to the releases it has a catalog
+	// for, newest first. Coverage differs between them: upstream had no otlp
+	// distribution before v0.120.0, so asking a flat list of versions what the
+	// otlp registry holds would name releases it cannot serve.
+	Distributions map[string][]string `json:"distributions"`
+}
+
+// Names returns the distributions the index covers, sorted.
+func (i *Index) Names() []string {
+	out := make([]string, 0, len(i.Distributions))
+	for name := range i.Distributions {
+		out = append(out, name)
+	}
+
+	sort.Strings(out)
+
+	return out
+}
+
+// Versions returns the releases one distribution has catalogs for, newest
+// first. An unknown distribution has none.
+func (i *Index) Versions(distribution string) []string {
+	return i.Distributions[distribution]
 }
 
 // ReadIndex decodes a registry index.
@@ -72,14 +90,17 @@ func (i *Index) Write(w io.Writer) error {
 	return nil
 }
 
-// Sort puts the index in its canonical order: distributions alphabetically,
-// versions newest first, so a regenerated index diffs cleanly.
+// Sort puts each distribution's versions newest first, so a regenerated index
+// diffs cleanly.
 func (i *Index) Sort() {
-	sort.Strings(i.Distributions)
-	sort.Slice(i.Versions, func(a, b int) bool { return Compare(i.Versions[a], i.Versions[b]) > 0 })
+	for _, versions := range i.Distributions {
+		sort.Slice(versions, func(a, b int) bool { return Compare(versions[a], versions[b]) > 0 })
+	}
 }
 
-// Has reports whether the index lists a distribution.
+// Has reports whether the index covers a distribution.
 func (i *Index) Has(distribution string) bool {
-	return slices.Contains(i.Distributions, distribution)
+	_, ok := i.Distributions[distribution]
+
+	return ok
 }

@@ -18,8 +18,12 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/catalogs"
 )
 
-// extensions returns the catalog file suffixes, in preference order.
-func extensions() []string { return []string{".yaml", ".yml", ".json"} }
+// Extensions returns the catalog file suffixes, in preference order. The
+// readable form comes first, so a location carrying both serves the YAML.
+func Extensions() []string { return []string{".yaml", ".yml", ".json"} }
+
+// extensions is the unexported spelling used throughout this package.
+func extensions() []string { return Extensions() }
 
 // Latest selects the newest catalog available in a store.
 const Latest = "latest"
@@ -144,11 +148,11 @@ func (s Store) versionsAt(loc string) []string {
 			return nil
 		}
 
-		return idx.Versions
+		return idx.Versions(s.distribution())
 	case locDir:
 		idx, err := ReadIndexFile(filepath.Join(loc, IndexFile))
 		if err == nil {
-			return idx.Versions
+			return idx.Versions(s.distribution())
 		}
 
 		return flatVersions(loc)
@@ -212,6 +216,13 @@ var (
 func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 	switch kindOf(loc) {
 	case locEmbedded:
+		// Only the union is embedded, so any other distribution has to come
+		// from a location that actually carries it. Answering with the union
+		// would silently widen a narrower request.
+		if s.distribution() != AllDistributions {
+			return nil, errNotFound
+		}
+
 		for _, ext := range extensions() {
 			f, err := catalogs.FS.Open(path.Join(AllDistributions, version+ext))
 			if err != nil {
@@ -226,18 +237,8 @@ func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 		return nil, errNotFound
 	case locRemote:
 		return s.loadFromRegistry(loc, version, s.fetch)
-	case locTemplate:
-		target := s.resolve(loc, version)
-		if isRemote(target) {
-			return s.fetch(target)
-		}
-
-		_, err := os.Stat(target)
-		if err != nil {
-			return nil, errNotFound
-		}
-
-		return ReadFile(target)
+	case locTemplate, locFile:
+		return s.loadOne(s.resolve(loc, version))
 	default:
 		// A directory holding an index is a registry root, laid out by
 		// distribution. Without one it is the flat legacy layout.
@@ -247,6 +248,15 @@ func (s Store) loadFrom(loc, version string) (*Catalog, error) {
 
 		return loadFlat(loc, version)
 	}
+}
+
+// loadOne reads a location that names a single catalog, local or remote.
+func (s Store) loadOne(target string) (*Catalog, error) {
+	if isRemote(target) {
+		return s.fetch(target)
+	}
+
+	return readLocal(target)
 }
 
 // loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", preferring
@@ -369,9 +379,16 @@ func (s Store) get(url string) (io.ReadCloser, error) {
 type locKind int
 
 const (
+	// locDir is a local directory: a registry root when it carries an index,
+	// otherwise the flat layout.
 	locDir locKind = iota
+	// locEmbedded is the catalogs built into the binary.
 	locEmbedded
+	// locTemplate is a path or URL with placeholders, naming one file.
 	locTemplate
+	// locFile is a path or URL naming one catalog file outright.
+	locFile
+	// locRemote is a remote registry root.
 	locRemote
 )
 
@@ -381,6 +398,8 @@ func kindOf(loc string) locKind {
 		return locEmbedded
 	case strings.Contains(loc, VersionPlaceholder), strings.Contains(loc, DistributionPlaceholder):
 		return locTemplate
+	case trimExt(path.Base(loc)) != "":
+		return locFile
 	case isRemote(loc):
 		return locRemote
 	default:
@@ -394,6 +413,8 @@ func (s Store) resolve(loc, version string) string {
 	switch kindOf(loc) {
 	case locEmbedded:
 		return "built-in " + version
+	case locFile:
+		return loc
 	case locTemplate:
 		out := strings.ReplaceAll(loc, VersionPlaceholder, version)
 

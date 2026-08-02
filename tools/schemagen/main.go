@@ -233,31 +233,29 @@ func filterDistribution(cat *catalog.Catalog, dist string) *catalog.Catalog {
 
 // writeIndex records what the registry can serve. It is rebuilt by listing the
 // output directory, not from the versions generated in this run, so
-// regenerating one release leaves the others listed.
+// regenerating one release leaves the others listed. Versions are recorded per
+// distribution because coverage differs: upstream had no otlp distribution
+// before v0.120.0.
 func writeIndex(outDir string) error {
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", outDir, err)
 	}
 
-	idx := &catalog.Index{Distributions: nil, Versions: nil}
-	seen := map[string]bool{}
+	idx := &catalog.Index{Distributions: map[string][]string{}}
 
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 
-		idx.Distributions = append(idx.Distributions, e.Name())
-
-		names, _ := filepath.Glob(filepath.Join(outDir, e.Name(), "*.json"))
-		for _, n := range names {
-			v := strings.TrimSuffix(filepath.Base(n), ".json")
-			if !seen[v] {
-				seen[v] = true
-				idx.Versions = append(idx.Versions, v)
-			}
+		versions := versionsIn(filepath.Join(outDir, e.Name()))
+		if len(versions) == 0 {
+			// Not a distribution, just a directory that happens to sit here.
+			continue
 		}
+
+		idx.Distributions[e.Name()] = versions
 	}
 
 	dest := filepath.Join(outDir, catalog.IndexFile)
@@ -276,9 +274,30 @@ func writeIndex(outDir string) error {
 		return err
 	}
 
-	logf("wrote %s (%d distributions, %d versions)\n", dest, len(idx.Distributions), len(idx.Versions))
+	logf("wrote %s (%d distributions)\n", dest, len(idx.Distributions))
 
 	return nil
+}
+
+// versionsIn lists the releases a distribution directory holds, in any of the
+// formats a catalog may be written in.
+func versionsIn(dir string) []string {
+	seen := map[string]bool{}
+
+	var out []string
+
+	for _, ext := range catalog.Extensions() {
+		names, _ := filepath.Glob(filepath.Join(dir, "*"+ext))
+		for _, n := range names {
+			v := strings.TrimSuffix(filepath.Base(n), ext)
+			if !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
+		}
+	}
+
+	return out
 }
 
 // write serialises a catalog to disk, replacing whatever was there before.
