@@ -43,18 +43,33 @@ var (
 	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
 	ErrNoYAMLFiles = errors.New("no YAML files found")
 
-	// errFilesInvalid ends the run with the "at least one file failed" exit
-	// code. It carries no message of its own: the formatter has already
-	// reported every finding.
-	errFilesInvalid = errors.New("at least one file is invalid")
+	// ErrFilesInvalid ends the run with ExitInvalid. It carries no message
+	// worth printing: the formatter has already reported every finding, so
+	// the caller should map it to an exit code and stay quiet.
+	ErrFilesInvalid = errors.New("at least one file is invalid")
 )
 
 // Exit codes, following the convention linters are expected to use in CI.
 const (
-	exitOK      = 0
-	exitInvalid = 1
-	exitUsage   = 2
+	// ExitOK reports that every file passed.
+	ExitOK = 0
+	// ExitInvalid reports that at least one file failed the gate.
+	ExitInvalid = 1
+	// ExitUsage reports that the command could not run at all.
+	ExitUsage = 2
 )
+
+// ExitCode maps the error a command run returned to a process exit code.
+func ExitCode(err error) int {
+	switch {
+	case err == nil:
+		return ExitOK
+	case errors.Is(err, ErrFilesInvalid):
+		return ExitInvalid
+	default:
+		return ExitUsage
+	}
+}
 
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
 // by reading files, not by checking them.
@@ -92,30 +107,6 @@ type Options struct {
 	store catalog.Store
 }
 
-// Execute runs the command against the given streams and returns the process
-// exit code. It is the entry point for both main and the tests.
-func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	cmd := NewCommand(nil)
-	cmd.SetArgs(args)
-	cmd.SetIn(stdin)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-
-	err := cmd.Execute()
-
-	switch {
-	case err == nil:
-		return exitOK
-	case errors.Is(err, errFilesInvalid):
-		// Every finding has already been printed by the formatter.
-		return exitInvalid
-	default:
-		cmd.PrintErrf("otelcol-config-lint: %v\n", err)
-
-		return exitUsage
-	}
-}
-
 // NewCommand builds the cobra command. A nil opts is allowed, in which case a
 // zero value is used.
 func NewCommand(opts *Options) *cobra.Command {
@@ -134,7 +125,8 @@ func NewCommand(opts *Options) *cobra.Command {
 		// Findings are not usage errors, so the usage text is printed only
 		// where it helps: bad flags and a missing argument.
 		SilenceUsage: true,
-		// Execute formats command-level errors itself, with the tool prefix.
+		// The caller prints command-level errors itself, with the tool prefix,
+		// and stays quiet about ErrFilesInvalid.
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := opts.Prepare(cmd)
@@ -162,7 +154,7 @@ Exit codes:
   %d  every file passed
   %d  at least one file failed
   %d  the command could not run
-`, exitOK, exitInvalid, exitUsage))
+`, ExitOK, ExitInvalid, ExitUsage))
 
 	opts.RegisterFlags(cmd)
 
@@ -286,7 +278,7 @@ func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
 }
 
 // lintAll checks every file and reports the results in argument order,
-// returning errFilesInvalid when the gate was not met.
+// returning ErrFilesInvalid when the gate was not met.
 func (o *Options) lintAll(
 	cmd *cobra.Command,
 	linter *lint.Linter,
@@ -336,7 +328,7 @@ func (o *Options) lintAll(
 	}
 
 	if summary.Failed() {
-		return errFilesInvalid
+		return ErrFilesInvalid
 	}
 
 	return nil

@@ -3,6 +3,8 @@ package otelcolconfiglint_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,15 +18,53 @@ const (
 	badConfig   = "../../../testdata/invalid/typos.yaml"
 )
 
-// run executes the command and returns its exit code and streams.
+// run executes the command and returns its exit code and streams. The wiring
+// mirrors cmd/otelcol-config-lint/main.go, so what the tests assert on is what
+// the binary does.
 func run(t *testing.T, stdin string, args ...string) (int, string, string) {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
 
-	code := otelcolconfiglint.Execute(args, strings.NewReader(stdin), &stdout, &stderr)
+	cmd := otelcolconfiglint.NewCommand(nil)
+	cmd.SetArgs(args)
+	cmd.SetIn(strings.NewReader(stdin))
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
 
-	return code, stdout.String(), stderr.String()
+	err := cmd.Execute()
+	if err != nil && !errors.Is(err, otelcolconfiglint.ErrFilesInvalid) {
+		cmd.PrintErrf("otelcol-config-lint: %v\n", err)
+	}
+
+	return otelcolconfiglint.ExitCode(err), stdout.String(), stderr.String()
+}
+
+func TestExitCode(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		in   error
+		want int
+	}{
+		"a clean run": {in: nil, want: otelcolconfiglint.ExitOK},
+		"findings":    {in: otelcolconfiglint.ErrFilesInvalid, want: otelcolconfiglint.ExitInvalid},
+		"wrapped findings": {
+			in:   fmt.Errorf("lint: %w", otelcolconfiglint.ErrFilesInvalid),
+			want: otelcolconfiglint.ExitInvalid,
+		},
+		"a command failure": {in: otelcolconfiglint.ErrNoInput, want: otelcolconfiglint.ExitUsage},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := otelcolconfiglint.ExitCode(tt.in); got != tt.want {
+				t.Errorf("ExitCode(%v) = %d, want %d", tt.in, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestValidDirectoryPasses(t *testing.T) {
