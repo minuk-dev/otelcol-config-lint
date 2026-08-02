@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -14,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/minuk-dev/otelcol-config-lint/schemas"
 )
 
 // Extensions returns the schema file suffixes, in preference order. The
@@ -28,9 +25,17 @@ func extensions() []string { return Extensions() }
 // Latest selects the newest schema available in a store.
 const Latest = "latest"
 
-// Default names the schemas built into the binary. It can be listed among a
-// store's locations to control where the built-ins are consulted.
+// Default names the official schema registry. It can be listed among a store's
+// locations to control where the published schemas are consulted.
 const Default = "default"
+
+// DefaultRegistry is where Default points: the schemas this project publishes
+// from its main branch.
+//
+// It tracks main rather than a release tag on purpose. A new collector release
+// only needs a schema commit to become lintable, with no linter release; the
+// cost is that a schema correction changes what an older binary reports.
+const DefaultRegistry = "https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/schemas"
 
 // VersionPlaceholder is substituted with the collector version in a location
 // template, e.g. "https://example.com/otel/{{.Version}}.json".
@@ -44,12 +49,12 @@ const DistributionPlaceholder = "{{.Distribution}}"
 // supplied its own client.
 const defaultFetchTimeout = 30 * time.Second
 
-// Store resolves collector versions to schemas. The zero value serves the
-// schemas embedded in the binary.
+// Store resolves collector versions to schemas. The zero value reads the
+// official registry over HTTP.
 //
 // A location is one of:
 //
-//   - "default", the schemas embedded in the binary;
+//   - "default", the official registry;
 //   - a directory, searched for "<version>.json";
 //   - a template containing {{.Version}}, resolved as a local path or, when it
 //     starts with http:// or https://, fetched over HTTP.
@@ -133,15 +138,6 @@ func (s Store) distribution() string {
 // single file and cannot be listed, so it contributes nothing.
 func (s Store) versionsAt(loc string) []string {
 	switch kindOf(loc) {
-	case locEmbedded:
-		entries, _ := fs.ReadDir(schemas.FS, DefaultDistribution)
-
-		out := make([]string, 0, len(entries))
-		for _, e := range entries {
-			out = append(out, trimExt(e.Name()))
-		}
-
-		return out
 	case locRemote:
 		idx, err := s.fetchIndex(loc)
 		if err != nil {
@@ -195,13 +191,25 @@ func isRegistryDir(dir string) bool {
 	return err == nil
 }
 
-// locations returns the locations to search, defaulting to the built-ins.
+// locations returns the locations to search, defaulting to the official
+// registry. "default" is expanded here, so nothing downstream has to know the
+// alias exists.
 func (s Store) locations() []string {
 	if len(s.Locations) == 0 {
-		return []string{Default}
+		return []string{DefaultRegistry}
 	}
 
-	return s.Locations
+	out := make([]string, 0, len(s.Locations))
+
+	for _, loc := range s.Locations {
+		if loc == Default {
+			loc = DefaultRegistry
+		}
+
+		out = append(out, loc)
+	}
+
+	return out
 }
 
 var (
@@ -215,27 +223,6 @@ var (
 
 func (s Store) loadFrom(loc, version string) (*Schema, error) {
 	switch kindOf(loc) {
-	case locEmbedded:
-		// Only the default distribution is embedded, so any other one has to
-		// come from a location that actually carries it. Answering with a
-		// wider distribution would silently accept components the requested
-		// binary does not ship.
-		if s.distribution() != DefaultDistribution {
-			return nil, errNotFound
-		}
-
-		for _, ext := range extensions() {
-			f, err := schemas.FS.Open(path.Join(DefaultDistribution, version+ext))
-			if err != nil {
-				continue
-			}
-
-			defer func() { _ = f.Close() }()
-
-			return Read(f)
-		}
-
-		return nil, errNotFound
 	case locRemote:
 		return s.loadFromRegistry(loc, version, s.fetch)
 	case locTemplate, locFile:
@@ -383,8 +370,6 @@ const (
 	// locDir is a local directory: a registry root when it carries an index,
 	// otherwise the flat layout.
 	locDir locKind = iota
-	// locEmbedded is the schemas built into the binary.
-	locEmbedded
 	// locTemplate is a path or URL with placeholders, naming one file.
 	locTemplate
 	// locFile is a path or URL naming one schema file outright.
@@ -395,8 +380,6 @@ const (
 
 func kindOf(loc string) locKind {
 	switch {
-	case loc == Default || loc == "embedded":
-		return locEmbedded
 	case strings.Contains(loc, VersionPlaceholder), strings.Contains(loc, DistributionPlaceholder):
 		return locTemplate
 	case trimExt(path.Base(loc)) != "":
@@ -412,8 +395,6 @@ func kindOf(loc string) locKind {
 // from, which is what error messages name.
 func (s Store) resolve(loc, version string) string {
 	switch kindOf(loc) {
-	case locEmbedded:
-		return "built-in " + version
 	case locFile:
 		return loc
 	case locTemplate:
@@ -442,8 +423,14 @@ type UnknownVersionError struct {
 
 func (e *UnknownVersionError) Error() string {
 	msg := "no schema for collector version " + e.Version
-	if len(e.Available) > 0 {
+
+	switch {
+	case len(e.Available) > 0:
 		msg += " (available: " + strings.Join(e.Available, ", ") + ")"
+	case len(e.Tried) > 0:
+		// Nothing could be enumerated either, so naming the version alone
+		// would not say whether the registry is wrong or simply unreachable.
+		msg += " (tried: " + strings.Join(e.Tried, ", ") + ")"
 	}
 
 	return msg

@@ -14,6 +14,11 @@ import (
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 )
 
+// repoSchemas is this repository's registry. The binary reads the published one
+// over HTTP, so every test that needs schemas injects this instead -- which is
+// also the path CI exercises.
+const repoSchemas = "../../../schemas"
+
 const (
 	validConfig   = "../../../testdata/valid"
 	badConfig     = "../../../testdata/invalid/typos.yaml"
@@ -42,11 +47,14 @@ func run(t *testing.T, stdin string, args ...string) (int, string, string) {
 	return otelcolconfiglint.ExitCode(err), stdout.String(), stderr.String()
 }
 
-// lint invokes the "run" subcommand, which is where every lint flag lives.
+// lint invokes the "run" subcommand, which is where every lint flag lives. The
+// repository's schemas are injected so no test reaches the network; a test that
+// passes its own --schema-location still wins, since locations are searched in
+// the order given.
 func lint(t *testing.T, stdin string, args ...string) (int, string, string) {
 	t.Helper()
 
-	return run(t, stdin, append([]string{"run"}, args...)...)
+	return run(t, stdin, append([]string{"run", "--schema-location", repoSchemas}, args...)...)
 }
 
 func TestExitCode(t *testing.T) {
@@ -444,7 +452,7 @@ func TestListRulesAndVersions(t *testing.T) {
 		t.Errorf("list rules output looks wrong (exit %d):\n%s", code, out)
 	}
 
-	code, out, _ = run(t, "", "list", "versions")
+	code, out, _ = run(t, "", "list", "versions", "--schema-location", repoSchemas)
 	if code != 0 || !strings.Contains(out, "(latest)") || !strings.Contains(out, "components") {
 		t.Errorf("list versions output looks wrong (exit %d):\n%s", code, out)
 	}

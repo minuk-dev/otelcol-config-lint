@@ -205,7 +205,7 @@ func (o *Options) registerSettingsFlag(cmd *cobra.Command) {
 func (o *Options) registerSchemaLocationFlag(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVar(&o.schemaLocations, "schema-location", nil,
 		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
-			"repeat to search several in order (default: the built-in schemas)")
+			"repeat to search several in order (default: the published registry)")
 }
 
 // registerRuleFlags declares the severity overrides, shared with "list rules".
@@ -397,7 +397,7 @@ func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
 // commit its linting policy instead of repeating flags in CI.
 type settings struct {
 	CollectorVersion string `yaml:"collectorVersion"`
-	// SchemaLocations are searched in order before the built-in schemas.
+	// SchemaLocations are searched in order before the published registry.
 	SchemaLocations      []string          `yaml:"schemaLocations"`
 	Output               string            `yaml:"output"`
 	Strict               *bool             `yaml:"strict"`

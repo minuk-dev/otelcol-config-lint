@@ -63,7 +63,7 @@ A directory without an `index.json` is read as the flat `<version>.<ext>` layout
 used before schemas were split by distribution.
 
 The flag can be repeated to search several locations in order — put a private
-distribution's schema first and fall back to `default` for the built-ins.
+distribution's schema first and fall back to `default` for this registry.
 
 ## Shape
 
