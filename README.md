@@ -7,7 +7,7 @@ release you target is a first-class input, the way `kubeconform` treats the
 Kubernetes version.
 
 ```console
-$ otelcol-config-lint --collector-version v0.157.0 config.yaml
+$ otelcol-config-lint run --collector-version v0.157.0 config.yaml
 config.yaml:6:3: error: unknown receiver type "prometheusreceiver" in collector v0.157.0 [unknown-component]
     hint: checked against collector v0.157.0; did you mean "prometheus"?
 config.yaml:11:14: error: "timeout" must be a duration such as 5s, 200ms or 1m30s [invalid-value]
@@ -32,7 +32,7 @@ Or run it as a container, mounting the configs to check:
 
 ```sh
 docker run --rm -v "$PWD:/workspace" \
-  ghcr.io/minuk-dev/otelcol-config-lint:latest --summary ./configs
+  ghcr.io/minuk-dev/otelcol-config-lint:latest run --summary ./configs
 ```
 
 Tagged releases publish binaries for Linux, macOS and Windows on amd64 and
@@ -41,7 +41,7 @@ arm64, plus a multi-arch image on ghcr.io.
 ## Usage
 
 ```
-otelcol-config-lint [flags] <file|dir|->...
+otelcol-config-lint run [flags] <file|dir|->...
 otelcol-config-lint list rules
 otelcol-config-lint list versions
 otelcol-config-lint version
@@ -49,9 +49,12 @@ otelcol-config-lint version
 
 | Command | Meaning |
 | --- | --- |
+| `run` | lint the given files, directories, or `-` for stdin |
 | `list rules` | the rules and their default severities, `--disable`/`--severity` applied |
 | `list versions` | the catalog versions available, honouring `--catalog-location` |
 | `version` | print the linter version (also available as `--version`) |
+
+The flags below belong to `run`:
 
 | Flag | Meaning |
 | --- | --- |
@@ -72,12 +75,12 @@ Exit codes: `0` everything passed, `1` at least one file failed, `2` the command
 could not run.
 
 ```sh
-otelcol-config-lint config.yaml                               # lint one file
-otelcol-config-lint --summary ./configs                       # walk a directory
-cat config.yaml | otelcol-config-lint -                       # read stdin
-otelcol-config-lint --output json ./configs > report.json     # machine-readable
-otelcol-config-lint --output github ./configs                 # PR annotations
-otelcol-config-lint --collector-version v0.110.0 config.yaml  # target an older release
+otelcol-config-lint run config.yaml                               # lint one file
+otelcol-config-lint run --summary ./configs                       # walk a directory
+cat config.yaml | otelcol-config-lint run -                       # read stdin
+otelcol-config-lint run --output json ./configs > report.json     # machine-readable
+otelcol-config-lint run --output github ./configs                 # PR annotations
+otelcol-config-lint run --collector-version v0.110.0 config.yaml  # target an older release
 ```
 
 ### Settings file
@@ -152,7 +155,7 @@ Because the catalogs sit at the repository root, they can be consumed without
 installing or cloning anything:
 
 ```sh
-otelcol-config-lint --catalog-location \
+otelcol-config-lint run --catalog-location \
   https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/catalogs/{{.Version}}.yaml \
   config.yaml
 ```

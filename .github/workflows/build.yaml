@@ -50,4 +50,4 @@ jobs:
         with:
           go-version: 1.25
       - name: Lint the example configs
-        run: go run ./cmd/otelcol-config-lint --output github --summary testdata/valid
+        run: go run ./cmd/otelcol-config-lint run --output github --summary testdata/valid

@@ -21,18 +21,9 @@ func newListCommand(opts *Options) *cobra.Command {
   otelcol-config-lint list versions`,
 	}
 
-	// Children inherit the root's usage template, whose exit-code footer talks
-	// about files passing and failing. A listing does neither.
-	cmd.SetUsageTemplate(defaultUsageTemplate())
-
 	cmd.AddCommand(opts.newListRulesCommand(), opts.newListVersionsCommand())
 
 	return cmd
-}
-
-// defaultUsageTemplate is cobra's own, before the root command appends to it.
-func defaultUsageTemplate() string {
-	return new(cobra.Command).UsageTemplate()
 }
 
 // newListRulesCommand builds "list rules". The severity flags apply because

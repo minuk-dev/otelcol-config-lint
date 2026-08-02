@@ -48,6 +48,6 @@ jobs:
           go run ./cmd/otelcol-config-lint list versions
           for f in catalogs/*.yaml; do
             version="$(basename "${f}" .yaml)"
-            go run ./cmd/otelcol-config-lint \
+            go run ./cmd/otelcol-config-lint run \
               --collector-version "${version}" --min-severity error testdata/valid
           done
