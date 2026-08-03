@@ -23,6 +23,7 @@ linters:
             - github.com/minuk-dev/otelcol-config-lint
             - github.com/samber/mo
             - github.com/spf13/cobra
+            - github.com/stretchr/testify
             - gopkg.in/yaml.v3
     exhaustive:
       # Switches over the internal enums end in a default case on purpose.
