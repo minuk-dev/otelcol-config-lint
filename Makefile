@@ -34,7 +34,7 @@ fmt:
 
 # Regenerate the component schemas from the upstream collector sources.
 schemas:
-	go run ./tools/schemagen -version '$(VERSIONS)' -out '$(SCHEMAS)'
+	go run ./cmd/schemagen --version '$(VERSIONS)' --out '$(SCHEMAS)'
 
 clean:
 	rm -rf bin dist coverage.txt

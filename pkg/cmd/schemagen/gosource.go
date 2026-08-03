@@ -1,4 +1,4 @@
-package main
+package schemagen
 
 import (
 	"go/ast"

@@ -187,7 +187,7 @@ make schemas VERSIONS=v0.158.0            # writes to ../otelcol-config-schemas
 make schemas VERSIONS=v0.158.0 SCHEMAS=/path/to/otelcol-config-schemas
 ```
 
-`tools/schemagen` downloads the core and contrib source archives for the tag,
+`cmd/schemagen` downloads the core and contrib source archives for the tag,
 reads every `metadata.yaml`, and writes `<distribution>/<version>.yaml` and
 `.json` into the schema repository, plus the `index.json` listing them. It needs no collector
 dependencies, so the linter itself stays a two-package build.
@@ -219,18 +219,18 @@ between releases. Components without an overlay are simply not field-checked.
 ## Layout
 
 ```
-cmd/otelcol-config-lint/      the entry point
+cmd/otelcol-config-lint/      the linter entry point
+cmd/schemagen/                the schema generator entry point
 pkg/cmd/otelcol-config-lint/  the cobra command: flags, settings files, reporting
-pkg/scanner/              expands the given paths into the files to lint
-pkg/sets/                 a set built on a map, in the shape of k8s.io/apimachinery
-pkg/config/               YAML parsing that keeps positions, so findings have line numbers
-pkg/schema/              schema types, version resolution and location lookup
-pkg/rule/                 the rules and the registry
-pkg/lint/                 the engine and the output formatters
-pkg/diag/                 diagnostics, severities and positions
-schemas/                 generated per-release schemas (yaml + json), embedded
-overlays/                 hand-written field schemas
-tools/schemagen/          schema generator
+pkg/cmd/schemagen/            the generator: harvests upstream metadata into schemas
+pkg/scanner/                  expands the given paths into the files to lint
+pkg/sets/                     a set built on a map, in the shape of k8s.io/apimachinery
+pkg/config/                   YAML parsing that keeps positions, so findings have line numbers
+pkg/schema/                   schema types, version resolution and location lookup
+pkg/rule/                     the rules and the registry
+pkg/lint/                     the engine and the output formatters
+pkg/diag/                     diagnostics, severities and positions
+overlays/                     hand-written field schemas
 ```
 
 ## Development
