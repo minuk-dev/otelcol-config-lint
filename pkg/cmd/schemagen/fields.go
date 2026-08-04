@@ -53,12 +53,18 @@ type jsonSchema struct {
 // from another module spells it.
 type schemaSet struct {
 	byKey map[string]*jsonSchema
+	// seen counts the files, which byKey cannot: one file is keyed twice.
+	seen map[string]bool
 }
 
-func newSchemaSet() *schemaSet { return &schemaSet{byKey: map[string]*jsonSchema{}} }
+func newSchemaSet() *schemaSet {
+	return &schemaSet{byKey: map[string]*jsonSchema{}, seen: map[string]bool{}}
+}
 
-// add records a config schema under the import path of the directory it was
-// published in, e.g. "go.opentelemetry.io/collector/receiver/otlpreceiver".
+// add records a config schema under both spellings a reference may use: the
+// import path it was published under, and the repository-absolute path, which
+// is how upstream's own schemas refer to each other -- "/config/configtls"
+// rather than "go.opentelemetry.io/collector/config/configtls".
 func (s *schemaSet) add(importPath string, raw []byte) {
 	var doc jsonSchema
 
@@ -68,6 +74,34 @@ func (s *schemaSet) add(importPath string, raw []byte) {
 	}
 
 	s.byKey[importPath] = &doc
+	s.seen[importPath] = true
+
+	if repo, ok := repositoryPath(importPath); ok {
+		s.byKey[repo] = &doc
+	}
+}
+
+// repositoryPath is the repository-absolute spelling of an import path, and
+// reports whether the module belongs to a repository that uses that spelling.
+// Only the two upstream repositories publish config schemas, and only they
+// write references this way, so only they have to be recognised.
+func repositoryPath(importPath string) (string, bool) {
+	for _, root := range repositoryRoots() {
+		if rest, found := strings.CutPrefix(importPath, root+"/"); found {
+			return "/" + rest, true
+		}
+	}
+
+	return "", false
+}
+
+// repositoryRoots are the module prefixes of the repositories whose published
+// schemas reference each other repository-absolutely.
+func repositoryRoots() []string {
+	return []string{
+		"go.opentelemetry.io/collector",
+		"github.com/open-telemetry/opentelemetry-collector-contrib",
+	}
 }
 
 // lookup resolves a $ref against the file that contained it. A reference is
@@ -89,8 +123,9 @@ func (s *schemaSet) lookup(ref, fromDir string) *jsonSchema {
 	return s.def(where, name)
 }
 
-// count reports how many config schemas were collected.
-func (s *schemaSet) count() int { return len(s.byKey) }
+// count reports how many config schemas were collected, counting each file
+// once rather than once per spelling it is keyed under.
+func (s *schemaSet) count() int { return len(s.seen) }
 
 // def looks a definition up in the file keyed by either spelling. A reference
 // relative to a module-qualified location resolves to a module-qualified key,

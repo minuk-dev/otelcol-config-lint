@@ -47,6 +47,7 @@ func TestExitCode(t *testing.T) {
 		"a bad invocation": {in: schemagen.ErrNoManifests, want: schemagen.ExitUsage},
 		"an empty format":  {in: schemagen.ErrNoFormats, want: schemagen.ExitUsage},
 		"two destinations": {in: schemagen.ErrTwoOutputs, want: schemagen.ExitUsage},
+		"nothing written":  {in: schemagen.ErrManyToOneFile, want: schemagen.ExitUsage},
 	}
 
 	for name, tt := range tests {
@@ -121,8 +122,9 @@ func TestRunWithoutPrepare(t *testing.T) {
 	require.ErrorIs(t, opts.Run(cmd), schemagen.ErrNoManifests)
 }
 
-// TestIncompleteManifest covers the manifest checks: a file that names no
-// distribution describes nothing to write.
+// TestIncompleteManifest covers the manifest checks, and what a run that
+// produced nothing reports: skipping is what keeps one bad manifest from
+// discarding the others, not a way to succeed at nothing.
 func TestIncompleteManifest(t *testing.T) {
 	t.Parallel()
 
@@ -133,10 +135,58 @@ func TestIncompleteManifest(t *testing.T) {
 	code, _, stderr := run(t, "--builder", path,
 		"--registry", t.TempDir(), "--cache", t.TempDir(), "--overlays", t.TempDir())
 
-	// One bad manifest is skipped, not fatal, so the run still ends cleanly.
-	require.Equal(t, schemagen.ExitOK, code, "run ended badly: %s", stderr)
+	assert.Equal(t, schemagen.ExitFailure, code)
 	assert.Contains(t, stderr, "dist.name is required")
-	assert.Contains(t, stderr, "skipped 1 of 1 manifests")
+	assert.Contains(t, stderr, "no schema could be generated")
+}
+
+// TestSkipsOneOfSeveral covers the other half: a manifest that cannot be read
+// does not discard the distributions that could.
+func TestSkipsOneOfSeveral(t *testing.T) {
+	t.Parallel()
+
+	modules, registry := t.TempDir(), t.TempDir()
+	good := singleComponentManifest(t, modules)
+	bad := filepath.Join(t.TempDir(), "broken.yaml")
+	writeFile(t, bad, "dist:\n  name: broken\n")
+
+	code, _, stderr := run(t, "--builder", bad, "--builder", good,
+		"--registry", registry, "--cache", t.TempDir(), "--overlays", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stderr, "skipped 1 of 2 manifests")
+	assert.FileExists(t, filepath.Join(registry, "custom", "v0.157.0.yaml"))
+}
+
+// TestRelativeReplacement covers a manifest whose replacement is written
+// against itself, which is how a distribution under development points at a
+// sibling checkout. The workspace the go command runs in is somewhere else, so
+// the path has to be carried over rather than copied.
+func TestRelativeReplacement(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	dir := module(t, root, "example.com/collector/receiver/otlpreceiver", map[string]string{
+		"metadata.yaml": "type: otlp\nstatus:\n  class: receiver\n" +
+			"  stability:\n    beta: [traces]\n",
+	})
+
+	path := filepath.Join(root, "manifest.yaml")
+	writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.157.0
+receivers:
+  - gomod: example.com/collector/receiver/otlpreceiver v0.0.0
+replaces:
+  - example.com/collector/receiver/otlpreceiver => ./%s
+`, filepath.Base(dir)))
+
+	code, stdout, stderr := run(t, "--builder", path,
+		"--cache", t.TempDir(), "--overlays", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stdout, "otlp:")
 }
 
 // TestGenerate runs the whole pipeline against modules on disk: the manifest

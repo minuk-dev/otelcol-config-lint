@@ -1,6 +1,7 @@
 package schemagen
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -29,6 +30,10 @@ const (
 // metadataFile is what every upstream component declares itself in.
 const metadataFile = "metadata.yaml"
 
+// errModuleMissing reports a declared component whose module could not be
+// resolved, which would leave the schema short of a component the binary has.
+var errModuleMissing = errors.New("module could not be resolved")
+
 // build reads one distribution out of the modules its manifest names.
 func (o *Options) build(man *manifest) (*schema.Schema, error) {
 	mods, err := o.resolveModules(man)
@@ -37,15 +42,18 @@ func (o *Options) build(man *manifest) (*schema.Schema, error) {
 	}
 
 	// A component's settings are mostly shared config types living in modules
-	// of their own, so every module on disk is read, not only the declared
-	// ones. References cross module boundaries, so they are all in hand before
-	// any of them is resolved.
+	// of their own, so the modules it requires are read too, not only the
+	// declared ones. References cross module boundaries, so they are all in
+	// hand before any of them is resolved.
 	set := newSchemaSet()
 	index := newGoIndex()
 	metas := map[string]metadata{}
+	worth := scannable(man)
 
-	for _, mod := range mods.byPath {
-		scanModule(mod, set, index, metas)
+	for path, mod := range mods.byPath {
+		if worth(path) {
+			scanModule(mod, set, index, metas)
+		}
 	}
 
 	cat := &schema.Schema{
@@ -59,16 +67,15 @@ func (o *Options) build(man *manifest) (*schema.Schema, error) {
 		cat.Sources[man.Dist.Name] = man.Dist.Module
 	}
 
-	declared, missing := 0, 0
+	declared := 0
 
 	for _, comp := range man.components() {
 		mod, ok := mods.lookup(comp.module)
 		if !ok {
-			o.logf("  %s: not downloaded, skipped\n", comp.module)
-
-			missing++
-
-			continue
+			// A schema missing a component reports every config that uses it as
+			// invalid, which is worse than having no schema for the release, so
+			// one module short is one too many.
+			return nil, fmt.Errorf("%w: %s", errModuleMissing, comp.module)
 		}
 
 		declared += add(cat, comp, metas[mod.Path])
@@ -81,16 +88,66 @@ func (o *Options) build(man *manifest) (*schema.Schema, error) {
 	fromSource := attachSourceFields(cat, index)
 	published := attachFields(cat, set)
 
-	o.logf("  %d components (%d modules unresolved), %d from source, %d enriched by %d published schemas\n",
-		declared, missing, fromSource, published, set.count())
+	o.logf("  %d components, %d from source, %d enriched by %d published schemas\n",
+		declared, fromSource, published, set.count())
 
 	return cat, nil
 }
+
+// scannable reports which modules are worth reading. A distribution's build
+// list is the whole dependency graph -- the AWS SDK, the Kubernetes client,
+// Docker -- and none of that can hold a component or a config schema. What can
+// is a declared module, or anything from the same repository as one, which is
+// where the shared config types live.
+func scannable(man *manifest) func(module string) bool {
+	roots := append([]string{}, repositoryRoots()...)
+
+	for _, decl := range man.components() {
+		roots = append(roots, repositoryRootOf(decl.module))
+	}
+
+	return func(module string) bool {
+		for _, root := range roots {
+			if root != "" && (module == root || strings.HasPrefix(module, root+"/")) {
+				return true
+			}
+		}
+
+		return false
+	}
+}
+
+// repositoryRootOf is the repository a module lives in: a known upstream root
+// when it is one of those, and otherwise "host/owner/repository", which is
+// where a private component's shared configuration sits too.
+func repositoryRootOf(module string) string {
+	for _, root := range repositoryRoots() {
+		if module == root || strings.HasPrefix(module, root+"/") {
+			return root
+		}
+	}
+
+	parts := strings.Split(module, "/")
+	if len(parts) < repositorySegments {
+		return module
+	}
+
+	return strings.Join(parts[:repositorySegments], "/")
+}
+
+// repositorySegments is how many path elements name a repository on the hosts
+// that spell it that way: "github.com/owner/repository".
+const repositorySegments = 3
 
 // scanModule reads one module directory: the component it declares, the config
 // schemas it publishes and the Go types its settings are written in. Everything
 // is keyed by import path, which is how a reference from another module spells
 // it.
+//
+// Only the component search prunes internal and cmd: a component cannot be
+// declared there, but the types and schemas its settings are made of very much
+// live there -- an exporter's sending_queue is defined in exporterhelper's own
+// internal package.
 func scanModule(mod resolvedModule, set *schemaSet, index *goIndex, metas map[string]metadata) {
 	root := filepath.Clean(mod.Dir)
 
@@ -111,7 +168,9 @@ func scanModule(mod resolvedModule, set *schemaSet, index *goIndex, metas map[st
 
 		switch {
 		case d.Name() == metadataFile:
-			readMetadata(p, importPath, metas)
+			if declarable(importPath, mod.Path) {
+				readMetadata(p, importPath, metas)
+			}
 		case d.Name() == configSchemaFile:
 			if raw, ok := readLimited(p, maxSchemaBytes); ok {
 				set.add(importPath, raw)
@@ -126,17 +185,33 @@ func scanModule(mod resolvedModule, set *schemaSet, index *goIndex, metas map[st
 	})
 }
 
-// skipDir reports directories that hold no component of their own. "internal"
-// holds a component's sub-parts, such as the resourcedetection providers that
-// are configured inside their parent's list, and "cmd" holds mdatagen's sample
-// components, which exist to exercise its code generation.
+// skipDir reports directories that hold nothing worth reading at all.
 func skipDir(name string) bool {
 	switch name {
-	case "internal", "cmd", "testdata", "examples", "test", ".git":
+	case "testdata", "examples", ".git":
 		return true
 	default:
 		return false
 	}
+}
+
+// declarable reports whether a metadata file describes a component a config can
+// declare. One under "cmd" is mdatagen's own sample, shipped to exercise its
+// code generation, and one under "internal" is a component's sub-part, such as
+// the resourcedetection providers configured inside their parent's list.
+func declarable(importPath, module string) bool {
+	rest, found := strings.CutPrefix(importPath, module)
+	if !found {
+		return false
+	}
+
+	for seg := range strings.SplitSeq(strings.Trim(rest, "/"), "/") {
+		if seg == "cmd" || seg == "internal" {
+			return false
+		}
+	}
+
+	return true
 }
 
 // importPathOf spells a file's directory the way another module's reference

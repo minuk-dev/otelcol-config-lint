@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -47,6 +48,10 @@ type manifest struct {
 	// distribution under development points its own components at a checkout,
 	// and the schema has to be read from there rather than from the proxy.
 	Replaces []string `yaml:"replaces"`
+
+	// dir is the directory the manifest was read from, which is what its
+	// relative replacements are written against.
+	dir string
 }
 
 // manifestComponent is one entry under a component section.
@@ -109,6 +114,8 @@ func readManifest(path, name string) (*manifest, error) {
 	if len(parsed.components()) == 0 {
 		return nil, fmt.Errorf("%s: %w", path, errNoComponents)
 	}
+
+	parsed.dir = filepath.Dir(path)
 
 	return &parsed, nil
 }
@@ -188,6 +195,40 @@ func (m *manifest) rawGoMods() []string {
 	}
 
 	return out
+}
+
+// replacements are the manifest's replacements with every local path made
+// absolute. The builder writes them against the manifest, and they are read
+// from a workspace of our own somewhere else entirely.
+func (m *manifest) replacements() []string {
+	out := make([]string, 0, len(m.Replaces))
+
+	for _, replace := range m.Replaces {
+		module, replacement, found := strings.Cut(replace, "=>")
+		if !found {
+			out = append(out, strings.TrimSpace(replace))
+
+			continue
+		}
+
+		target := strings.TrimSpace(replacement)
+		if isLocalPath(target) && !filepath.IsAbs(target) {
+			target = filepath.Join(m.dir, target)
+		}
+
+		out = append(out, strings.TrimSpace(module)+" => "+target)
+	}
+
+	return out
+}
+
+// isLocalPath reports a replacement that names a directory rather than a
+// module, which go.mod spells with a leading dot or slash.
+func isLocalPath(target string) bool {
+	return strings.HasPrefix(target, "./") ||
+		strings.HasPrefix(target, "../") ||
+		strings.HasPrefix(target, "/") ||
+		filepath.IsAbs(target)
 }
 
 // splitGoMod splits the builder's "<module> <version>" into its two halves.

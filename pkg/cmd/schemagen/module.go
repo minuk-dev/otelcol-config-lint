@@ -150,7 +150,7 @@ func (o *Options) workspace(man *manifest) (string, error) {
 
 	gomod.WriteString(")\n")
 
-	for _, replace := range man.Replaces {
+	for _, replace := range man.replacements() {
 		fmt.Fprintf(&gomod, "\nreplace %s\n", strings.TrimSpace(replace))
 	}
 

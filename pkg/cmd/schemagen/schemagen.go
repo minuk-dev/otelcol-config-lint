@@ -28,11 +28,12 @@ import (
 // These carry the messages; the exported errors below are what callers match
 // on.
 var (
-	errNoManifests   = errors.New("no builder manifests specified")
-	errNoFormats     = errors.New("no schema formats specified")
-	errUnknownFormat = errors.New("unknown schema format")
-	errTwoOutputs    = errors.New("--out and --registry name two different places to write")
-	errManyToOneFile = errors.New("several manifests write several schemas, which needs --registry")
+	errNoManifests      = errors.New("no builder manifests specified")
+	errNoFormats        = errors.New("no schema formats specified")
+	errUnknownFormat    = errors.New("unknown schema format")
+	errNothingGenerated = errors.New("no schema could be generated")
+	errTwoOutputs       = errors.New("--out and --registry name two different places to write")
+	errManyToOneFile    = errors.New("several manifests write several schemas, which needs --registry")
 )
 
 // Errors reported for bad flag values. Each one is a usage error, so ExitCode
@@ -243,6 +244,13 @@ func (o *Options) Run(cmd *cobra.Command) error {
 
 	if len(skipped) > 0 {
 		o.logf("skipped %d of %d manifests: %s\n", len(skipped), len(manifests), strings.Join(skipped, ", "))
+	}
+
+	// Skipping one manifest of several leaves the others generated, which is
+	// the point of skipping. Skipping every one produced nothing at all, and a
+	// run that produced nothing has not succeeded.
+	if len(skipped) == len(manifests) {
+		return fmt.Errorf("%w: %s", errNothingGenerated, strings.Join(skipped, ", "))
 	}
 
 	if o.registryDir == "" {
