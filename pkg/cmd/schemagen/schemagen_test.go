@@ -97,7 +97,7 @@ func TestUnknownFormat(t *testing.T) {
 	out := t.TempDir()
 
 	code, _, stderr := run(t, "--builder", "manifest.yaml", "--formats", "toml",
-		"--registry", out, "--cache", t.TempDir(), "--overlays", t.TempDir())
+		"--registry", out, "--cache", t.TempDir())
 
 	assert.Equal(t, schemagen.ExitUsage, code)
 	assert.Contains(t, stderr, `unknown schema format "toml"`)
@@ -133,15 +133,16 @@ func TestIncompleteManifest(t *testing.T) {
 	writeFile(t, path, "dist:\n  otelcol_version: 0.157.0\n")
 
 	code, _, stderr := run(t, "--builder", path,
-		"--registry", t.TempDir(), "--cache", t.TempDir(), "--overlays", t.TempDir())
+		"--registry", t.TempDir(), "--cache", t.TempDir())
 
 	assert.Equal(t, schemagen.ExitFailure, code)
 	assert.Contains(t, stderr, "dist.name is required")
-	assert.Contains(t, stderr, "no schema could be generated")
+	assert.Contains(t, stderr, "1 of 1 manifests could not be generated")
 }
 
 // TestSkipsOneOfSeveral covers the other half: a manifest that cannot be read
-// does not discard the distributions that could.
+// does not discard the distributions that could, and the run still fails, so a
+// registry is never published a distribution short.
 func TestSkipsOneOfSeveral(t *testing.T) {
 	t.Parallel()
 
@@ -151,24 +152,92 @@ func TestSkipsOneOfSeveral(t *testing.T) {
 	writeFile(t, bad, "dist:\n  name: broken\n")
 
 	code, _, stderr := run(t, "--builder", bad, "--builder", good,
-		"--registry", registry, "--cache", t.TempDir(), "--overlays", t.TempDir())
+		"--registry", registry, "--cache", t.TempDir())
 
-	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
-	assert.Contains(t, stderr, "skipped 1 of 2 manifests")
+	assert.Equal(t, schemagen.ExitFailure, code)
+	assert.Contains(t, stderr, "1 of 2 manifests could not be generated")
+
+	// The one that could be read is written all the same, and the index lists
+	// it, so the failure costs only the distribution that failed.
 	assert.FileExists(t, filepath.Join(registry, "custom", "v0.157.0.yaml"))
+	assert.Contains(t, readFile(t, filepath.Join(registry, "index.json")), "custom")
 }
 
-// TestRelativeReplacement covers a manifest whose replacement is written
-// against itself, which is how a distribution under development points at a
-// sibling checkout. The workspace the go command runs in is somewhere else, so
+// TestRelativeReplacement covers a manifest whose replacement is a path rather
+// than a module, which is how a distribution under development points at a
+// checkout. The workspace the go command runs in is somewhere else entirely, so
 // the path has to be carried over rather than copied.
+//
+// What it is carried over from is the builder's output directory, not the
+// manifest: upstream's own contrib manifest reaches its replacement with
+// "../../../internal/obi-src", which is three levels up from
+// "distributions/otelcol-contrib/_build" and only two from the manifest itself.
 func TestRelativeReplacement(t *testing.T) {
 	t.Parallel()
 
+	tests := map[string]struct {
+		outputPath string
+		// depth is how far back up the manifest has to reach to name the
+		// module directory, counted from wherever the base turns out to be.
+		depth string
+	}{
+		"against the manifest":  {outputPath: "", depth: "."},
+		"against output_path":   {outputPath: "./_build", depth: ".."},
+		"against a nested path": {outputPath: "./build/dist", depth: "../.."},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			dir := module(t, root, "example.com/collector/receiver/otlpreceiver", map[string]string{
+				"metadata.yaml": "type: otlp\nstatus:\n  class: receiver\n" +
+					"  stability:\n    beta: [traces]\n",
+			})
+
+			output := ""
+			if tt.outputPath != "" {
+				output = "\n  output_path: " + tt.outputPath
+			}
+
+			path := filepath.Join(root, "manifest.yaml")
+			writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.157.0%s
+receivers:
+  - gomod: example.com/collector/receiver/otlpreceiver v0.0.0
+replaces:
+  - example.com/collector/receiver/otlpreceiver => %s/%s
+`, output, tt.depth, filepath.Base(dir)))
+
+			code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
+
+			require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+			assert.Contains(t, stdout, "otlp:")
+		})
+	}
+}
+
+// TestTextualType covers a setting whose Go type is a number but whose config
+// spelling is a word: configtelemetry.Level is an int32 with an UnmarshalText
+// method, and the debug exporter's "verbosity: detailed" is not an integer.
+func TestTextualType(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
-	dir := module(t, root, "example.com/collector/receiver/otlpreceiver", map[string]string{
-		"metadata.yaml": "type: otlp\nstatus:\n  class: receiver\n" +
-			"  stability:\n    beta: [traces]\n",
+	level := module(t, root, "example.com/collector/config/configtelemetry", map[string]string{
+		"level.go": "package configtelemetry\n\ntype Level int32\n\n" +
+			"func (l *Level) UnmarshalText(text []byte) error { return nil }\n",
+	})
+	exporter := module(t, root, "example.com/collector/exporter/debugexporter", map[string]string{
+		"metadata.yaml": "type: debug\nstatus:\n  class: exporter\n" +
+			"  stability:\n    alpha: [traces]\n",
+		"config.go": "package debugexporter\n\n" +
+			"import \"example.com/collector/config/configtelemetry\"\n\n" +
+			"type Config struct {\n" +
+			"\tVerbosity configtelemetry.Level `mapstructure:\"verbosity\"`\n}\n",
 	})
 
 	path := filepath.Join(root, "manifest.yaml")
@@ -176,17 +245,18 @@ func TestRelativeReplacement(t *testing.T) {
 dist:
   name: custom
   otelcol_version: 0.157.0
-receivers:
-  - gomod: example.com/collector/receiver/otlpreceiver v0.0.0
+exporters:
+  - gomod: example.com/collector/exporter/debugexporter v0.0.0
 replaces:
-  - example.com/collector/receiver/otlpreceiver => ./%s
-`, filepath.Base(dir)))
+  - example.com/collector/exporter/debugexporter => %s
+  - example.com/collector/config/configtelemetry => %s
+`, exporter, level))
 
-	code, stdout, stderr := run(t, "--builder", path,
-		"--cache", t.TempDir(), "--overlays", t.TempDir())
+	code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
-	assert.Contains(t, stdout, "otlp:")
+	assert.Contains(t, stdout, "verbosity:")
+	assert.NotContains(t, stdout, "type: int", "a text-decoded type was read as its underlying number")
 }
 
 // TestGenerate runs the whole pipeline against modules on disk: the manifest
@@ -195,7 +265,7 @@ replaces:
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
-	modules, out, overlays := t.TempDir(), t.TempDir(), t.TempDir()
+	modules, out := t.TempDir(), t.TempDir()
 
 	otlp := module(t, modules, "example.com/collector/receiver/otlpreceiver", map[string]string{
 		"metadata.yaml": `
@@ -238,20 +308,10 @@ replaces:
   - example.com/private/exporter/vendorexporter => %s
 `, otlp, private))
 
-	writeFile(t, filepath.Join(overlays, "otlp.yaml"), `
-kind: receiver
-type: otlp
-fields:
-  type: map
-  children:
-    protocols: {type: map}
-`)
-
 	code, stdout, stderr := run(t, "--builder", "custom="+manifest,
-		"--registry", out, "--cache", t.TempDir(), "--overlays", overlays)
+		"--registry", out, "--cache", t.TempDir())
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
-	assert.Contains(t, stderr, "loaded 1 field overlay(s)")
 	assert.Empty(t, stdout, "the registry form has nothing to put on stdout")
 
 	// The release comes from the manifest; the distribution is what --builder
@@ -262,7 +322,7 @@ fields:
 	assert.Contains(t, written, "collectorVersion: v0.157.0")
 
 	assert.Contains(t, written, "otlp:", "the schema is missing the declared receiver")
-	assert.Contains(t, written, "protocols:", "the otlp receiver did not take the overlay's fields")
+	assert.Contains(t, written, "endpoint:", "the otlp receiver took no fields from its Config struct")
 	assert.NotContains(t, written, "sample:", "the schema declared an mdatagen fixture")
 
 	// The private component has no metadata, so its type comes from the module
@@ -285,7 +345,7 @@ func TestWritesOneFile(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "my-collector.json")
 
 	code, _, stderr := run(t, "--builder", manifest, "--out", dest,
-		"--cache", t.TempDir(), "--overlays", t.TempDir())
+		"--cache", t.TempDir())
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
 
@@ -297,7 +357,7 @@ func TestWritesOneFile(t *testing.T) {
 	// With no --out at all the schema is a stream, the way a filter writes, so
 	// stdout holds the schema and nothing else.
 	code, stdout, stderr := run(t, "--builder", manifest,
-		"--cache", t.TempDir(), "--overlays", t.TempDir())
+		"--cache", t.TempDir())
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
 	assert.True(t, strings.HasPrefix(stdout, "collectorVersion: v0.157.0"),

@@ -41,6 +41,13 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: 1.25
+      - name: Prepare the sources a manifest replaces
+        # The contrib manifest replaces go.opentelemetry.io/obi with
+        # internal/obi-src, which upstream's own script downloads. Without it
+        # the module graph cannot be resolved and contrib is the one
+        # distribution most configs are linted against.
+        working-directory: releases
+        run: ./scripts/prepare-obi.sh otelcol-contrib
       - name: Generate
         run: |
           # The registry's own names: upstream calls these otelcol and

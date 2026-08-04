@@ -36,15 +36,24 @@ type goType struct {
 	imports map[string]string // local package name -> import path
 }
 
-// goIndex holds every type declaration across the source archives, keyed by
-// "<import path>.<TypeName>", which is how one package names another's type.
+// goIndex holds every type declaration across the distribution's modules, keyed
+// by "<import path>.<TypeName>", which is how one package names another's type.
 type goIndex struct {
 	byName map[string]*goType
-	fset   *token.FileSet
+	// textual holds the types that decode themselves from text. Their
+	// underlying kind says nothing about what a config writes: an int with an
+	// UnmarshalText method is spelled as a word, the way the debug exporter's
+	// verbosity is "detailed" and not 2.
+	textual map[string]bool
+	fset    *token.FileSet
 }
 
 func newGoIndex() *goIndex {
-	return &goIndex{byName: map[string]*goType{}, fset: token.NewFileSet()}
+	return &goIndex{
+		byName:  map[string]*goType{},
+		textual: map[string]bool{},
+		fset:    token.NewFileSet(),
+	}
 }
 
 // add parses one Go file and records the type declarations in it. Files that
@@ -59,6 +68,12 @@ func (g *goIndex) add(importPath string, src []byte) {
 	imports := fileImports(file)
 
 	for _, decl := range file.Decls {
+		if fn, isFunc := decl.(*ast.FuncDecl); isFunc {
+			g.addMethod(importPath, fn)
+
+			continue
+		}
+
 		gen, ok := decl.(*ast.GenDecl)
 		if !ok || gen.Tok != token.TYPE {
 			continue
@@ -81,6 +96,27 @@ func (g *goIndex) add(importPath string, src []byte) {
 			}
 		}
 	}
+}
+
+// addMethod records a type that decodes itself from text, which is what makes
+// it a string in a config however it is declared in Go.
+func (g *goIndex) addMethod(importPath string, method *ast.FuncDecl) {
+	if method.Recv == nil || len(method.Recv.List) == 0 {
+		return
+	}
+
+	switch method.Name.Name {
+	case "UnmarshalText", "UnmarshalYAML", "UnmarshalJSON":
+	default:
+		return
+	}
+
+	name := exprName(unwrap(method.Recv.List[0].Type))
+	if name == "" {
+		return
+	}
+
+	g.textual[importPath+"."+name] = true
 }
 
 // fileImports maps the name a file refers to each import by onto its path.
@@ -202,7 +238,12 @@ func (g *goIndex) scalar(decl *goType, expr ast.Expr) string {
 		return ""
 	}
 
-	under := g.deref(g.resolve(decl, expr))
+	key := g.resolve(decl, expr)
+	if g.textual[key] {
+		return typeString
+	}
+
+	under := g.deref(key)
 	if under != nil && under.strukt == nil && under.under != nil {
 		if exprName(under.under) == "time.Duration" {
 			return typeDuration

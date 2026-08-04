@@ -38,6 +38,10 @@ type manifest struct {
 		// against.
 		Version        string `yaml:"version"`
 		OtelColVersion string `yaml:"otelcol_version"` //nolint:tagliatelle // the builder's own spelling
+		// OutputPath is where the builder generates the collector's go.mod,
+		// which is what the manifest's relative replacements are written
+		// against -- not the manifest's own directory.
+		OutputPath string `yaml:"output_path"` //nolint:tagliatelle // the builder's own spelling
 	} `yaml:"dist"`
 	Receivers  []manifestComponent `yaml:"receivers"`
 	Processors []manifestComponent `yaml:"processors"`
@@ -213,13 +217,33 @@ func (m *manifest) replacements() []string {
 
 		target := strings.TrimSpace(replacement)
 		if isLocalPath(target) && !filepath.IsAbs(target) {
-			target = filepath.Join(m.dir, target)
+			target = filepath.Join(m.replaceBase(), target)
 		}
 
 		out = append(out, strings.TrimSpace(module)+" => "+target)
 	}
 
 	return out
+}
+
+// replaceBase is the directory a relative replacement is written against: the
+// one the builder generates its go.mod in. Upstream's contrib manifest points
+// at "../../../internal/obi-src", which is three levels up from
+// "distributions/otelcol-contrib/_build" -- the repository root -- and only two
+// from the manifest itself.
+func (m *manifest) replaceBase() string {
+	out := m.Dist.OutputPath
+
+	switch {
+	case out == "":
+		// The builder would default to a temporary directory, which no
+		// relative path can be meant against; the manifest is the best guess.
+		return m.dir
+	case filepath.IsAbs(out):
+		return out
+	default:
+		return filepath.Join(m.dir, out)
+	}
 }
 
 // isLocalPath reports a replacement that names a directory rather than a

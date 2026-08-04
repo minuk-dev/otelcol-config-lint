@@ -8,7 +8,7 @@
 // this machine builds with apply unchanged -- along with everything those
 // modules require. Components come from the metadata.yaml each one ships, and
 // field-level schemas from their Config structs and the config.schema.yaml
-// upstream publishes, with the hand-written overlays merged on top.
+// upstream publishes.
 package schemagen
 
 import (
@@ -28,12 +28,12 @@ import (
 // These carry the messages; the exported errors below are what callers match
 // on.
 var (
-	errNoManifests      = errors.New("no builder manifests specified")
-	errNoFormats        = errors.New("no schema formats specified")
-	errUnknownFormat    = errors.New("unknown schema format")
-	errNothingGenerated = errors.New("no schema could be generated")
-	errTwoOutputs       = errors.New("--out and --registry name two different places to write")
-	errManyToOneFile    = errors.New("several manifests write several schemas, which needs --registry")
+	errNoManifests   = errors.New("no builder manifests specified")
+	errNoFormats     = errors.New("no schema formats specified")
+	errUnknownFormat = errors.New("unknown schema format")
+	errSkipped       = errors.New("could not be generated")
+	errTwoOutputs    = errors.New("--out and --registry name two different places to write")
+	errManyToOneFile = errors.New("several manifests write several schemas, which needs --registry")
 )
 
 // Errors reported for bad flag values. Each one is a usage error, so ExitCode
@@ -92,7 +92,6 @@ type Options struct {
 	builders    []string
 	outFile     string
 	registryDir string
-	overlayDir  string
 	formats     string
 	cacheDir    string
 	timeout     time.Duration
@@ -172,7 +171,6 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.registryDir, "registry", "",
 		"registry directory to write <distribution>/<version>.<format> into,\n"+
 			"alongside the index.json listing them")
-	flags.StringVar(&o.overlayDir, "overlays", "overlays", "directory of field-schema overlays")
 	flags.StringVar(&o.formats, "formats", "yaml,json", "schema formats to write: yaml, json")
 	flags.StringVar(&o.cacheDir, "cache", defaultCacheDir(), "directory to resolve the modules in")
 	flags.DurationVar(&o.timeout, "timeout", commandTimeout, "timeout for one go command")
@@ -221,11 +219,6 @@ func (o *Options) Run(cmd *cobra.Command) error {
 		return err
 	}
 
-	loaded, err := o.loadOverlays()
-	if err != nil {
-		return err
-	}
-
 	var skipped []string
 
 	for _, builder := range manifests {
@@ -233,7 +226,7 @@ func (o *Options) Run(cmd *cobra.Command) error {
 		// every manifest a registry serves, and one that cannot be resolved --
 		// a module this machine cannot reach, say -- should not discard the
 		// schemas the others produced.
-		err := o.generate(builder, loaded, formats)
+		err := o.generate(builder, formats)
 		if err != nil {
 			o.logf("  %s: skipped (%v)\n", builder, err)
 			skipped = append(skipped, builder)
@@ -242,22 +235,23 @@ func (o *Options) Run(cmd *cobra.Command) error {
 		}
 	}
 
+	if o.registryDir != "" {
+		err = o.writeIndex()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Carrying on past a manifest that failed is what keeps it from discarding
+	// the distributions that did generate; it is not a way to succeed at less
+	// than was asked for. The run ends in failure with the rest written, so a
+	// registry is never quietly published a distribution short.
 	if len(skipped) > 0 {
-		o.logf("skipped %d of %d manifests: %s\n", len(skipped), len(manifests), strings.Join(skipped, ", "))
+		return fmt.Errorf("%d of %d manifests %w: %s",
+			len(skipped), len(manifests), errSkipped, strings.Join(skipped, ", "))
 	}
 
-	// Skipping one manifest of several leaves the others generated, which is
-	// the point of skipping. Skipping every one produced nothing at all, and a
-	// run that produced nothing has not succeeded.
-	if len(skipped) == len(manifests) {
-		return fmt.Errorf("%w: %s", errNothingGenerated, strings.Join(skipped, ", "))
-	}
-
-	if o.registryDir == "" {
-		return nil
-	}
-
-	return o.writeIndex()
+	return nil
 }
 
 // checkDestination settles where the schemas are written. A run either writes
@@ -282,7 +276,7 @@ func (o *Options) checkDestination(manifests []string) error {
 }
 
 // generate reads one manifest and writes the distribution it describes.
-func (o *Options) generate(builder string, overlays []overlay, formats []schema.Format) error {
+func (o *Options) generate(builder string, formats []schema.Format) error {
 	name, path := splitBuilder(builder)
 
 	man, err := readManifest(path, name)
@@ -296,8 +290,6 @@ func (o *Options) generate(builder string, overlays []overlay, formats []schema.
 	if err != nil {
 		return err
 	}
-
-	applyOverlays(cat, overlays)
 
 	if o.registryDir != "" {
 		return o.writeRegistry(cat, formats)

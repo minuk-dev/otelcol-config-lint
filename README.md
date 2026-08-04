@@ -227,22 +227,23 @@ deprecated alias. Both resolve, and using the old name reports
 
 ### Field schemas
 
-`metadata.yaml` describes components but not their settings, so field-level
-schemas come from hand-written overlays in [`overlays/`](overlays), merged into
-the schema at generation time:
+`metadata.yaml` describes components but not their settings, so those are read
+from the modules themselves: every component's `Config` struct, and the
+`config.schema.yaml` upstream publishes alongside it, which contributes
+descriptions and enums the Go source cannot:
 
 ```yaml
-kind: processor
-type: batch
 fields:
   type: map
   children:
-    timeout: {type: duration}
+    timeout: {type: duration, doc: how long to wait before sending a batch}
     send_batch_size: {type: int}
 ```
 
-Overlays accept `minVersion`/`maxVersion` when a component's settings change
-between releases. Components without an overlay are simply not field-checked.
+References between those schemas are followed across modules, so a component's
+shared settings — `sending_queue`, `retry_on_failure`, TLS, gRPC client options
+— are expanded in full. What cannot be resolved stays open rather than being
+reported, so partial coverage never produces false positives.
 
 ## Layout
 
@@ -258,7 +259,6 @@ pkg/schema/                   schema types, version resolution and location look
 pkg/rule/                     the rules and the registry
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
-overlays/                     hand-written field schemas
 ```
 
 ## Development
