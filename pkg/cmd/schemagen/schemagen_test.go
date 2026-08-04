@@ -1,9 +1,8 @@
 package schemagen_test
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,15 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/schemagen"
-)
-
-// The upstream repositories a run harvests, and the archive root each one's
-// tarball unpacks into.
-const (
-	coreRepo    = "open-telemetry/opentelemetry-collector"
-	coreRoot    = "opentelemetry-collector-0.157.0"
-	contribRepo = "open-telemetry/opentelemetry-collector-contrib"
-	contribRoot = "opentelemetry-collector-contrib-0.157.0"
 )
 
 // run executes the command and returns its exit code and streams. The wiring
@@ -54,8 +44,9 @@ func TestExitCode(t *testing.T) {
 	}{
 		"a clean run":      {in: nil, want: schemagen.ExitOK},
 		"a failed harvest": {in: os.ErrNotExist, want: schemagen.ExitFailure},
-		"a bad invocation": {in: schemagen.ErrNoVersions, want: schemagen.ExitUsage},
+		"a bad invocation": {in: schemagen.ErrNoManifests, want: schemagen.ExitUsage},
 		"an empty format":  {in: schemagen.ErrNoFormats, want: schemagen.ExitUsage},
+		"two destinations": {in: schemagen.ErrTwoOutputs, want: schemagen.ExitUsage},
 	}
 
 	for name, tt := range tests {
@@ -67,13 +58,13 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
-func TestNoVersion(t *testing.T) {
+func TestNoManifest(t *testing.T) {
 	t.Parallel()
 
-	code, _, stderr := run(t, "--out", t.TempDir())
+	code, _, stderr := run(t, "--registry", t.TempDir())
 
 	assert.Equal(t, schemagen.ExitUsage, code)
-	assert.Contains(t, stderr, schemagen.ErrNoVersions.Error(), "the missing release is not reported")
+	assert.Contains(t, stderr, schemagen.ErrNoManifests.Error(), "the missing manifest is not reported")
 	assert.Contains(t, stderr, "Usage:", "the usage is not printed")
 }
 
@@ -86,26 +77,26 @@ func TestUnknownFlag(t *testing.T) {
 	assert.Contains(t, stderr, "unknown flag")
 }
 
-// TestPositionalArgument covers the likeliest slip: the release written as an
-// argument rather than as --version.
+// TestPositionalArgument covers the likeliest slip: the manifest written as an
+// argument rather than as --builder.
 func TestPositionalArgument(t *testing.T) {
 	t.Parallel()
 
-	code, _, stderr := run(t, "v0.157.0")
+	code, _, stderr := run(t, "manifest.yaml")
 
 	assert.Equal(t, schemagen.ExitUsage, code)
 	assert.Contains(t, stderr, "Usage:", "the usage is not printed")
 }
 
 // TestUnknownFormat covers --formats: a name nothing can be written in is
-// refused before the first download, rather than writing YAML under it.
+// refused before a single module is resolved, rather than writing YAML under it.
 func TestUnknownFormat(t *testing.T) {
 	t.Parallel()
 
 	out := t.TempDir()
 
-	code, _, stderr := run(t, "--version", "v0.157.0", "--formats", "toml",
-		"--out", out, "--cache", t.TempDir(), "--overlays", t.TempDir())
+	code, _, stderr := run(t, "--builder", "manifest.yaml", "--formats", "toml",
+		"--registry", out, "--cache", t.TempDir(), "--overlays", t.TempDir())
 
 	assert.Equal(t, schemagen.ExitUsage, code)
 	assert.Contains(t, stderr, `unknown schema format "toml"`)
@@ -127,150 +118,207 @@ func TestRunWithoutPrepare(t *testing.T) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 
-	require.ErrorIs(t, opts.Run(cmd), schemagen.ErrNoVersions)
+	require.ErrorIs(t, opts.Run(cmd), schemagen.ErrNoManifests)
 }
 
-func TestIncompleteOverlay(t *testing.T) {
+// TestIncompleteManifest covers the manifest checks: a file that names no
+// distribution describes nothing to write.
+func TestIncompleteManifest(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "batch.yaml"), "fields:\n  type: map\n")
+	path := filepath.Join(dir, "manifest.yaml")
+	writeFile(t, path, "dist:\n  otelcol_version: 0.157.0\n")
 
-	code, _, stderr := run(t, "--version", "v0.157.0", "--overlays", dir, "--out", t.TempDir())
+	code, _, stderr := run(t, "--builder", path,
+		"--registry", t.TempDir(), "--cache", t.TempDir(), "--overlays", t.TempDir())
 
-	assert.Equal(t, schemagen.ExitFailure, code)
-	assert.Contains(t, stderr, "kind and type are required")
+	// One bad manifest is skipped, not fatal, so the run still ends cleanly.
+	require.Equal(t, schemagen.ExitOK, code, "run ended badly: %s", stderr)
+	assert.Contains(t, stderr, "dist.name is required")
+	assert.Contains(t, stderr, "skipped 1 of 1 manifests")
 }
 
-// TestGenerate runs the whole pipeline against archives planted in the cache,
-// so a full generation is exercised without reaching the network.
+// TestGenerate runs the whole pipeline against modules on disk: the manifest
+// replaces every component with a local checkout, which is both what a
+// distribution under development does and what keeps this test off the network.
 func TestGenerate(t *testing.T) {
 	t.Parallel()
 
-	cache, out, overlays := t.TempDir(), t.TempDir(), t.TempDir()
+	modules, out, overlays := t.TempDir(), t.TempDir(), t.TempDir()
 
-	archive(t, cache, coreRepo, map[string]string{
-		coreRoot + "/receiver/otlpreceiver/metadata.yaml": `
+	otlp := module(t, modules, "example.com/collector/receiver/otlpreceiver", map[string]string{
+		"metadata.yaml": `
 type: otlp
 status:
   class: receiver
   stability:
     beta: [traces, metrics, logs]
-  distributions: [core, contrib]
 `,
 		// The field schema is read from the component's own Config struct.
-		coreRoot + "/receiver/otlpreceiver/config.go": "package otlpreceiver\n\n" +
+		"config.go": "package otlpreceiver\n\n" +
 			"type Config struct {\n" +
 			"\t// Endpoint is where the receiver listens.\n" +
 			"\tEndpoint string `mapstructure:\"endpoint\"`\n" +
 			"\tTimeout  int    `mapstructure:\"timeout\"`\n" +
 			"}\n",
-		// Sample components under cmd/ are mdatagen's own fixtures, not
-		// something a config can declare.
-		coreRoot + "/cmd/mdatagen/internal/samplereceiver/metadata.yaml": `
-type: sample
-status:
-  class: receiver
-  stability:
-    development: [traces]
-`,
-	})
-	archive(t, cache, contribRepo, map[string]string{
-		contribRoot + "/processor/spanprocessor/metadata.yaml": `
-type: span
-status:
-  class: processor
-  stability:
-    alpha: [traces]
-  distributions: [contrib]
-`,
+		// mdatagen's sample components live under cmd/ and are not declarable.
+		"cmd/mdatagen/metadata.yaml": "type: sample\nstatus:\n  class: receiver\n",
 	})
 
-	writeFile(t, filepath.Join(overlays, "span.yaml"), `
-kind: processor
-type: span
+	// A component with no metadata.yaml at all, which is what a private one
+	// usually looks like: it is still recorded, from what the manifest says.
+	private := module(t, modules, "example.com/private/exporter/vendorexporter", map[string]string{
+		"config.go": "package vendorexporter\n\ntype Config struct {\n" +
+			"\tToken string `mapstructure:\"token\"`\n}\n",
+	})
+
+	manifest := filepath.Join(modules, "manifest.yaml")
+	writeFile(t, manifest, fmt.Sprintf(`
+dist:
+  module: example.com/collector/distribution
+  name: otelcol-custom
+  otelcol_version: 0.157.0
+receivers:
+  - gomod: example.com/collector/receiver/otlpreceiver v0.0.0
+exporters:
+  - gomod: example.com/private/exporter/vendorexporter v0.0.0
+replaces:
+  - example.com/collector/receiver/otlpreceiver => %s
+  - example.com/private/exporter/vendorexporter => %s
+`, otlp, private))
+
+	writeFile(t, filepath.Join(overlays, "otlp.yaml"), `
+kind: receiver
+type: otlp
 fields:
   type: map
   children:
-    from_attributes: {type: list}
+    protocols: {type: map}
 `)
 
-	code, stdout, stderr := run(t, "--version", "0.157.0",
-		"--out", out, "--cache", cache, "--overlays", overlays)
+	code, stdout, stderr := run(t, "--builder", "custom="+manifest,
+		"--registry", out, "--cache", t.TempDir(), "--overlays", overlays)
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
-	assert.Contains(t, stdout, "loaded 1 field overlay(s)")
+	assert.Contains(t, stderr, "loaded 1 field overlay(s)")
+	assert.Empty(t, stdout, "the registry form has nothing to put on stdout")
 
-	// The version was given without its "v", which the registry layout adds.
-	core := readFile(t, filepath.Join(out, "core", "v0.157.0.yaml"))
-	assert.Contains(t, core, "otlp:", "the core schema is missing the otlp receiver")
-	assert.Contains(t, core, "endpoint:", "the otlp receiver took no fields from its Config struct")
-	assert.NotContains(t, core, "sample:", "the core schema declared an mdatagen fixture")
-	// The span processor ships in contrib only, so it must not leak into the
-	// distribution the otlp receiver was filtered into.
-	assert.NotContains(t, core, "span:", "the core schema holds a contrib-only component")
+	// The release comes from the manifest; the distribution is what --builder
+	// filed it under, which is "custom" and not the manifest's own name.
+	written := readFile(t, filepath.Join(out, "custom", "v0.157.0.yaml"))
+	assert.Contains(t, written, "distribution: custom")
+	assert.NotContains(t, written, "distribution: otelcol-custom")
+	assert.Contains(t, written, "collectorVersion: v0.157.0")
 
-	contrib := readFile(t, filepath.Join(out, "contrib", "v0.157.0.json"))
-	assert.Contains(t, contrib, `"span"`)
-	assert.Contains(t, contrib, `"otlp"`)
-	assert.Contains(t, contrib, `"from_attributes"`, "the span processor did not take the overlay's fields")
+	assert.Contains(t, written, "otlp:", "the schema is missing the declared receiver")
+	assert.Contains(t, written, "protocols:", "the otlp receiver did not take the overlay's fields")
+	assert.NotContains(t, written, "sample:", "the schema declared an mdatagen fixture")
+
+	// The private component has no metadata, so its type comes from the module
+	// name and its fields from its Config struct.
+	assert.Contains(t, written, "vendor:", "the private exporter was dropped for having no metadata")
+	assert.Contains(t, written, "token:", "the private exporter took no fields from its Config struct")
 
 	index := readFile(t, filepath.Join(out, "index.json"))
-	for _, want := range []string{"core", "contrib", "v0.157.0"} {
-		assert.Contains(t, index, want)
-	}
+	assert.Contains(t, index, "custom")
+	assert.Contains(t, index, "v0.157.0")
 }
 
-// TestSkipsMissingRelease covers a release one repository never tagged: the
-// run reports it and carries on rather than failing.
-func TestSkipsMissingRelease(t *testing.T) {
+// TestWritesOneFile covers the single-manifest form: the schema goes where
+// --out names, and to stdout when it names nothing.
+func TestWritesOneFile(t *testing.T) {
 	t.Parallel()
 
-	out := t.TempDir()
+	modules := t.TempDir()
+	manifest := singleComponentManifest(t, modules)
+	dest := filepath.Join(t.TempDir(), "my-collector.json")
 
-	// The cache is empty and the timeout expires immediately, so the first
-	// fetch fails without waiting on the network.
-	code, stdout, stderr := run(t, "--version", "v0.1.0", "--timeout", "1ns",
-		"--out", out, "--cache", t.TempDir(), "--overlays", t.TempDir())
+	code, _, stderr := run(t, "--builder", manifest, "--out", dest,
+		"--cache", t.TempDir(), "--overlays", t.TempDir())
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
-	assert.Contains(t, stdout, "v0.1.0: skipped")
-	assert.Contains(t, stdout, "skipped 1 of 1 releases")
 
-	// The index is still written, listing nothing.
-	index := readFile(t, filepath.Join(out, "index.json"))
-	assert.Contains(t, index, "distributions")
+	// The name says JSON, so JSON is what it holds.
+	written := readFile(t, dest)
+	assert.Contains(t, written, `"otlp"`)
+	assert.Contains(t, written, `"collectorVersion": "v0.157.0"`)
+
+	// With no --out at all the schema is a stream, the way a filter writes, so
+	// stdout holds the schema and nothing else.
+	code, stdout, stderr := run(t, "--builder", manifest,
+		"--cache", t.TempDir(), "--overlays", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.True(t, strings.HasPrefix(stdout, "collectorVersion: v0.157.0"),
+		"stdout is not the schema alone:\n%s", stdout)
 }
 
-// archive writes a gzipped tar into the cache directory under the name a
-// download would have been saved as, so the run finds it already fetched.
-func archive(t *testing.T, cacheDir, repo string, files map[string]string) {
+// TestTwoDestinations covers --out and --registry given together, which name
+// two different places for the same schema.
+func TestTwoDestinations(t *testing.T) {
+	t.Parallel()
+
+	code, _, stderr := run(t, "--builder", "manifest.yaml",
+		"--out", filepath.Join(t.TempDir(), "schema.yaml"), "--registry", t.TempDir())
+
+	assert.Equal(t, schemagen.ExitUsage, code)
+	assert.Contains(t, stderr, schemagen.ErrTwoOutputs.Error())
+}
+
+// TestManyManifestsNeedRegistry covers several manifests written to one file,
+// which cannot hold them all.
+func TestManyManifestsNeedRegistry(t *testing.T) {
+	t.Parallel()
+
+	code, _, stderr := run(t, "--builder", "a.yaml", "--builder", "b.yaml",
+		"--out", filepath.Join(t.TempDir(), "schema.yaml"))
+
+	assert.Equal(t, schemagen.ExitUsage, code)
+	assert.Contains(t, stderr, schemagen.ErrManyToOneFile.Error())
+}
+
+// singleComponentManifest writes a manifest with one locally replaced
+// component, which is all a destination test needs.
+func singleComponentManifest(t *testing.T, root string) string {
 	t.Helper()
 
-	var buf bytes.Buffer
+	dir := module(t, root, "example.com/collector/receiver/otlpreceiver", map[string]string{
+		"metadata.yaml": "type: otlp\nstatus:\n  class: receiver\n" +
+			"  stability:\n    beta: [traces]\n",
+	})
 
-	zipped := gzip.NewWriter(&buf)
-	tarred := tar.NewWriter(zipped)
+	path := filepath.Join(root, "manifest.yaml")
+	writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.157.0
+receivers:
+  - gomod: example.com/collector/receiver/otlpreceiver v0.0.0
+replaces:
+  - example.com/collector/receiver/otlpreceiver => %s
+`, dir))
+
+	return path
+}
+
+// module writes a self-contained Go module under root and returns its
+// directory, so a manifest can replace the module path with it.
+func module(t *testing.T, root, path string, files map[string]string) string {
+	t.Helper()
+
+	dir := filepath.Join(root, strings.ReplaceAll(path, "/", "_"))
+	require.NoError(t, os.MkdirAll(dir, 0o750))
+
+	writeFile(t, filepath.Join(dir, "go.mod"), "module "+path+"\n\ngo 1.24\n")
 
 	for name, body := range files {
-		//nolint:exhaustruct // a regular file needs no ownership or timestamps
-		err := tarred.WriteHeader(&tar.Header{
-			Name:     name,
-			Typeflag: tar.TypeReg,
-			Mode:     0o600,
-			Size:     int64(len(body)),
-		})
-		require.NoError(t, err, "write header for %s", name)
-
-		_, err = tarred.Write([]byte(body))
-		require.NoError(t, err, "write %s", name)
+		dest := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o750))
+		writeFile(t, dest, body)
 	}
 
-	require.NoError(t, tarred.Close())
-	require.NoError(t, zipped.Close())
-
-	name := strings.ReplaceAll(repo, "/", "_") + "-v0.157.0.tar.gz"
-	writeFile(t, filepath.Join(cacheDir, name), buf.String())
+	return dir
 }
 
 func writeFile(t *testing.T, path, content string) {

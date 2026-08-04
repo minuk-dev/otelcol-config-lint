@@ -182,15 +182,43 @@ network is tried.
 
 ### Adding a release
 
+A distribution is described by the same [OCB builder
+manifest](https://github.com/open-telemetry/opentelemetry-collector/tree/main/cmd/builder)
+that builds it, so the schema lists exactly the components the binary carries.
+Upstream ships one per distribution in
+[`opentelemetry-collector-releases`](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions):
+
 ```sh
-make schemas VERSIONS=v0.158.0            # writes to ../otelcol-config-schemas
-make schemas VERSIONS=v0.158.0 SCHEMAS=/path/to/otelcol-config-schemas
+# ../opentelemetry-collector-releases checked out at the release to generate
+make schemas                                    # writes to ../otelcol-config-schemas
+make schemas RELEASES=/path/to/opentelemetry-collector-releases \
+             SCHEMAS=/path/to/otelcol-config-schemas
 ```
 
-`cmd/schemagen` downloads the core and contrib source archives for the tag,
-reads every `metadata.yaml`, and writes `<distribution>/<version>.yaml` and
-`.json` into the schema repository, plus the `index.json` listing them. It needs no collector
-dependencies, so the linter itself stays a two-package build.
+Or name a manifest directly, which is how a private distribution is covered.
+A single run writes one schema, so `--out` names the file (or `-`, the default,
+for stdout); `--registry` is what fills a directory with the
+`<distribution>/<version>.<ext>` layout and its `index.json`:
+
+```sh
+go run ./cmd/schemagen --builder ./builder.yaml --out ./my-collector.yaml
+go run ./cmd/schemagen --builder acme=./builder.yaml --registry ./schemas
+```
+
+`cmd/schemagen` downloads every module the manifest names, plus everything they
+require, and writes `<distribution>/<version>.yaml` and `.json` into the schema
+repository, along with the `index.json` listing them. The download goes through
+the `go` command, so `GOPROXY`, `GOPRIVATE` and whatever credentials this
+machine builds with apply unchanged: a **private component resolves exactly as
+it does for the build that consumes it**, and a `replaces:` entry pointing at a
+checkout is read from there. A component that ships no `metadata.yaml` is still
+recorded, from what the manifest says, so a config naming it is not reported as
+unknown.
+
+In the registry the file name comes from the manifest -- `dist.otelcol_version`
+(or `dist.version`) and `dist.name` -- so `--builder <name>=<path>` overrides
+the name where the registry spells a distribution differently from upstream, as
+it does for `otelcol`, which is filed as `core`.
 
 Component renames are carried through: upstream is moving types to snake_case,
 so from v0.157.0 the OTLP gRPC exporter is `otlp_grpc` with `otlp` kept as a

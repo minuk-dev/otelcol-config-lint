@@ -1,19 +1,20 @@
 // Package schemagen implements the schemagen command: flag parsing, the
-// harvest of the upstream sources and writing the schemas out.
+// harvest of a distribution's modules and writing the schemas out.
 //
-// Every collector component ships a metadata.yaml declaring its type, class and
-// per-signal stability. schemagen downloads the core and contrib source
-// archives for a release, reads those files, and writes one schema per
-// distribution into a registry directory. Field-level schemas come from the
-// components' own Config structs and the config.schema.yaml upstream publishes,
-// with the hand-written overlays merged on top.
+// A distribution is described by the same OCB builder manifest that builds it,
+// so the schema lists exactly the components the binary carries. Every module
+// the manifest names is downloaded through the go command -- which is what
+// makes a private component work, since GOPROXY, GOPRIVATE and any credentials
+// this machine builds with apply unchanged -- along with everything those
+// modules require. Components come from the metadata.yaml each one ships, and
+// field-level schemas from their Config structs and the config.schema.yaml
+// upstream publishes, with the hand-written overlays merged on top.
 package schemagen
 
 import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,18 +28,25 @@ import (
 // These carry the messages; the exported errors below are what callers match
 // on.
 var (
-	errNoVersions    = errors.New("no collector releases specified")
+	errNoManifests   = errors.New("no builder manifests specified")
 	errNoFormats     = errors.New("no schema formats specified")
 	errUnknownFormat = errors.New("unknown schema format")
+	errTwoOutputs    = errors.New("--out and --registry name two different places to write")
+	errManyToOneFile = errors.New("several manifests write several schemas, which needs --registry")
 )
 
 // Errors reported for bad flag values. Each one is a usage error, so ExitCode
 // maps it to ExitUsage the way a bad flag is mapped.
 var (
-	// ErrNoVersions reports that no release was named to generate a schema for.
-	ErrNoVersions error = usageError{errNoVersions}
+	// ErrNoManifests reports that no builder manifest was given to read a
+	// distribution out of.
+	ErrNoManifests error = usageError{errNoManifests}
 	// ErrNoFormats reports that --formats was emptied out.
 	ErrNoFormats error = usageError{errNoFormats}
+	// ErrTwoOutputs reports --out and --registry given together.
+	ErrTwoOutputs error = usageError{errTwoOutputs}
+	// ErrManyToOneFile reports several manifests written to a single file.
+	ErrManyToOneFile error = usageError{errManyToOneFile}
 )
 
 // Exit codes: the command either produced schemas or it did not.
@@ -72,23 +80,26 @@ func ExitCode(err error) int {
 	}
 }
 
-// downloadTimeout bounds a single source archive download.
-const downloadTimeout = 5 * time.Minute
+// commandTimeout bounds one go command: resolving a large distribution
+// downloads a few hundred modules, so it is generous.
+const commandTimeout = 10 * time.Minute
 
 // Options holds everything the command was asked to do. The fields are filled
 // in by RegisterFlags and then by Prepare, in that order.
 type Options struct {
 	// flags
-	versions   string
-	outDir     string
-	overlayDir string
-	formats    string
-	cacheDir   string
-	timeout    time.Duration
+	builders    []string
+	outFile     string
+	registryDir string
+	overlayDir  string
+	formats     string
+	cacheDir    string
+	timeout     time.Duration
 
-	// internal state
-	client *http.Client
-	out    io.Writer
+	// internal state. The schema is the command's output and progress is not,
+	// so they go to different streams: "--out -" has to be pipeable.
+	out      io.Writer
+	progress io.Writer
 }
 
 // NewCommand builds the schemagen command. A nil opts is allowed, in which case
@@ -101,11 +112,12 @@ func NewCommand(opts *Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "schemagen [flags]",
 		Short: "Build component schemas from the upstream collector sources",
-		Example: `  schemagen --version v0.157.0
-  schemagen --version v0.150.0,v0.157.0 --out ../otelcol-config-schemas`,
-		// Every input is a flag. A stray argument -- "schemagen v0.157.0" for
-		// "--version v0.157.0" -- is a usage error like any bad flag, so it is
-		// reported the same way rather than through cobra's own path.
+		Example: `  schemagen --builder builder.yaml --out schema.yaml
+  schemagen --builder core=otelcol/manifest.yaml --builder contrib=otelcol-contrib/manifest.yaml \
+    --registry ../otelcol-config-schemas`,
+		// Every input is a flag. A stray argument -- "schemagen manifest.yaml"
+		// for "--builder manifest.yaml" -- is a usage error like any bad flag,
+		// so it is reported the same way rather than through cobra's own path.
 		Args: func(cmd *cobra.Command, args []string) error {
 			err := cobra.NoArgs(cmd, args)
 			if err != nil {
@@ -119,7 +131,7 @@ func NewCommand(opts *Options) *cobra.Command {
 		// main prints command-level errors itself, with the tool prefix.
 		SilenceErrors: true,
 		// A failed harvest is not a usage error, so the usage text is printed
-		// only where it helps: bad flags and a missing --version.
+		// only where it helps: bad flags and a missing --builder.
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := opts.Prepare(cmd)
@@ -151,44 +163,59 @@ func NewCommand(opts *Options) *cobra.Command {
 func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
-	flags.StringVar(&o.versions, "version", "", "comma-separated collector releases, e.g. v0.157.0")
-	flags.StringVar(&o.outDir, "out", "schemas", "registry directory to write schemas into")
+	flags.StringSliceVar(&o.builders, "builder", nil,
+		"OCB builder manifest describing a distribution, as \"[name=]path\";\n"+
+			"name overrides what the registry files it under; repeat for several")
+	flags.StringVar(&o.outFile, "out", "-",
+		"file to write the schema to, or \"-\" for stdout; one manifest only")
+	flags.StringVar(&o.registryDir, "registry", "",
+		"registry directory to write <distribution>/<version>.<format> into,\n"+
+			"alongside the index.json listing them")
 	flags.StringVar(&o.overlayDir, "overlays", "overlays", "directory of field-schema overlays")
 	flags.StringVar(&o.formats, "formats", "yaml,json", "schema formats to write: yaml, json")
-	flags.StringVar(&o.cacheDir, "cache", defaultCacheDir(), "directory to cache downloaded archives in")
-	flags.DurationVar(&o.timeout, "timeout", downloadTimeout, "per-download timeout")
+	flags.StringVar(&o.cacheDir, "cache", defaultCacheDir(), "directory to resolve the modules in")
+	flags.DurationVar(&o.timeout, "timeout", commandTimeout, "timeout for one go command")
 }
 
-// Prepare wires up what the run needs beyond the flags: where progress is
-// reported and the client the archives are downloaded with.
+// Prepare wires up what the run needs beyond the flags: where the schema is
+// written and where progress is reported.
 func (o *Options) Prepare(cmd *cobra.Command) error {
 	o.out = cmd.OutOrStdout()
-	o.client = &http.Client{Timeout: o.timeout}
+	o.progress = cmd.ErrOrStderr()
+
+	if o.timeout <= 0 {
+		o.timeout = commandTimeout
+	}
 
 	return nil
 }
 
-// Run generates a schema for every requested release. Prepare is expected to
-// have run first; a caller that composed the options itself gets the defaults
-// instead of a half-built run.
+// Run generates a schema for every distribution it was given a manifest for.
+// Prepare is expected to have run first; a caller that composed the options
+// itself gets the defaults instead of a half-built run.
 func (o *Options) Run(cmd *cobra.Command) error {
-	if o.out == nil || o.client == nil {
+	if o.out == nil || o.progress == nil {
 		err := o.Prepare(cmd)
 		if err != nil {
 			return err
 		}
 	}
 
-	versions := splitList(o.versions)
-	if len(versions) == 0 {
+	manifests := o.builders
+	if len(manifests) == 0 {
 		cmd.PrintErr(cmd.UsageString())
 
-		return ErrNoVersions
+		return ErrNoManifests
 	}
 
-	// The formats are resolved before the first download, so a typo does not
-	// surface after several minutes of fetching.
+	// Everything the flags can disagree about is settled before the first
+	// download, so a typo does not surface after several minutes of fetching.
 	formats, err := o.parseFormats()
+	if err != nil {
+		return err
+	}
+
+	err = o.checkDestination(manifests)
 	if err != nil {
 		return err
 	}
@@ -198,40 +225,77 @@ func (o *Options) Run(cmd *cobra.Command) error {
 		return err
 	}
 
-	err = os.MkdirAll(o.outDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf("create output directory: %w", err)
-	}
-
 	var skipped []string
 
-	for _, v := range versions {
-		v = schema.Normalize(v)
-
-		// A release is skipped rather than fatal: generating the full tag
-		// history means asking for versions one repository tagged and the
-		// other did not, and one gap should not discard the rest of the run.
-		cat, err := o.build(v)
+	for _, builder := range manifests {
+		// A distribution is skipped rather than fatal: a run is usually given
+		// every manifest a registry serves, and one that cannot be resolved --
+		// a module this machine cannot reach, say -- should not discard the
+		// schemas the others produced.
+		err := o.generate(builder, loaded, formats)
 		if err != nil {
-			o.logf("  %s: skipped (%v)\n", v, err)
-			skipped = append(skipped, v)
+			o.logf("  %s: skipped (%v)\n", builder, err)
+			skipped = append(skipped, builder)
 
 			continue
-		}
-
-		applyOverlays(cat, loaded)
-
-		err = o.writeDistributions(cat, formats)
-		if err != nil {
-			return err
 		}
 	}
 
 	if len(skipped) > 0 {
-		o.logf("skipped %d of %d releases: %s\n", len(skipped), len(versions), strings.Join(skipped, ", "))
+		o.logf("skipped %d of %d manifests: %s\n", len(skipped), len(manifests), strings.Join(skipped, ", "))
+	}
+
+	if o.registryDir == "" {
+		return nil
 	}
 
 	return o.writeIndex()
+}
+
+// checkDestination settles where the schemas are written. A run either writes
+// one distribution, to a file or to stdout, or fills a registry with as many as
+// it was given manifests; asking for both says two different things.
+func (o *Options) checkDestination(manifests []string) error {
+	switch {
+	case o.registryDir != "" && o.outFile != "" && o.outFile != stdoutMarker:
+		return ErrTwoOutputs
+	case o.registryDir == "" && len(manifests) > 1:
+		return ErrManyToOneFile
+	case o.registryDir == "":
+		return nil
+	}
+
+	err := os.MkdirAll(o.registryDir, dirPerm)
+	if err != nil {
+		return fmt.Errorf("create registry directory: %w", err)
+	}
+
+	return nil
+}
+
+// generate reads one manifest and writes the distribution it describes.
+func (o *Options) generate(builder string, overlays []overlay, formats []schema.Format) error {
+	name, path := splitBuilder(builder)
+
+	man, err := readManifest(path, name)
+	if err != nil {
+		return err
+	}
+
+	o.logf("%s: %s %s\n", path, man.Dist.Name, man.collectorVersion())
+
+	cat, err := o.build(man)
+	if err != nil {
+		return err
+	}
+
+	applyOverlays(cat, overlays)
+
+	if o.registryDir != "" {
+		return o.writeRegistry(cat, formats)
+	}
+
+	return o.writeFile(cat, formats)
 }
 
 // parseFormats resolves --formats. An unknown name is refused rather than
@@ -257,11 +321,10 @@ func (o *Options) parseFormats() ([]schema.Format, error) {
 	return out, nil
 }
 
-// logf reports progress. schemagen is a developer command whose output is the
-// point, but it goes through the command's own writer so nothing prints to a
-// stream the caller did not choose.
+// logf reports progress, on the error stream: the schema is what this command
+// outputs, and "--out -" is meant to be piped.
 func (o *Options) logf(format string, args ...any) {
-	_, _ = fmt.Fprintf(o.out, format, args...)
+	_, _ = fmt.Fprintf(o.progress, format, args...)
 }
 
 func defaultCacheDir() string {
