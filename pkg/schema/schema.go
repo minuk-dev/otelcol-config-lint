@@ -63,9 +63,9 @@ type Component struct {
 	AliasOf string `json:"aliasOf,omitempty" yaml:"aliasOf,omitempty"`
 	// Alias is the legacy name this component is also registered under.
 	Alias string `json:"alias,omitempty" yaml:"alias,omitempty"`
-	// Fields is the optional field-level schema. It is only populated for
-	// components covered by an overlay, and rules that inspect settings skip
-	// components without it.
+	// Fields is the optional field-level schema, read from the component's
+	// Config struct and the config schema upstream publishes. Rules that
+	// inspect settings skip components without it.
 	Fields *Field `json:"fields,omitempty" yaml:"fields,omitempty"`
 }
 

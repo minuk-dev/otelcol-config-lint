@@ -25,10 +25,6 @@ const (
 	typeDuration = "duration"
 )
 
-// keysPerSchema is how many keys a schema is indexed under: its repository path
-// and its module path.
-const keysPerSchema = 2
-
 // maxFieldDepth is a backstop only. Expansion normally terminates by detecting
 // a reference cycle; this catches a schema that nests deeply without repeating
 // a reference, so a malformed input cannot run away.
@@ -51,19 +47,25 @@ type jsonSchema struct {
 	AdditionalProperties *yaml.Node `yaml:"additionalProperties"`
 }
 
-// schemaSet holds every config schema found across the source archives, keyed
-// both by repository path ("/receiver/filelogreceiver") and by module path
-// ("go.opentelemetry.io/collector/config/confighttp"), because references use
-// both spellings.
+// schemaSet holds every config schema found across the distribution's modules,
+// keyed by import path
+// ("go.opentelemetry.io/collector/config/confighttp"), which is how a reference
+// from another module spells it.
 type schemaSet struct {
 	byKey map[string]*jsonSchema
+	// seen counts the files, which byKey cannot: one file is keyed twice.
+	seen map[string]bool
 }
 
-func newSchemaSet() *schemaSet { return &schemaSet{byKey: map[string]*jsonSchema{}} }
+func newSchemaSet() *schemaSet {
+	return &schemaSet{byKey: map[string]*jsonSchema{}, seen: map[string]bool{}}
+}
 
-// add records a config schema under both spellings a reference may use. dir is
-// the component directory inside the archive, e.g. "receiver/filelogreceiver".
-func (s *schemaSet) add(src source, dir string, raw []byte) {
+// add records a config schema under both spellings a reference may use: the
+// import path it was published under, and the repository-absolute path, which
+// is how upstream's own schemas refer to each other -- "/config/configtls"
+// rather than "go.opentelemetry.io/collector/config/configtls".
+func (s *schemaSet) add(importPath string, raw []byte) {
 	var doc jsonSchema
 
 	err := yaml.Unmarshal(raw, &doc)
@@ -71,8 +73,35 @@ func (s *schemaSet) add(src source, dir string, raw []byte) {
 		return
 	}
 
-	s.byKey["/"+dir] = &doc
-	s.byKey[src.module+"/"+dir] = &doc
+	s.byKey[importPath] = &doc
+	s.seen[importPath] = true
+
+	if repo, ok := repositoryPath(importPath); ok {
+		s.byKey[repo] = &doc
+	}
+}
+
+// repositoryPath is the repository-absolute spelling of an import path, and
+// reports whether the module belongs to a repository that uses that spelling.
+// Only the two upstream repositories publish config schemas, and only they
+// write references this way, so only they have to be recognised.
+func repositoryPath(importPath string) (string, bool) {
+	for _, root := range repositoryRoots() {
+		if rest, found := strings.CutPrefix(importPath, root+"/"); found {
+			return "/" + rest, true
+		}
+	}
+
+	return "", false
+}
+
+// repositoryRoots are the module prefixes of the repositories whose published
+// schemas reference each other repository-absolutely.
+func repositoryRoots() []string {
+	return []string{
+		"go.opentelemetry.io/collector",
+		"github.com/open-telemetry/opentelemetry-collector-contrib",
+	}
 }
 
 // lookup resolves a $ref against the file that contained it. A reference is
@@ -96,7 +125,7 @@ func (s *schemaSet) lookup(ref, fromDir string) *jsonSchema {
 
 // count reports how many config schemas were collected, counting each file
 // once rather than once per spelling it is keyed under.
-func (s *schemaSet) count() int { return len(s.byKey) / keysPerSchema }
+func (s *schemaSet) count() int { return len(s.seen) }
 
 // def looks a definition up in the file keyed by either spelling. A reference
 // relative to a module-qualified location resolves to a module-qualified key,
@@ -335,14 +364,12 @@ func attachFields(cat *schema.Schema, set *schemaSet) int {
 
 	for _, byType := range cat.Components {
 		for _, comp := range byType {
-			dir := moduleDir(comp.Module)
-
 			doc, ok := set.byKey[comp.Module]
-			if !ok || dir == "" {
+			if !ok {
 				continue
 			}
 
-			f := set.field(doc, dir, nil, 0)
+			f := set.field(doc, comp.Module, nil, 0)
 			if f == nil || len(f.Children) == 0 {
 				continue
 			}
@@ -389,16 +416,4 @@ func enrich(primary, secondary *schema.Field) {
 
 		primary.Children[name] = child
 	}
-}
-
-// moduleDir is the in-archive directory a module path corresponds to, which is
-// what relative references inside its schema resolve against.
-func moduleDir(module string) string {
-	for _, src := range sources() {
-		if rest, found := strings.CutPrefix(module, src.module+"/"); found {
-			return rest
-		}
-	}
-
-	return ""
 }
