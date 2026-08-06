@@ -95,11 +95,15 @@ func repositoryPath(importPath string) (string, bool) {
 	return "", false
 }
 
+// coreModuleRoot is the module prefix of the collector itself, whose release is
+// the one a config is written against.
+const coreModuleRoot = "go.opentelemetry.io/collector"
+
 // repositoryRoots are the module prefixes of the repositories whose published
 // schemas reference each other repository-absolutely.
 func repositoryRoots() []string {
 	return []string{
-		"go.opentelemetry.io/collector",
+		coreModuleRoot,
 		"github.com/open-telemetry/opentelemetry-collector-contrib",
 	}
 }

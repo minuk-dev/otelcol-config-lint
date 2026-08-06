@@ -220,6 +220,55 @@ replaces:
 	}
 }
 
+// TestCollectorVersion covers where the release a schema is filed under comes
+// from. Upstream's own release manifests carry a dist.version that lags the tag
+// -- 0.149.0 at the v0.150.0 tag -- so what the collector's components are
+// pinned at decides, and dist.otelcol_version overrides everything when set.
+func TestCollectorVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		dist string
+		want string
+	}{
+		"pinned components win over a lagging dist.version": {
+			dist: "  name: custom\n  version: 0.149.0",
+			want: "collectorVersion: v0.150.0",
+		},
+		"otelcol_version wins over both": {
+			dist: "  name: custom\n  version: 0.149.0\n  otelcol_version: 0.157.0",
+			want: "collectorVersion: v0.157.0",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			dir := module(t, root, "go.opentelemetry.io/collector/receiver/otlpreceiver", map[string]string{
+				"metadata.yaml": "type: otlp\nstatus:\n  class: receiver\n" +
+					"  stability:\n    beta: [traces]\n",
+			})
+
+			path := filepath.Join(root, "manifest.yaml")
+			writeFile(t, path, fmt.Sprintf(`
+dist:
+%s
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.150.0
+replaces:
+  - go.opentelemetry.io/collector/receiver/otlpreceiver => %s
+`, tt.dist, dir))
+
+			code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
+
+			require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+			assert.Contains(t, stdout, tt.want)
+		})
+	}
+}
+
 // TestTextualType covers a setting whose Go type is a number but whose config
 // spelling is a word: configtelemetry.Level is an int32 with an UnmarshalText
 // method, and the debug exporter's "verbosity: detailed" is not an integer.

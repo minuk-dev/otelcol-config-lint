@@ -125,15 +125,50 @@ func readManifest(path, name string) (*manifest, error) {
 }
 
 // collectorVersion is the upstream release the distribution is built from,
-// which is what the schema is filed under. A manifest that only carries its own
-// version is taken at its word: for the upstream release manifests the two are
-// the same number.
+// which is what the schema is filed under and what a config is checked against.
+//
+// dist.version is asked last because it is the distribution's own number, not
+// the collector's: a vendor's build has a version of its own, and even
+// upstream's release manifests lag -- at the v0.150.0 tag they still read
+// 0.149.0 while every component is pinned at v0.150.0. What the components are
+// pinned at is the release, so that is the better answer.
 func (m *manifest) collectorVersion() string {
 	if m.Dist.OtelColVersion != "" {
 		return schema.Normalize(m.Dist.OtelColVersion)
 	}
 
+	if pinned := m.pinnedVersion(); pinned != "" {
+		return schema.Normalize(pinned)
+	}
+
 	return schema.Normalize(m.Dist.Version)
+}
+
+// pinnedVersion is the release the collector's own components are pinned at:
+// the most common one among them. Only the 0.x line is counted, since the
+// modules that reached 1.0 -- pdata, component, config -- carry a version of
+// their own that is not the release.
+func (m *manifest) pinnedVersion() string {
+	counts := map[string]int{}
+
+	best, seen := "", 0
+
+	for _, decl := range m.components() {
+		if !strings.HasPrefix(decl.module, coreModuleRoot+"/") ||
+			!strings.HasPrefix(decl.version, "v0.") {
+			continue
+		}
+
+		counts[decl.version]++
+
+		// Ties keep the version already chosen, which the ordering of
+		// components() makes deterministic.
+		if counts[decl.version] > seen {
+			best, seen = decl.version, counts[decl.version]
+		}
+	}
+
+	return best
 }
 
 // components lists every declared component, in kind order.
