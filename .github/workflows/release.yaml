@@ -19,6 +19,26 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # Bump then tag: the commit being released has to pin the action's image
+      # at the release it is about to publish. If it names anything else,
+      # `uses: minuk-dev/otelcol-config-lint@v1` would run a different revision
+      # of the linter than the tag says -- and the fix, once the tag is out
+      # there, is another release. Cheaper to refuse the tag.
+      - name: The action has to be pinned at the release being cut
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # goreleaser publishes {{ .Version }}, which carries no leading v.
+          expected="${GITHUB_REF_NAME#v}"
+          pinned="$(sed -nE 's|^FROM ghcr\.io/minuk-dev/otelcol-config-lint:([^ ]+).*|\1|p' Dockerfile)"
+
+          if [ "${pinned}" != "${expected}" ]; then
+            echo "::error title=release::${GITHUB_REF_NAME} pins the action at" \
+              "'${pinned}', expected '${expected}'." \
+              "Run 'make release-pin RELEASE=${GITHUB_REF_NAME}', commit, and tag that commit."
+            exit 1
+          fi
+
+          echo "${GITHUB_REF_NAME} pins the action at ${pinned}"
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

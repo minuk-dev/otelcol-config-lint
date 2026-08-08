@@ -1,10 +1,10 @@
-# The action image builds with the repository root as its context, so keep the
-# things that are not needed to compile the binary out of it.
-.git
-.github
-bin/
-dist/
-coverage.txt
-# The fixtures are read from the mounted workspace when a workflow points
-# schema-location at them, never from inside the image.
-testdata/
+# The action image is assembled from the linter image goreleaser published, so
+# the only thing its build context has to carry is the entrypoint wrapped
+# around it. The source tree is no longer part of that build; sending it would
+# only make every consumer's workflow upload it to the daemon and drop it.
+#
+# This applies to the root Dockerfile alone. The distroless image releases
+# publish is built with goreleaser's dist directory as its context, which has a
+# .dockerignore of its own -- that is, none.
+*
+!build/docker/action-entrypoint.sh

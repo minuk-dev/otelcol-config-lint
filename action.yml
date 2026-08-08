@@ -96,8 +96,9 @@ outputs:
   infos:
     description: Number of infos reported.
 
-# The image is built from this repository, so the action and the linter it runs
-# are always the same revision: a workflow pinned to @v1 cannot drift.
+# The image wraps the linter image of the release it ships in -- see Dockerfile
+# -- so the action and the linter it runs are always the same release: a
+# workflow pinned to @v1 cannot drift, and nothing is compiled on the runner.
 runs:
   using: docker
   image: Dockerfile
