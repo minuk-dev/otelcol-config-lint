@@ -48,6 +48,8 @@ func TestExitCode(t *testing.T) {
 		"an empty format":  {in: schemagen.ErrNoFormats, want: schemagen.ExitUsage},
 		"two destinations": {in: schemagen.ErrTwoOutputs, want: schemagen.ExitUsage},
 		"nothing written":  {in: schemagen.ErrManyToOneFile, want: schemagen.ExitUsage},
+		"nothing to diff":  {in: schemagen.ErrNoPrevious, want: schemagen.ExitUsage},
+		"nothing to prune": {in: schemagen.ErrNothingToPrune, want: schemagen.ExitUsage},
 	}
 
 	for name, tt := range tests {
