@@ -2,12 +2,9 @@ package otelcolconfiglint
 
 import (
 	"github.com/spf13/cobra"
-)
 
-// Version is the linter's own version.
-//
-//nolint:gochecknoglobals // injected at build time with -ldflags
-var Version = "dev"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/version"
+)
 
 // versionTemplate renders the built-in --version flag the same way the
 // "version" subcommand prints it, so the two never drift apart.
@@ -20,7 +17,7 @@ func newVersionCommand() *cobra.Command {
 		Short: "Print the linter version",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
-			cmd.Printf("otelcol-config-lint %s\n", Version)
+			cmd.Printf("otelcol-config-lint %s\n", version.Version)
 		},
 	}
 }

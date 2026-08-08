@@ -344,6 +344,7 @@ pkg/schema/                   schema types, version resolution and location look
 pkg/rule/                     the rules and the registry
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
+pkg/version/                  the linter's own version, stamped at build time
 action.yml                    the GitHub Action; Dockerfile is the image it runs
 ```
 
@@ -354,8 +355,15 @@ make test            # go test -race with coverage
 make lint            # golangci-lint
 make build           # ./bin/otelcol-config-lint
 make build-snapshot  # every release target, the way CI builds them
+make verify-version  # build, then read the version back out of the binary
 make schemas         # regenerate the schemas into ../otelcol-config-schemas
 ```
+
+The version lives in `pkg/version` and both build paths stamp it there with
+`-ldflags -X`. The linker ignores `-X` against a symbol that does not exist, so
+moving that package without updating `Makefile` and `.goreleaser.yaml` would
+ship a binary reporting `dev` and nothing would fail; `make verify-version`
+reads it back out, and CI does the same to the snapshot build.
 
 CI runs the tests with coverage reported on the pull request, builds every
 release target, lints this repository's own example configs, exercises the

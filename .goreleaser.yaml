@@ -20,7 +20,10 @@ builds:
       - arm64
     ldflags:
       - "-s -w"
-      - "-X github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint.Version={{.Version}}"
+      # Keep in step with the Makefile's LDFLAGS: the linker ignores -X against
+      # a symbol that does not exist, so a stale path ships a binary reporting
+      # "dev". CI reads the version back out of a snapshot build to catch that.
+      - "-X github.com/minuk-dev/otelcol-config-lint/pkg/version.Version={{.Version}}"
 
 archives:
   - id: otelcol-config-lint
