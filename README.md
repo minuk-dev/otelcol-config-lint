@@ -269,6 +269,47 @@ so from v0.157.0 the OTLP gRPC exporter is `otlp_grpc` with `otlp` kept as a
 deprecated alias. Both resolve, and using the old name reports
 `deprecated-component`.
 
+### Keeping the registry current
+
+Nobody has to remember. The [`schemas`](.github/workflows/schemas.yaml) workflow
+runs weekly, reads upstream's release tags, and for each one the registry does
+not have yet generates the schemas and opens a pull request against
+`otelcol-config-schemas`, one per release. A release with no schema is not a gap
+the linter reports — `--collector-version v0.158.0` falls back to the newest
+release it does have and checks the config against the wrong component set — so
+the registry has to keep up on its own. Dispatch the workflow with a version to
+generate one by hand, present or not.
+
+The generated diff is several megabytes of YAML, so the pull request leads with
+what actually changed. `--summary` writes it: the components the release adds,
+drops and renames, and the ones that crossed the beta line, which is what
+`component-stability` reports on and so what changes the findings an unchanged
+config gets.
+
+```sh
+go run ./cmd/schemagen --builder acme=./builder.yaml --registry ./schemas \
+  --summary -
+```
+
+```
+### contrib: `v0.157.0` → `v0.158.0`
+
+4 added, 1 renamed, 2 across the beta line; 327 components in total.
+
+**Added**
+
+- receiver `faro`
+…
+```
+
+A registry grows without bound — one file per release per distribution, in two
+formats — so `--retain n` keeps only the newest `n` releases of each
+distribution, and `--retain-every n` holds on to every `n`th minor for good, so
+a config pinned to a round release keeps resolving after its neighbours are
+dropped. Neither is on by default; the scheduled workflow sets them, a local
+`make schemas` keeps everything. Pruning bounds what the registry serves and
+what a checkout costs, not the history of the repository holding it.
+
 ### Field schemas
 
 `metadata.yaml` describes components but not their settings, so those are read
@@ -313,10 +354,11 @@ make test            # go test -race with coverage
 make lint            # golangci-lint
 make build           # ./bin/otelcol-config-lint
 make build-snapshot  # every release target, the way CI builds them
-make schemas VERSIONS=v0.158.0
+make schemas         # regenerate the schemas into ../otelcol-config-schemas
 ```
 
 CI runs the tests with coverage reported on the pull request, builds every
 release target, lints this repository's own example configs, exercises the
 action against `testdata/`, and publishes binaries and container images from
-tags.
+tags. A weekly job generates the schemas for each new collector release and
+opens a pull request against the schema registry.

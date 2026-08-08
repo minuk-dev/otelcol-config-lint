@@ -28,13 +28,19 @@ import (
 // These carry the messages; the exported errors below are what callers match
 // on.
 var (
-	errNoManifests   = errors.New("no builder manifests specified")
-	errNoFormats     = errors.New("no schema formats specified")
-	errUnknownFormat = errors.New("unknown schema format")
-	errSkipped       = errors.New("could not be generated")
-	errTwoOutputs    = errors.New("--out and --registry name two different places to write")
-	errManyToOneFile = errors.New("several manifests write several schemas, which needs --registry")
+	errNoManifests    = errors.New("no builder manifests specified")
+	errNoFormats      = errors.New("no schema formats specified")
+	errUnknownFormat  = errors.New("unknown schema format")
+	errSkipped        = errors.New("could not be generated")
+	errTwoOutputs     = errors.New("--out and --registry name two different places to write")
+	errManyToOneFile  = errors.New("several manifests write several schemas, which needs --registry")
+	errNoPrevious     = errors.New("--summary has nothing to compare against without --registry")
+	errNothingToPrune = errors.New("--retain has nothing to prune without --registry")
 )
+
+// defaultRetainEvery keeps every tenth minor release for good, which is the
+// spacing the published registry was seeded at.
+const defaultRetainEvery = 10
 
 // Errors reported for bad flag values. Each one is a usage error, so ExitCode
 // maps it to ExitUsage the way a bad flag is mapped.
@@ -48,6 +54,11 @@ var (
 	ErrTwoOutputs error = usageError{errTwoOutputs}
 	// ErrManyToOneFile reports several manifests written to a single file.
 	ErrManyToOneFile error = usageError{errManyToOneFile}
+	// ErrNoPrevious reports --summary given without a registry to read the
+	// previously served release out of.
+	ErrNoPrevious error = usageError{errNoPrevious}
+	// ErrNothingToPrune reports --retain given without a registry to apply it to.
+	ErrNothingToPrune error = usageError{errNothingToPrune}
 )
 
 // Exit codes: the command either produced schemas or it did not.
@@ -93,6 +104,9 @@ type Options struct {
 	outFile     string
 	registryDir string
 	formats     string
+	summaryFile string
+	retain      int
+	retainEvery int
 	cacheDir    string
 	timeout     time.Duration
 
@@ -100,6 +114,9 @@ type Options struct {
 	// so they go to different streams: "--out -" has to be pipeable.
 	out      io.Writer
 	progress io.Writer
+	// diffs is what each generated distribution changes against the release
+	// the registry served before it, collected for --summary.
+	diffs []*schema.Diff
 }
 
 // NewCommand builds the schemagen command. A nil opts is allowed, in which case
@@ -172,6 +189,15 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 		"registry directory to write <distribution>/<version>.<format> into,\n"+
 			"alongside the index.json listing them")
 	flags.StringVar(&o.formats, "formats", "yaml,json", "schema formats to write: yaml, json")
+	flags.StringVar(&o.summaryFile, "summary", "",
+		"file to write a Markdown summary of what the generated releases add,\n"+
+			"remove, rename and restabilise, or \"-\" for stdout; needs --registry")
+	flags.IntVar(&o.retain, "retain", 0,
+		"keep only the newest n releases of each distribution in the registry;\n"+
+			"0 keeps every release")
+	flags.IntVar(&o.retainEvery, "retain-every", defaultRetainEvery,
+		"never drop a release whose minor version is a multiple of n, however\n"+
+			"old it is; 0 keeps no milestones")
 	flags.StringVar(&o.cacheDir, "cache", defaultCacheDir(), "directory to resolve the modules in")
 	flags.DurationVar(&o.timeout, "timeout", commandTimeout, "timeout for one go command")
 }
@@ -236,10 +262,23 @@ func (o *Options) Run(cmd *cobra.Command) error {
 	}
 
 	if o.registryDir != "" {
+		// Pruning runs before the index so the index is written from what the
+		// registry is left holding, which is the whole point of rebuilding it
+		// by listing the directory.
+		err = o.prune()
+		if err != nil {
+			return err
+		}
+
 		err = o.writeIndex()
 		if err != nil {
 			return err
 		}
+	}
+
+	err = o.writeSummary()
+	if err != nil {
+		return err
 	}
 
 	// Carrying on past a manifest that failed is what keeps it from discarding
@@ -263,6 +302,12 @@ func (o *Options) checkDestination(manifests []string) error {
 		return ErrTwoOutputs
 	case o.registryDir == "" && len(manifests) > 1:
 		return ErrManyToOneFile
+	// Both read the registry back: the summary for the release it served
+	// before this run, the retention policy for the ones it still holds.
+	case o.registryDir == "" && o.summaryFile != "":
+		return ErrNoPrevious
+	case o.registryDir == "" && o.retain > 0:
+		return ErrNothingToPrune
 	case o.registryDir == "":
 		return nil
 	}
@@ -292,6 +337,10 @@ func (o *Options) generate(builder string, formats []schema.Format) error {
 	}
 
 	if o.registryDir != "" {
+		// Before the write, so the comparison is against what the registry
+		// served up to now even when a release is regenerated in place.
+		o.summarise(cat)
+
 		return o.writeRegistry(cat, formats)
 	}
 
