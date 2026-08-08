@@ -84,7 +84,15 @@ func (o *Options) resolveModules(man *manifest) (*moduleSet, error) {
 		o.logf("  go mod download: %v\n", err)
 	}
 
-	out, err := o.goCommand(work, "list", "-m", "-json", "all")
+	// -e, so a module that cannot be resolved is reported as an entry carrying
+	// an Error rather than as a failure that takes the whole listing with it.
+	// One unresolvable module in a graph of well over a thousand is ordinary:
+	// contrib reaches github.com/DataDog/datadog-agent/pkg/api, which requires
+	// a sibling at the placeholder version its own go.mod replaces, and a
+	// replacement in a dependency is not one the go command applies. Without
+	// -e that single edge yields no schema for the distribution most configs
+	// are linted against.
+	out, err := o.goCommand(work, "list", "-m", "-e", "-json", "all")
 	if err != nil && out == "" {
 		return nil, fmt.Errorf("resolve modules: %w", err)
 	}
