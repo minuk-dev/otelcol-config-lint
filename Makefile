@@ -1,6 +1,4 @@
-BINARY  := bin/otelcol-config-lint
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -X github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint.Version=$(VERSION)
+BINARY := bin/otelcol-config-lint
 
 # A checkout of github.com/minuk-dev/otelcol-config-schemas, which is where
 # generated schemas are written.
@@ -25,8 +23,10 @@ BUILDERS ?= \
 
 all: lint test build
 
+# No -ldflags for the version: the toolchain stamps the module version and the
+# repository state into the binary, and pkg/version reads that back.
 build:
-	go build -ldflags '$(LDFLAGS)' -o $(BINARY) ./cmd/otelcol-config-lint
+	go build -o $(BINARY) ./cmd/otelcol-config-lint
 
 # Build every release target locally, the way CI does before a tag.
 build-snapshot:

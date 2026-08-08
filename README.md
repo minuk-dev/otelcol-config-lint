@@ -344,6 +344,7 @@ pkg/schema/                   schema types, version resolution and location look
 pkg/rule/                     the rules and the registry
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
+pkg/version/                  the linter's own version, stamped at build time
 action.yml                    the GitHub Action; Dockerfile is the image it runs
 ```
 
@@ -356,6 +357,17 @@ make build           # ./bin/otelcol-config-lint
 make build-snapshot  # every release target, the way CI builds them
 make schemas         # regenerate the schemas into ../otelcol-config-schemas
 ```
+
+Nothing injects the version. The Go toolchain records the module version and
+the repository state in every binary it builds, and `pkg/version` reads that
+back, so a tagged build reports its tag because it was built from that tag:
+
+| built from | `otelcol-config-lint version` |
+| --- | --- |
+| a tag | `v1.2.3`, or `v1.2.3+dirty` from a modified tree |
+| `go install ...@v1.2.3` | `v1.2.3` |
+| a commit between tags | `b7dbdd5`, or `b7dbdd5-dirty` |
+| no repository, or `go run` | `devel` |
 
 CI runs the tests with coverage reported on the pull request, builds every
 release target, lints this repository's own example configs, exercises the

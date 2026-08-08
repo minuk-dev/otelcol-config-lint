@@ -18,9 +18,12 @@ builds:
     goarch:
       - amd64
       - arm64
+    # No -X for the version. The toolchain stamps the module version and the
+    # repository state into every binary and pkg/version reads that back, so a
+    # tagged build reports its tag without anything here having to say so.
+    # -s -w strip the symbol table and DWARF, not the build info.
     ldflags:
       - "-s -w"
-      - "-X github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint.Version={{.Version}}"
 
 archives:
   - id: otelcol-config-lint
