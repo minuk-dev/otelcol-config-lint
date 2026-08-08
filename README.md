@@ -79,10 +79,13 @@ them:
 - run: echo "${{ steps.lint.outputs.invalid }} file(s) failed"
 ```
 
-`@v1` follows the newest v1 release. Pin a full tag such as `@v1.2.3` to hold a
-workflow to one revision of the linter. The schemas are a separate registry that
-tracks its own main, so pin `schema-location` as well — at a vendored directory,
-or at a tagged URL — for a run that cannot change underneath a workflow.
+`@v1` follows the newest v1 release, and runs exactly that release's linter: the
+action wraps `ghcr.io/minuk-dev/otelcol-config-lint:<release>`, pinned at a tag
+and never `latest`, so a step is two small image pulls rather than a Go
+toolchain and a compile. Pin a full tag such as `@v1.2.3` to hold a workflow to
+one revision. The schemas are a separate registry that tracks its own main, so
+pin `schema-location` as well — at a vendored directory, or at a tagged URL —
+for a run that cannot change underneath a workflow.
 
 ## Usage
 
@@ -345,7 +348,8 @@ pkg/rule/                     the rules and the registry
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
 pkg/version/                  the linter's own version, stamped at build time
-action.yml                    the GitHub Action; Dockerfile is the image it runs
+action.yml                    the GitHub Action; Dockerfile wraps the released image it runs
+build/docker/Dockerfile       the distroless linter image releases publish
 ```
 
 ## Development
@@ -374,3 +378,15 @@ release target, lints this repository's own example configs, exercises the
 action against `testdata/`, and publishes binaries and container images from
 tags. A weekly job generates the schemas for each new collector release and
 opens a pull request against the schema registry.
+
+Releasing is bump then tag, because the action's image is pinned at the release
+it ships in and a tag cannot reference an image built from itself:
+
+```sh
+make release-pin RELEASE=v1.2.3
+git commit -am 'chore(release): pin the action at v1.2.3'
+git tag v1.2.3 && git push origin main v1.2.3
+```
+
+The release workflow refuses a tag whose pin names another release, and moves
+`v1` onto the release once it has published.

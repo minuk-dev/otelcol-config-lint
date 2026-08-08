@@ -23,6 +23,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.25
+
+      # The action's image is assembled from the linter image of the release it
+      # is pinned to, and a pull request predates that release -- on a tag the
+      # pin resolves, here it cannot. So the same image is built from this
+      # revision and the pin rewritten to it: every step below then exercises
+      # action.yml, the Dockerfile and the entrypoint as committed, against the
+      # linter as it stands on this branch rather than as it was last released.
+      - name: Build the linter image from this revision
+        run: |
+          mkdir -p dist/action
+          CGO_ENABLED=0 go build -ldflags '-s -w' \
+            -o dist/action/otelcol-config-lint ./cmd/otelcol-config-lint
+
+          # dist/action as the context, the way goreleaser builds it: the image
+          # is the binary and nothing else.
+          docker build -t otelcol-config-lint:source \
+            -f build/docker/Dockerfile dist/action
+
+          sed -i -E \
+            's|^FROM ghcr\.io/minuk-dev/otelcol-config-lint:[^ ]*|FROM otelcol-config-lint:source|' \
+            Dockerfile
+          git --no-pager diff -- Dockerfile
+
       - name: Lint the valid examples
         id: valid
         uses: ./

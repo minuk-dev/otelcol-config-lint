@@ -19,7 +19,7 @@ BUILDERS ?= \
 	k8s=$(RELEASES)/distributions/otelcol-k8s/manifest.yaml \
 	otlp=$(RELEASES)/distributions/otelcol-otlp/manifest.yaml
 
-.PHONY: all build build-snapshot test lint lint-fix fmt schemas clean
+.PHONY: all build build-snapshot test lint lint-fix fmt schemas release-pin clean
 
 all: lint test build
 
@@ -43,6 +43,20 @@ lint-fix:
 
 fmt:
 	gofmt -w .
+
+# Point the action's image at the release about to be cut. A tag cannot
+# reference an image built from itself, so this runs first and the tag goes on
+# the commit it produces; the release workflow refuses a tag whose pin says
+# anything else.
+#
+#   make release-pin RELEASE=v1.2.3
+#   git commit -am 'chore(release): pin the action at v1.2.3'
+#   git tag v1.2.3 && git push origin main v1.2.3
+release-pin:
+	@test -n '$(RELEASE)' || { echo 'usage: make release-pin RELEASE=v1.2.3' >&2; exit 1; }
+	sed -i.bak -E 's|^(FROM ghcr\.io/minuk-dev/otelcol-config-lint):[^ ]*|\1:$(RELEASE:v%=%)|' Dockerfile
+	@rm -f Dockerfile.bak
+	@echo 'The action now runs $(RELEASE:v%=%); commit that and tag the commit $(RELEASE).'
 
 # Regenerate the component schemas from the distributions' builder manifests.
 schemas:
