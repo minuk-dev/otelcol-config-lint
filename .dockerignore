@@ -1,0 +1,10 @@
+# The action image builds with the repository root as its context, so keep the
+# things that are not needed to compile the binary out of it.
+.git
+.github
+bin/
+dist/
+coverage.txt
+# The fixtures are read from the mounted workspace when a workflow points
+# schema-location at them, never from inside the image.
+testdata/

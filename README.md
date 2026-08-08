@@ -40,6 +40,50 @@ docker run --rm -v "$PWD:/workspace" \
 Tagged releases publish binaries for Linux, macOS and Windows on amd64 and
 arm64, plus a multi-arch image on ghcr.io.
 
+## GitHub Action
+
+In a workflow it is one `uses:` line — no Go toolchain, no install step:
+
+```yaml
+- uses: minuk-dev/otelcol-config-lint@v1
+  with:
+    files: ./configs
+    collector-version: v0.157.0
+    strict: true
+```
+
+Findings land as inline pull-request annotations, because the action defaults to
+`--output github`. The step passes when everything is valid, fails when a file
+is invalid, and reports a usage error — a rule that does not exist, an unreadable
+settings file — distinctly, with exit code 2.
+
+Every input is the `run` flag of the same name, so the flag table below is the
+whole reference: `files` (default `.`, whitespace-separated, globs allowed),
+`collector-version`, `distribution`, `schema-location` (one per line to search
+several in order), `strict`, `ignore-missing-schemas`, `min-severity`,
+`fail-on`, `disable`, `severity`, `exclude`, `output` (default `github`),
+`config`, `summary` (default `true`), `verbose` and `exit-on-error`. Only `-n`
+and `--no-color` are left out: a runner gains nothing from either.
+
+The counts come back as outputs — `exit-code`, `valid`, `invalid`, `errors`,
+`skipped`, `warnings` and `infos` — so a later step can decide what to do with
+them:
+
+```yaml
+- uses: minuk-dev/otelcol-config-lint@v1
+  id: lint
+  continue-on-error: true
+  with:
+    files: ./configs
+    fail-on: warning
+- run: echo "${{ steps.lint.outputs.invalid }} file(s) failed"
+```
+
+`@v1` follows the newest v1 release. Pin a full tag such as `@v1.2.3` to hold a
+workflow to one revision of the linter. The schemas are a separate registry that
+tracks its own main, so pin `schema-location` as well — at a vendored directory,
+or at a tagged URL — for a run that cannot change underneath a workflow.
+
 ## Usage
 
 ```
@@ -259,6 +303,7 @@ pkg/schema/                   schema types, version resolution and location look
 pkg/rule/                     the rules and the registry
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
+action.yml                    the GitHub Action; Dockerfile is the image it runs
 ```
 
 ## Development
@@ -272,5 +317,6 @@ make schemas VERSIONS=v0.158.0
 ```
 
 CI runs the tests with coverage reported on the pull request, builds every
-release target, lints this repository's own example configs, and publishes
-binaries and container images from tags.
+release target, lints this repository's own example configs, exercises the
+action against `testdata/`, and publishes binaries and container images from
+tags.
