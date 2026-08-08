@@ -113,7 +113,7 @@ func NewCommand(opts *Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "otelcol-config-lint <command> [flags]",
 		Short:   "Validate OpenTelemetry Collector config files against a specific collector release",
-		Version: version.Version,
+		Version: version.Version(),
 		// The subcommands print command-level errors themselves, with the tool
 		// prefix, and stay quiet about ErrFilesInvalid.
 		SilenceErrors: true,

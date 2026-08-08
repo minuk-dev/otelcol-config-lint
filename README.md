@@ -355,15 +355,19 @@ make test            # go test -race with coverage
 make lint            # golangci-lint
 make build           # ./bin/otelcol-config-lint
 make build-snapshot  # every release target, the way CI builds them
-make verify-version  # build, then read the version back out of the binary
 make schemas         # regenerate the schemas into ../otelcol-config-schemas
 ```
 
-The version lives in `pkg/version` and both build paths stamp it there with
-`-ldflags -X`. The linker ignores `-X` against a symbol that does not exist, so
-moving that package without updating `Makefile` and `.goreleaser.yaml` would
-ship a binary reporting `dev` and nothing would fail; `make verify-version`
-reads it back out, and CI does the same to the snapshot build.
+Nothing injects the version. The Go toolchain records the module version and
+the repository state in every binary it builds, and `pkg/version` reads that
+back, so a tagged build reports its tag because it was built from that tag:
+
+| built from | `otelcol-config-lint version` |
+| --- | --- |
+| a tag | `v1.2.3`, or `v1.2.3+dirty` from a modified tree |
+| `go install ...@v1.2.3` | `v1.2.3` |
+| a commit between tags | `b7dbdd5`, or `b7dbdd5-dirty` |
+| no repository, or `go run` | `devel` |
 
 CI runs the tests with coverage reported on the pull request, builds every
 release target, lints this repository's own example configs, exercises the

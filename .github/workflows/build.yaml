@@ -29,23 +29,19 @@ jobs:
           distribution: goreleaser
           version: "~> v2"
           args: build --snapshot --clean
-      # -X against a symbol that does not exist is ignored by the linker
-      # without a warning, so ldflags left pointing at a package that moved
-      # ships a binary reporting "dev" and nothing notices. Read the version
-      # back out of what was just built, once per build path.
-      - name: Check the release build stamps the version
+      # The version comes from what the toolchain stamps, which needs a real
+      # repository to read: a shallow checkout, a missing .git or
+      # -buildvcs=false would leave release binaries unable to say what they
+      # are, and nothing else would notice. Read it back out of what was built.
+      - name: Check the release build knows its own version
         run: |
-          version="$(jq -r '.version' dist/metadata.json)"
           binary="$(jq -r 'first(.[] | select(.type == "Binary" and .goos == "linux" and .goarch == "amd64")).path' dist/artifacts.json)"
           got="$("${binary}" version)"
-          want="otelcol-config-lint ${version}"
-          if [ "${got}" != "${want}" ]; then
-            echo "the version stamp did not land: got \"${got}\", want \"${want}\"" >&2
-            echo 'check that the .goreleaser.yaml ldflags name the package Version lives in' >&2
+          echo "${got}"
+          if [ "${got}" = "otelcol-config-lint devel" ]; then
+            echo 'the binary carries no build information; check the checkout and -buildvcs' >&2
             exit 1
           fi
-      - name: Check the Makefile build stamps the version
-        run: make verify-version
       - name: Upload binaries
         uses: actions/upload-artifact@v7
         with:

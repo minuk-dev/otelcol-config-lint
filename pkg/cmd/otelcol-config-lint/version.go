@@ -17,7 +17,7 @@ func newVersionCommand() *cobra.Command {
 		Short: "Print the linter version",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
-			cmd.Printf("otelcol-config-lint %s\n", version.Version)
+			cmd.Printf("otelcol-config-lint %s\n", version.Version())
 		},
 	}
 }
