@@ -329,6 +329,44 @@ func (b blocked) Open(name string) (afero.File, error) {
 	return b.Fs.Open(name)
 }
 
+// TestScanSurvivesAnEntryItCannotStat pins that one bad entry does not cost the
+// walk. A file can be removed between the directory read and the stat that
+// follows it, and a directory can be listable without being searchable; ending
+// the scan there would report nothing for a tree that is otherwise fine. The
+// name is still known, so the file is kept and the linter reports it as one it
+// could not read.
+func TestScanSurvivesAnEntryItCannotStat(t *testing.T) {
+	t.Parallel()
+
+	fsys := vanished{Fs: tree(t, "keep.yaml", "gone.yaml"), path: filepath.Join(root, "gone.yaml")}
+
+	files, err := newScanner(fsys, nil).Scan([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := relative(t, files)
+	if want := []string{"gone.yaml", "keep.yaml"}; !slices.Equal(got, want) {
+		t.Errorf("Scan() = %v, want %v", got, want)
+	}
+}
+
+// vanished lists one path but refuses to stat it, standing in for a file
+// removed while the walk was running.
+type vanished struct {
+	afero.Fs
+
+	path string
+}
+
+func (v vanished) Stat(name string) (os.FileInfo, error) {
+	if name == v.path {
+		return nil, &os.PathError{Op: "stat", Path: name, Err: os.ErrNotExist}
+	}
+
+	return v.Fs.Stat(name)
+}
+
 func TestScanOfNothingIsEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -367,22 +405,54 @@ func TestScannerFieldsAreHonoured(t *testing.T) {
 
 // TestNilFsReadsTheRealFilesystem pins the documented default: a Scanner that
 // was never given an Fs still walks the machine it runs on.
+//
+// It repeats what the in-memory tests cover because the two filesystems are
+// not interchangeable underneath. OsFs implements afero.Lstater and MemMapFs
+// does not, so the walk takes a different path through afero on each, and this
+// is the one the shipped binary runs.
 func TestNilFsReadsTheRealFilesystem(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 
-	err := os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte("receivers:\n"), 0o600)
+	for _, name := range []string{
+		"agent.yaml",
+		"nested/deep.yml",
+		"notes.txt",
+		".git/config.yaml",
+		"vendor/dep.yaml",
+		"gen/agent.generated.yaml",
+	} {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+
+		err := os.MkdirAll(filepath.Dir(path), 0o750)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = os.WriteFile(path, []byte("receivers:\n"), 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := scanner.New([]string{"*.generated.yaml"}).Scan([]string{dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := scanner.New(nil).Scan([]string{dir})
-	if err != nil {
-		t.Fatal(err)
+	got := make([]string, 0, files.Len())
+
+	for _, path := range sets.List(files) {
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got = append(got, filepath.ToSlash(rel))
 	}
 
-	if !files.Has(filepath.Join(dir, "agent.yaml")) {
-		t.Errorf("Scan() = %v, want the file on disk", sets.List(files))
+	if want := []string{"agent.yaml", "nested/deep.yml"}; !slices.Equal(got, want) {
+		t.Errorf("Scan() = %v, want %v", got, want)
 	}
 }

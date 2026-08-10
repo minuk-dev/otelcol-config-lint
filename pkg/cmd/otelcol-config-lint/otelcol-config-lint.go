@@ -110,7 +110,8 @@ type Options struct {
 // zero value is used.
 func NewCommand(opts *Options) *cobra.Command {
 	if opts == nil {
-		opts = &Options{} //nolint:exhaustruct // every field is filled in by RegisterFlags
+		//nolint:exhaustruct // RegisterFlags fills in every flag, and a nil Fs is the real filesystem
+		opts = &Options{}
 	}
 
 	// The root carries no work of its own: every mode is a subcommand, so a
