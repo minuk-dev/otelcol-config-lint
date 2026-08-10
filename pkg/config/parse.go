@@ -3,9 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -129,9 +129,14 @@ func (f *File) Component(k Kind, id ID) (Component, bool) {
 	return Component{}, false
 }
 
-// ParseFile reads and parses the config at path.
-func ParseFile(path string) (*File, error) {
-	src, err := os.ReadFile(path)
+// ParseFile reads and parses the config at path. A nil fsys reads the real
+// filesystem.
+func ParseFile(fsys afero.Fs, path string) (*File, error) {
+	if fsys == nil {
+		fsys = afero.NewOsFs()
+	}
+
+	src, err := afero.ReadFile(fsys, path)
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
 	}

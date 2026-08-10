@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/afero"
 )
 
 // Extensions returns the schema file suffixes, in preference order. The
@@ -75,6 +77,9 @@ type Store struct {
 	// HTTPClient fetches remote locations. A nil client uses a default with a
 	// 30 second timeout.
 	HTTPClient *http.Client
+	// Fs is the filesystem local locations are read from. A nil Fs means the
+	// real one. Remote locations go over HTTPClient and ignore it.
+	Fs afero.Fs
 }
 
 // Versions lists every schema the store can serve, newest first. Templated and
@@ -150,6 +155,16 @@ func (s Store) Load(version string) (*Schema, error) {
 	return nil, &UnknownVersionError{Version: version, Available: s.Versions(), Tried: tried}
 }
 
+// fs returns the filesystem to read local locations from, which is the real one
+// unless the caller named another.
+func (s Store) fs() afero.Fs {
+	if s.Fs == nil {
+		return afero.NewOsFs()
+	}
+
+	return s.Fs
+}
+
 // distribution returns the distribution to serve.
 func (s Store) distribution() string {
 	if s.Distribution == "" {
@@ -170,7 +185,7 @@ func (s Store) indexAt(loc string) *Index {
 
 		return idx
 	case locDir:
-		idx, err := ReadIndexFile(filepath.Join(loc, IndexFile))
+		idx, err := readIndexFile(s.fs(), filepath.Join(loc, IndexFile))
 		if err != nil {
 			return nil
 		}
@@ -193,12 +208,12 @@ func (s Store) versionsAt(loc string) []string {
 
 		return idx.Versions(s.distribution())
 	case locDir:
-		idx, err := ReadIndexFile(filepath.Join(loc, IndexFile))
+		idx, err := readIndexFile(s.fs(), filepath.Join(loc, IndexFile))
 		if err == nil {
 			return idx.Versions(s.distribution())
 		}
 
-		return flatVersions(loc)
+		return flatVersions(s.fs(), loc)
 	default:
 		return nil
 	}
@@ -206,11 +221,11 @@ func (s Store) versionsAt(loc string) []string {
 
 // flatVersions lists "<dir>/<version>.<ext>", the layout used before schemas
 // were split by distribution.
-func flatVersions(dir string) []string {
+func flatVersions(fsys afero.Fs, dir string) []string {
 	var out []string
 
 	for _, ext := range extensions() {
-		names, _ := filepath.Glob(filepath.Join(dir, "*"+ext))
+		names, _ := afero.Glob(fsys, filepath.Join(dir, "*"+ext))
 		for _, n := range names {
 			out = append(out, trimExt(filepath.Base(n)))
 		}
@@ -232,8 +247,8 @@ func trimExt(name string) string {
 
 // isRegistryDir reports whether a directory is a registry root: one carrying an
 // index, and so laid out by distribution.
-func isRegistryDir(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, IndexFile))
+func (s Store) isRegistryDir(dir string) bool {
+	_, err := s.fs().Stat(filepath.Join(dir, IndexFile))
 
 	return err == nil
 }
@@ -277,11 +292,11 @@ func (s Store) loadFrom(loc, version string) (*Schema, error) {
 	default:
 		// A directory holding an index is a registry root, laid out by
 		// distribution. Without one it is the flat legacy layout.
-		if isRegistryDir(loc) {
-			return s.loadFromRegistry(loc, version, readLocal)
+		if s.isRegistryDir(loc) {
+			return s.loadFromRegistry(loc, version, s.readLocal)
 		}
 
-		return loadFlat(loc, version)
+		return s.loadFlat(loc, version)
 	}
 }
 
@@ -291,7 +306,7 @@ func (s Store) loadOne(target string) (*Schema, error) {
 		return s.fetch(target)
 	}
 
-	return readLocal(target)
+	return s.readLocal(target)
 }
 
 // loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", preferring
@@ -313,13 +328,13 @@ func (s Store) loadFromRegistry(root, version string, read func(string) (*Schema
 
 // loadFlat reads "<dir>/<version>.<ext>", the layout used before schemas were
 // split by distribution.
-func loadFlat(dir, version string) (*Schema, error) {
+func (s Store) loadFlat(dir, version string) (*Schema, error) {
 	for _, ext := range extensions() {
 		path := filepath.Join(dir, version+ext)
 
-		_, err := os.Stat(path)
+		_, err := s.fs().Stat(path)
 		if err == nil {
-			return ReadFile(path)
+			return readFile(s.fs(), path)
 		}
 	}
 
@@ -328,13 +343,13 @@ func loadFlat(dir, version string) (*Schema, error) {
 
 // readLocal reads a schema from disk, reporting a missing file as errNotFound
 // so a registry root can fall through to the next extension.
-func readLocal(path string) (*Schema, error) {
-	_, err := os.Stat(path)
+func (s Store) readLocal(path string) (*Schema, error) {
+	_, err := s.fs().Stat(path)
 	if err != nil {
 		return nil, errNotFound
 	}
 
-	return ReadFile(path)
+	return readFile(s.fs(), path)
 }
 
 // fetchIndex reads a remote registry's index.
@@ -451,7 +466,7 @@ func (s Store) resolve(loc, version string) string {
 	case locRemote:
 		return join(loc, s.distribution(), version+extensions()[0])
 	default:
-		if isRegistryDir(loc) {
+		if s.isRegistryDir(loc) {
 			return filepath.Join(loc, s.distribution(), version+extensions()[0])
 		}
 

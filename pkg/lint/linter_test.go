@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
@@ -180,6 +182,29 @@ func TestLintAllVisitsEveryFile(t *testing.T) {
 
 	if len(seen) != len(paths) {
 		t.Errorf("want %d results, got %d", len(paths), len(seen))
+	}
+}
+
+// TestLintFileReadsTheGivenFs pins that LintFile honours Options.Fs, so a
+// caller can lint a config that was never written to disk.
+func TestLintFileReadsTheGivenFs(t *testing.T) {
+	t.Parallel()
+
+	fsys := afero.NewMemMapFs()
+
+	err := afero.WriteFile(fsys, "/configs/agent.yaml", []byte(good), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := newLinter(t, lint.Options{Fs: fsys, MinSeverity: diag.Error})
+
+	if r := l.LintFile("/configs/agent.yaml"); r.Status != lint.Valid {
+		t.Errorf("want valid, got %s: %v %+v", r.Status, r.Err, r.Diagnostics)
+	}
+
+	if r := l.LintFile("/configs/absent.yaml"); r.Status != lint.Error {
+		t.Errorf("a missing file should be an error, got %s", r.Status)
 	}
 }
 
