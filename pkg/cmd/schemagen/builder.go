@@ -252,7 +252,7 @@ func (m *manifest) replacements() []string {
 
 		target := strings.TrimSpace(replacement)
 		if isLocalPath(target) && !filepath.IsAbs(target) {
-			target = filepath.Join(m.replaceBase(), target)
+			target = absolutePath(filepath.Join(m.replaceBase(), target))
 		}
 
 		out = append(out, strings.TrimSpace(module)+" => "+target)
@@ -266,6 +266,30 @@ func (m *manifest) replacements() []string {
 // at "../../../internal/obi-src", which is three levels up from
 // "distributions/otelcol-contrib/_build" -- the repository root -- and only two
 // from the manifest itself.
+// absolute resolves a replacement path against the directory schemagen was
+// invoked from.
+//
+// A manifest's local replacement is written to be read from the manifest's own
+// tree -- contrib's "go.opentelemetry.io/obi => ../../../internal/obi-src" is
+// three levels up from the distribution directory -- but the go.mod that
+// replacement is copied into is the synthetic workspace, which lives in the
+// cache directory. A path relative to where schemagen ran does not point at
+// the same place from there, and the go command will not even parse it: a
+// filesystem replacement must be rooted or start with "." or "..", so a
+// "releases/internal/obi-src" is rejected outright and takes the whole
+// distribution with it.
+//
+// A path that cannot be made absolute is left as it was, so the go command
+// reports what is wrong with it rather than this reporting something else.
+func absolutePath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+
+	return abs
+}
+
 func (m *manifest) replaceBase() string {
 	out := m.Dist.OutputPath
 
