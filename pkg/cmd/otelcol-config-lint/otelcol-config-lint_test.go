@@ -738,3 +738,183 @@ func TestReportOrderDoesNotDependOnArgumentOrder(t *testing.T) {
 		t.Errorf("results are not in path order: %v", got)
 	}
 }
+
+// limiterConfig is a config whose only interesting part is a memory_limiter
+// with a fixed limit: room enough in a gateway's container, far too much in an
+// agent's.
+const limiterConfig = `
+receivers:
+  otlp:
+    protocols:
+      grpc:
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  debug:
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+`
+
+// writeFile writes a fixture, creating the directories leading to it.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o750)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = os.WriteFile(path, []byte(content), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// rulesFired returns the rules each file in a JSON report was flagged by.
+func rulesFired(t *testing.T, out string) map[string][]string {
+	t.Helper()
+
+	var report struct {
+		Files []struct {
+			Filename    string `json:"filename"`
+			Diagnostics []struct {
+				Rule string `json:"rule"`
+			} `json:"diagnostics"`
+		} `json:"files"`
+	}
+
+	err := json.Unmarshal([]byte(out), &report)
+	if err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
+	}
+
+	fired := map[string][]string{}
+
+	for _, f := range report.Files {
+		for _, d := range f.Diagnostics {
+			name := filepath.Base(f.Filename)
+			fired[name] = append(fired[name], d.Rule)
+		}
+	}
+
+	return fired
+}
+
+// TestEnvironmentIsResolvedPerFile is the point of the whole kubernetes block:
+// one run over one directory, two workloads, and only the one that does not fit
+// its container is flagged.
+func TestEnvironmentIsResolvedPerFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "configs", "agent-node.yaml"), limiterConfig)
+	writeFile(t, filepath.Join(dir, "configs", "gateway", "gw.yaml"), limiterConfig)
+	writeFile(t, filepath.Join(dir, "configs", "legacy", "old.yaml"), limiterConfig)
+
+	settings := filepath.Join(dir, "settings.yaml")
+	writeFile(t, settings, `
+kubernetes:
+  memoryRequest: 512Mi
+  memoryLimit: 512Mi
+  overrides:
+    - paths: ["agent-*.yaml"]
+      memoryRequest: 256Mi
+      memoryLimit: 256Mi
+    - paths: ["gw.yaml"]
+      memoryRequest: 4Gi
+      memoryLimit: 4Gi
+    - paths: ["old.yaml"]
+      enabled: false
+`)
+
+	_, out, errOut := lint(t, "", "--config", settings, "--output", "json", filepath.Join(dir, "configs"))
+
+	fired := rulesFired(t, out)
+	if !slices.Contains(fired["agent-node.yaml"], "memory-limiter-sizing") {
+		t.Errorf("512Mi does not fit a 256Mi container: %v\n%s", fired, errOut)
+	}
+
+	if slices.Contains(fired["gw.yaml"], "memory-limiter-sizing") {
+		t.Errorf("512Mi fits a 4Gi container: %v", fired)
+	}
+
+	if slices.Contains(fired["old.yaml"], "memory-limiter-sizing") {
+		t.Errorf("an override that turns kubernetes off should opt the file out: %v", fired)
+	}
+}
+
+// TestMemoryFlagsCoverTheSingleFileCase pins that the flags feed the defaults
+// and imply that the config runs in Kubernetes.
+func TestMemoryFlagsCoverTheSingleFileCase(t *testing.T) {
+	t.Parallel()
+
+	_, out, _ := lint(t, limiterConfig, "--memory-limit", "256Mi", "--output", "json", "-")
+	if !slices.Contains(rulesFired(t, out)["stdin"], "memory-limiter-sizing") {
+		t.Errorf("--memory-limit alone should be enough to size the limiter:\n%s", out)
+	}
+
+	_, out, _ = lint(t, limiterConfig, "--memory-limit", "4Gi", "--output", "json", "-")
+	if slices.Contains(rulesFired(t, out)["stdin"], "memory-limiter-sizing") {
+		t.Errorf("512Mi fits a 4Gi container:\n%s", out)
+	}
+}
+
+// TestFlagsWinOverTheKubernetesBlock keeps the environment on the same
+// precedence rule as every other option.
+func TestFlagsWinOverTheKubernetesBlock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	settings := filepath.Join(dir, "settings.yaml")
+	writeFile(t, settings, "kubernetes:\n  memoryLimit: 4Gi\n")
+
+	_, out, _ := lint(t, limiterConfig, "--config", settings, "--memory-limit", "256Mi", "--output", "json", "-")
+	if !slices.Contains(rulesFired(t, out)["stdin"], "memory-limiter-sizing") {
+		t.Errorf("--memory-limit should beat the settings file:\n%s", out)
+	}
+}
+
+func TestBadMemoryQuantityIsAUsageError(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := lint(t, "", "--memory-limit", "512MB", validConfig)
+	if code != 2 || !strings.Contains(errOut, "not a memory quantity") {
+		t.Errorf("a bad quantity should stop the run, got exit %d: %s", code, errOut)
+	}
+
+	dir := t.TempDir()
+	settings := filepath.Join(dir, "settings.yaml")
+	writeFile(t, settings, "kubernetes:\n  overrides:\n    - paths: [\"[bad\"]\n      memoryLimit: 1Gi\n")
+
+	code, _, errOut = lint(t, "", "--config", settings, validConfig)
+	if code != 2 || !strings.Contains(errOut, "override 1") {
+		t.Errorf("a malformed glob should stop the run, got exit %d: %s", code, errOut)
+	}
+}
+
+// TestVerboseSaysWhichEnvironmentAFileGot answers "why was this file not
+// checked" without anyone re-reading the glob list.
+func TestVerboseSaysWhichEnvironmentAFileGot(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "agent-node.yaml"), limiterConfig)
+
+	_, _, errOut := lint(t, "", "--verbose", "--memory-limit", "256Mi", "--memory-request", "256Mi", dir)
+	if !strings.Contains(errOut, "agent-node.yaml: kubernetes, memory request 256Mi, memory limit 256Mi") {
+		t.Errorf("a verbose run should say what each file resolved to:\n%s", errOut)
+	}
+
+	_, _, errOut = lint(t, "", "--verbose", dir)
+	if strings.Contains(errOut, "no deployment environment") {
+		t.Errorf("with no environment configured there is nothing to say:\n%s", errOut)
+	}
+}

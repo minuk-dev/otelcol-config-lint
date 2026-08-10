@@ -42,10 +42,35 @@ type Context struct {
 	// Strict makes lenient checks report at their strict severity, mirroring
 	// kubeconform's -strict flag.
 	Strict bool
+	// Env describes where this file is deployed. Its zero value means nothing
+	// is known, and the rules that need one then report nothing.
+	Env Environment
 
 	rule     Rule
 	severity diag.Severity
 	out      *diag.Diagnostics
+}
+
+// Environment describes where a config file is deployed. Some settings are
+// only wrong in the light of numbers the config cannot carry -- a memory limit
+// is a limit against something -- and this is how the caller supplies them.
+//
+// The zero value means nothing is known. It is the value every file has unless
+// the caller says otherwise, so a rule that needs an environment must treat it
+// as "say nothing" rather than as zero bytes.
+type Environment struct {
+	// Kubernetes reports that the config runs in a Kubernetes pod.
+	Kubernetes bool
+	// MemoryRequest is the container's memory request in bytes; 0 is unknown.
+	MemoryRequest int64
+	// MemoryLimit is the container's memory limit in bytes; 0 is unknown.
+	MemoryLimit int64
+}
+
+// Known reports whether the environment carries anything worth checking
+// against.
+func (e Environment) Known() bool {
+	return e.Kubernetes && (e.MemoryRequest > 0 || e.MemoryLimit > 0)
 }
 
 // Finding is a single problem a rule wants to report.
@@ -59,6 +84,10 @@ type Finding struct {
 	Message string
 	// Hint optionally suggests a fix.
 	Hint string
+	// Docs optionally links to the upstream documentation the finding rests
+	// on. A rule that reports what upstream requires or recommends should say
+	// where it says so.
+	Docs string
 	// Severity overrides the rule's default for this one finding.
 	Severity diag.Severity
 }
@@ -77,6 +106,7 @@ func (c *Context) Report(f Finding) {
 		Position: c.File.Pos(f.Node),
 		Path:     f.Path,
 		Hint:     f.Hint,
+		Docs:     f.Docs,
 	})
 }
 
@@ -109,6 +139,7 @@ func All() []Rule {
 		referenceRules(),
 		componentRules(),
 		fieldRules(),
+		settingsRules(),
 		practiceRules(),
 	)
 	slices.SortFunc(rules, func(a, b Rule) int { return strings.Compare(a.Name(), b.Name()) })

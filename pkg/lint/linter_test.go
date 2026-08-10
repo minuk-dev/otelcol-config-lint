@@ -22,6 +22,8 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
   batch:
 exporters:
   debug:
@@ -312,5 +314,74 @@ func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 
 	if len(idx.Versions("exporter", "definitely_not_a_component")) != 0 {
 		t.Error("an unknown component should have no versions")
+	}
+}
+
+// TestAMissingCheckIntervalIsReportedOnce pins that memory-limiter-config
+// stands down where the field schema already marks check_interval required:
+// one missing key, one finding, not two about the same line.
+func TestAMissingCheckIntervalIsReportedOnce(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(good, "    check_interval: 1s\n", "", 1)
+
+	var about []string
+
+	for _, d := range newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src)).Diagnostics {
+		if strings.Contains(d.Message, "check_interval") {
+			about = append(about, d.Rule)
+		}
+	}
+
+	if len(about) != 1 {
+		t.Errorf("want one finding about check_interval, got %v", about)
+	}
+}
+
+// TestFormattersCarryTheDocumentationLink pins that a finding's citation
+// survives into the output; a link nobody can see is not a citation.
+func TestFormattersCarryTheDocumentationLink(t *testing.T) {
+	t.Parallel()
+
+	// A memory_limiter that is present and empty: the collector refuses to
+	// start, and upstream's README is what says so.
+	src := strings.Replace(good, "    check_interval: 1s\n    limit_mib: 512\n    spike_limit_mib: 128\n", "", 1)
+	result := newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src))
+
+	const docs = "processor/memorylimiterprocessor/README.md"
+
+	cited := false
+
+	for _, d := range result.Diagnostics {
+		if strings.Contains(d.Docs, docs) {
+			cited = true
+		}
+	}
+
+	if !cited {
+		t.Fatalf("no finding cited the processor's README: %+v", result.Diagnostics)
+	}
+
+	for _, name := range []string{"text", "json", "github"} {
+		var buf bytes.Buffer
+
+		f, err := lint.NewFormatter(name, &buf, lint.FormatterOptions{})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+
+		err = f.Result(result)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+
+		err = f.Finish(lint.Summary{})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+
+		if !strings.Contains(buf.String(), docs) {
+			t.Errorf("%s output drops the link:\n%s", name, buf.String())
+		}
 	}
 }

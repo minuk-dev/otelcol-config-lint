@@ -17,7 +17,15 @@ config.yaml:22:3: error: unknown exporter type "logging" in collector v0.157.0 [
     hint: "logging" exists in v0.110.0 but not in v0.157.0
 config.yaml:29:30: error: service.extensions references "pprof" which is not declared under extensions [undefined-reference]
     hint: declared extensions: health_check
+config.yaml:34:5: error: processor "memory_limiter" sets neither limit_mib nor limit_percentage: 'limit_mib' or 'limit_percentage' must be greater than zero [memory-limiter-config]
+    hint: set limit_mib to the memory the collector may use; spike_limit_mib then defaults to 20% of it
+    docs: https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/memorylimiterprocessor/README.md
 ```
+
+A rule that reports what the collector requires or recommends carries a `docs:`
+link to the upstream page that says so, so the claim can be checked rather than
+taken on trust. It is in the JSON output as `docs`, and in the GitHub
+annotations.
 
 No collector binary and no Go toolchain are needed at lint time. The component
 schemas are fetched from the published registry, so a new collector release
@@ -118,6 +126,8 @@ The flags below belong to `run`:
 | `--disable` | comma-separated rules to turn off |
 | `--severity` | comma-separated `rule=level` overrides |
 | `--exclude` | glob patterns to skip when walking directories |
+| `--kubernetes` | the config runs in a Kubernetes pod |
+| `--memory-request`, `--memory-limit` | the container's resources, e.g. `256Mi`, `1Gi`, `2G`. Either one implies `--kubernetes` |
 | `-n` | files checked in parallel |
 | `--summary`, `--verbose`, `--no-color`, `--exit-on-error` | output control |
 
@@ -156,6 +166,50 @@ schemaLocations:
   - default         # then the published registry
 ```
 
+#### The deployment environment
+
+`memory-limiter-sizing` compares a `memory_limiter` against the container it
+runs in, which the config file cannot state. The `kubernetes` block supplies it.
+
+It is resolved **per file**, because a run is not one deployment: an agent
+DaemonSet at `256Mi` and a gateway Deployment at `4Gi` sit in the same directory
+and are checked in the same run.
+
+```yaml
+kubernetes:
+  enabled: true
+  memoryRequest: 512Mi        # the defaults, for any file no override matches
+  memoryLimit: 512Mi
+  overrides:
+    - paths: ["configs/agent-*.yaml"]
+      memoryRequest: 256Mi
+      memoryLimit: 256Mi
+    - paths: ["configs/gateway/*.yaml"]
+      memoryRequest: 4Gi
+      memoryLimit: 4Gi
+    - paths: ["configs/legacy/*.yaml"]
+      enabled: false          # opt a subtree back out
+```
+
+- Overrides are matched in list order and the **first match wins**. A matching
+  override replaces the defaults; it does not merge with them.
+- `paths` are globs matched against both the whole path and the base name,
+  exactly as `--exclude` is, so the two behave identically — including which
+  patterns do not work: there is no `**`.
+- `enabled` defaults to true when either memory number is written, since a
+  block stating what the container has is a block about a container.
+- Sizes are Kubernetes quantities: `512Mi`, `1Gi`, `2G`, or a bare byte count.
+  Anything else is an error rather than a silently different number.
+- A file that matches no override and has no defaults to fall back on simply
+  skips `memory-limiter-sizing`. That is per file: the rest of the run is
+  unaffected. `--verbose` prints what each file resolved to.
+- Config read from stdin is reported as `stdin`, which no glob is meant to
+  match, so it gets the defaults.
+
+`--kubernetes`, `--memory-request` and `--memory-limit` are the single-file
+convenience: they set the defaults and, like every flag, win over the file.
+There is deliberately no flag form of the overrides.
+
 ## What it checks
 
 `otelcol-config-lint list rules` prints the current set with default severities.
@@ -184,7 +238,27 @@ coverage never produces false positives. `${env:...}` expansions are left
 alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
-`missing-batch`, `insecure-tls`.
+`missing-batch`, `insecure-tls`, `memory-limiter-config`,
+`memory-limiter-sizing`.
+
+Every practice rule cites the upstream page it rests on — the
+`memorylimiterprocessor` and `batchprocessor` READMEs, `configtls`, and the
+Kubernetes resource docs for the container's request and limit.
+
+`memory_limiter` is the one processor this linter tells people to add, and two
+of its constraints cannot be written as a field schema:
+`check_interval` must be greater than zero and yet defaults to `0s`, so leaving
+it out is an error rather than a choice, and `limit_mib`/`limit_percentage` are
+a one-of. `memory-limiter-config` checks what upstream's own `Validate()`
+checks, quoting its wording, and matches on the component type so
+`memory_limiter/aggressive` is covered too.
+
+`memory-limiter-sizing` is the other half, and it needs a number the config
+cannot carry: the container's memory limit. A limiter that passes every check
+above is still decoration if `limit_mib` sits at or above the container limit,
+because the kernel kills the collector before the limiter ever engages. It runs
+only for files the [`kubernetes` block](#the-deployment-environment) describes,
+so a run that configures nothing sees nothing new.
 
 ## Schemas
 
@@ -347,6 +421,7 @@ pkg/schema/                   schema types, version resolution and location look
 pkg/rule/                     the rules and the registry
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
+pkg/quantity/                 Kubernetes memory quantities, parsed and printed back
 pkg/version/                  the linter's own version, stamped at build time
 action.yml                    the GitHub Action; Dockerfile wraps the released image it runs
 build/docker/Dockerfile       the distroless linter image releases publish
