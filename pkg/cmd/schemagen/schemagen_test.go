@@ -20,6 +20,15 @@ import (
 func run(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 
+	// Everything that generates goes through the subcommand that generates.
+	return runCommand(t, append([]string{"generate"}, args...)...)
+}
+
+// runCommand executes the root with exactly the arguments given, for the tests
+// that are about the root itself rather than about generating.
+func runCommand(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
+
 	var stdout, stderr bytes.Buffer
 
 	cmd := schemagen.NewCommand(nil)
@@ -495,4 +504,71 @@ func readFile(t *testing.T, path string) string {
 	require.NoError(t, err)
 
 	return string(raw)
+}
+
+// TestPrintVersion covers --print-version, which is what a scheduled run asks
+// so that it does not confuse a release tag with the release a manifest
+// resolves to. Upstream's own manifests make the two differ.
+func TestPrintVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Shaped after the v0.146.0 tag, where every number in the manifest is a
+	// different one: it calls itself 0.145.0 while pinning its components at
+	// v0.146.1. What the components are pinned at is the release.
+	path := filepath.Join(dir, "manifest.yaml")
+	writeFile(t, path, "dist:\n  name: otelcol-contrib\n  version: 0.145.0\n"+
+		"receivers:\n"+
+		"  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.146.1\n"+
+		"  - gomod: go.opentelemetry.io/collector/receiver/nopreceiver v0.146.1\n")
+
+	code, stdout, _ := runCommand(t, "print-version", "--builder", "contrib="+path)
+
+	assert.Equal(t, schemagen.ExitOK, code)
+	assert.Equal(t, "contrib\tv0.146.1\n", stdout)
+}
+
+// TestPrintVersionNeedsNoDestination covers the other half of why it is asked
+// early: it writes no schema, so the flags describing where one would go are
+// not required, and --registry is not one of them.
+func TestPrintVersionNeedsNoDestination(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "manifest.yaml")
+	writeFile(t, path, "dist:\n  name: otelcol\n  otelcol_version: 0.158.0\n"+
+		"receivers:\n  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.158.0\n")
+
+	code, stdout, stderr := runCommand(t, "print-version", "--builder", path)
+
+	assert.Equal(t, schemagen.ExitOK, code)
+	assert.Equal(t, "otelcol\tv0.158.0\n", stdout)
+	assert.Empty(t, stderr)
+}
+
+// TestRootListsCommands covers the shape of the root: it does no work of its
+// own, so a bare invocation prints the help that names the modes rather than
+// trying to generate from nothing.
+func TestRootListsCommands(t *testing.T) {
+	t.Parallel()
+
+	code, stdout, _ := runCommand(t)
+
+	assert.Equal(t, schemagen.ExitOK, code)
+	assert.Contains(t, stdout, "generate")
+	assert.Contains(t, stdout, "print-version")
+}
+
+// TestPrintVersionNeedsAManifest covers print-version reporting the missing
+// input itself: it does not share generate's flags, so it cannot share its
+// checks either.
+func TestPrintVersionNeedsAManifest(t *testing.T) {
+	t.Parallel()
+
+	code, _, stderr := runCommand(t, "print-version")
+
+	assert.Equal(t, schemagen.ExitUsage, code)
+	assert.Contains(t, stderr, schemagen.ErrNoManifests.Error())
+	assert.Contains(t, stderr, "Usage:")
 }

@@ -1,6 +1,12 @@
 // Package schemagen implements the schemagen command: flag parsing, the
 // harvest of a distribution's modules and writing the schemas out.
 //
+// There are two modes, and they are subcommands rather than a flag because
+// they answer different questions and share only their input. "generate"
+// resolves the modules and writes the schemas; "print-version" reads a
+// manifest and reports the release it resolves to, which is what a caller
+// filling a registry needs to know before it generates anything.
+//
 // A distribution is described by the same OCB builder manifest that builds it,
 // so the schema lists exactly the components the binary carries. Every module
 // the manifest names is downloaded through the go command -- which is what
@@ -126,46 +132,19 @@ func NewCommand(opts *Options) *cobra.Command {
 		opts = &Options{} //nolint:exhaustruct // every field is filled in by RegisterFlags and Prepare
 	}
 
+	// The root carries no work of its own: every mode is a subcommand, so a
+	// bare invocation prints the help that lists them.
 	cmd := &cobra.Command{
-		Use:   "schemagen [flags]",
+		Use:   "schemagen <command> [flags]",
 		Short: "Build component schemas from the upstream collector sources",
-		Example: `  schemagen --builder builder.yaml --out schema.yaml
-  schemagen --builder core=otelcol/manifest.yaml --builder contrib=otelcol-contrib/manifest.yaml \
-    --registry ../otelcol-config-schemas`,
-		// Every input is a flag. A stray argument -- "schemagen manifest.yaml"
-		// for "--builder manifest.yaml" -- is a usage error like any bad flag,
-		// so it is reported the same way rather than through cobra's own path.
-		Args: func(cmd *cobra.Command, args []string) error {
-			err := cobra.NoArgs(cmd, args)
-			if err != nil {
-				cmd.PrintErr(cmd.UsageString())
-
-				return usageError{err}
-			}
-
-			return nil
-		},
 		// main prints command-level errors itself, with the tool prefix.
 		SilenceErrors: true,
 		// A failed harvest is not a usage error, so the usage text is printed
 		// only where it helps: bad flags and a missing --builder.
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := opts.Prepare(cmd)
-			if err != nil {
-				return err
-			}
-
-			err = opts.Run(cmd)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		},
 	}
 
-	opts.RegisterFlags(cmd)
+	cmd.AddCommand(newGenerateCommand(opts), newPrintVersionCommand(opts))
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		cmd.PrintErr(cmd.UsageString())
@@ -176,13 +155,83 @@ func NewCommand(opts *Options) *cobra.Command {
 	return cmd
 }
 
+// noArgs refuses a stray argument the way a bad flag is refused. Every input
+// these commands take is a flag, so "schemagen generate manifest.yaml" written
+// for "--builder manifest.yaml" is a usage error, and is reported as one rather
+// than through cobra's own path.
+func noArgs(cmd *cobra.Command, args []string) error {
+	err := cobra.NoArgs(cmd, args)
+	if err != nil {
+		cmd.PrintErr(cmd.UsageString())
+
+		return usageError{err}
+	}
+
+	return nil
+}
+
+// newGenerateCommand builds "generate", which reads the manifests and writes
+// the schemas. It is where every flag describing an output lives.
+func newGenerateCommand(opts *Options) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "generate [flags]",
+		Short: "Build component schemas from the upstream collector sources",
+		Example: `  schemagen generate --builder builder.yaml --out schema.yaml
+  schemagen generate --builder core=otelcol/manifest.yaml \
+    --builder contrib=otelcol-contrib/manifest.yaml --registry ../otelcol-config-schemas`,
+		Args:         noArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			err := opts.Prepare(cmd)
+			if err != nil {
+				return err
+			}
+
+			return opts.Run(cmd)
+		},
+	}
+
+	opts.RegisterFlags(cmd)
+
+	return cmd
+}
+
+// newPrintVersionCommand builds "print-version", which answers what release a
+// manifest resolves to and writes nothing.
+//
+// It is a command of its own rather than a flag on generate because it is a
+// different question: it takes only --builder, and none of the flags saying
+// where a schema goes, in what format, or how much of a registry to keep mean
+// anything to it.
+func newPrintVersionCommand(opts *Options) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "print-version [flags]",
+		Short: "Print the release each manifest resolves to",
+		Example: `  schemagen print-version --builder core=otelcol/manifest.yaml
+  schemagen print-version --builder builder.yaml | cut -f2`,
+		Args:         noArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			err := opts.Prepare(cmd)
+			if err != nil {
+				return err
+			}
+
+			return opts.PrintVersions(cmd)
+		},
+	}
+
+	opts.registerBuilderFlag(cmd)
+
+	return cmd
+}
+
 // RegisterFlags declares every flag the generator takes.
 func (o *Options) RegisterFlags(cmd *cobra.Command) {
+	o.registerBuilderFlag(cmd)
+
 	flags := cmd.Flags()
 
-	flags.StringSliceVar(&o.builders, "builder", nil,
-		"OCB builder manifest describing a distribution, as \"[name=]path\";\n"+
-			"name overrides what the registry files it under; repeat for several")
 	flags.StringVar(&o.outFile, "out", "-",
 		"file to write the schema to, or \"-\" for stdout; one manifest only")
 	flags.StringVar(&o.registryDir, "registry", "",
@@ -261,19 +310,9 @@ func (o *Options) Run(cmd *cobra.Command) error {
 		}
 	}
 
-	if o.registryDir != "" {
-		// Pruning runs before the index so the index is written from what the
-		// registry is left holding, which is the whole point of rebuilding it
-		// by listing the directory.
-		err = o.prune()
-		if err != nil {
-			return err
-		}
-
-		err = o.writeIndex()
-		if err != nil {
-			return err
-		}
+	err = o.publishRegistry()
+	if err != nil {
+		return err
 	}
 
 	err = o.writeSummary()
@@ -291,6 +330,83 @@ func (o *Options) Run(cmd *cobra.Command) error {
 	}
 
 	return nil
+}
+
+// PrintVersions writes the release each manifest resolves to and returns.
+//
+// Prepare is expected to have run first; a caller that composed the options
+// itself gets the defaults instead of a half-built run.
+//
+// It exists so that a caller filling a registry can ask what a manifest would
+// be filed under without generating it, which is not something that can be
+// worked out from the outside: the release is dist.otelcol_version, or failing
+// that the version most of the collector's own components are pinned at, or
+// failing that dist.version, and upstream's manifests disagree with their own
+// tags often enough for the difference to matter. The tag v0.146.0 pins its
+// components at v0.146.1 and calls itself 0.145.0.
+//
+// A scheduled run that compares release tags against what a registry holds
+// will otherwise find the same release missing every time, generate it, and
+// file it under the name it already had.
+//
+// Only the manifest is read, so this answers without resolving a module graph.
+func (o *Options) PrintVersions(cmd *cobra.Command) error {
+	if o.out == nil || o.progress == nil {
+		err := o.Prepare(cmd)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(o.builders) == 0 {
+		cmd.PrintErr(cmd.UsageString())
+
+		return ErrNoManifests
+	}
+
+	for _, builder := range o.builders {
+		name, path := splitBuilder(builder)
+
+		man, err := readManifest(path, name)
+		if err != nil {
+			return err
+		}
+
+		_, err = fmt.Fprintf(o.out, "%s\t%s\n", man.Dist.Name, man.collectorVersion())
+		if err != nil {
+			return fmt.Errorf("write the release: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// registerBuilderFlag declares the one input every mode takes: which manifests
+// to read. It is registered on its own because print-version takes this and
+// nothing else.
+func (o *Options) registerBuilderFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSliceVar(&o.builders, "builder", nil,
+		"OCB builder manifest describing a distribution, as \"[name=]path\";\n"+
+			"name overrides what the registry files it under; repeat for several")
+}
+
+// publishRegistry settles what the registry serves once the schemas are
+// written. A run that was not given one has nothing to settle.
+//
+// Pruning runs before the index so the index is written from what the registry
+// is left holding, which is the whole point of rebuilding it by listing the
+// directory rather than editing it.
+func (o *Options) publishRegistry() error {
+	if o.registryDir == "" {
+		return nil
+	}
+
+	err := o.prune()
+	if err != nil {
+		return err
+	}
+
+	return o.writeIndex()
 }
 
 // checkDestination settles where the schemas are written. A run either writes

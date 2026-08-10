@@ -60,7 +60,7 @@ release-pin:
 
 # Regenerate the component schemas from the distributions' builder manifests.
 schemas:
-	go run ./cmd/schemagen $(addprefix --builder ,$(BUILDERS)) --registry '$(SCHEMAS)'
+	go run ./cmd/schemagen generate $(addprefix --builder ,$(BUILDERS)) --registry '$(SCHEMAS)'
 
 clean:
 	rm -rf bin dist coverage.txt
