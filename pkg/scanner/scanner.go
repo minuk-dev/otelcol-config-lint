@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/spf13/afero"
+
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
@@ -19,6 +21,9 @@ const StdinMarker = "-"
 
 // Scanner turns paths into the files to lint.
 type Scanner struct {
+	// Fs is the filesystem the paths are read from. A nil Fs means the real
+	// one, so the zero value scans the machine the linter runs on.
+	Fs afero.Fs
 	// Exclude are glob patterns skipped during a directory walk, matched
 	// against both the full path and the base name. A pattern containing "*"
 	// also matches anywhere in the path.
@@ -35,6 +40,7 @@ type Scanner struct {
 // usual vendored directories, and skips anything matching exclude.
 func New(exclude []string) *Scanner {
 	return &Scanner{
+		Fs:         nil,
 		Exclude:    exclude,
 		Extensions: []string{".yaml", ".yml"},
 		SkipDirs:   []string{"vendor", "node_modules"},
@@ -55,7 +61,7 @@ func (s *Scanner) Scan(paths []string) (sets.Set[string], error) {
 			continue
 		}
 
-		info, err := os.Stat(path)
+		info, err := s.fs().Stat(path)
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", path, err)
 		}
@@ -77,26 +83,47 @@ func (s *Scanner) Scan(paths []string) (sets.Set[string], error) {
 	return files, nil
 }
 
+// fs returns the filesystem to read, which is the real one unless the caller
+// named another.
+func (s *Scanner) fs() afero.Fs {
+	if s.Fs == nil {
+		return afero.NewOsFs()
+	}
+
+	return s.Fs
+}
+
 // walk adds every config file under root to files.
 func (s *Scanner) walk(root string, files sets.Set[string]) error {
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := afero.Walk(s.fs(), root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			// A walk fails in two ways, and they do not deserve the same
+			// answer. A directory that cannot be listed arrives with its own
+			// info, and losing one would quietly shorten the file list, so it
+			// ends the scan. An entry that cannot be stat'd arrives with no
+			// info at all -- it was removed while the walk was running, or it
+			// sits in a directory that can be listed but not searched. Its
+			// name is still known, so a config file goes into the set and is
+			// reported as a file that could not be read, rather than costing
+			// every other file in the tree.
+			if info != nil || path == root {
+				return err
+			}
+
+			s.insert(path, files)
+
+			return nil
 		}
 
-		if d.IsDir() {
-			if path != root && s.skipDir(d.Name()) {
+		if info.IsDir() {
+			if path != root && s.skipDir(info.Name()) {
 				return fs.SkipDir
 			}
 
 			return nil
 		}
 
-		if !s.wanted(d.Name()) || s.excluded(path) {
-			return nil
-		}
-
-		files.Insert(filepath.Clean(path))
+		s.insert(path, files)
 
 		return nil
 	})
@@ -105,6 +132,17 @@ func (s *Scanner) walk(root string, files sets.Set[string]) error {
 	}
 
 	return nil
+}
+
+// insert adds a walked path to files when it is a config file the walk picks
+// up. The name is all it goes on, so it serves an entry that could not be
+// stat'd as well as one that could.
+func (s *Scanner) insert(path string, files sets.Set[string]) {
+	if !s.wanted(filepath.Base(path)) || s.excluded(path) {
+		return
+	}
+
+	files.Insert(filepath.Clean(path))
 }
 
 // skipDir reports whether a walk should stay out of a directory.

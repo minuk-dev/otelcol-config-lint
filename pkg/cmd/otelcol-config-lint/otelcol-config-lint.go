@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"runtime"
 	"strings"
 
 	"github.com/samber/mo"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
@@ -78,6 +78,11 @@ const DefaultSettingsFile = ".otelcol-config-lint.yaml"
 // Options holds everything the command was asked to do. The fields are filled
 // in by RegisterFlags and then by the settings file, in that order.
 type Options struct {
+	// Fs is the filesystem the settings file, the config files and any local
+	// schema location are read from. A nil Fs means the real one, which is
+	// what the binary uses.
+	Fs afero.Fs
+
 	// flags
 	collectorVersion string
 	distribution     string
@@ -105,7 +110,8 @@ type Options struct {
 // zero value is used.
 func NewCommand(opts *Options) *cobra.Command {
 	if opts == nil {
-		opts = &Options{} //nolint:exhaustruct // every field is filled in by RegisterFlags
+		//nolint:exhaustruct // RegisterFlags fills in every flag, and a nil Fs is the real filesystem
+		opts = &Options{}
 	}
 
 	// The root carries no work of its own: every mode is a subcommand, so a
@@ -168,14 +174,14 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 // Prepare folds the settings file into the parsed flags and builds the schema
 // store. Flags given on the command line win over the file.
 func (o *Options) Prepare(cmd *cobra.Command) error {
-	fileSettings, err := loadSettings(o.settingsFile)
+	fileSettings, err := loadSettings(o.fs(), o.settingsFile)
 	if err != nil {
 		return err
 	}
 
 	o.applySettings(fileSettings, cmd.Flags().Changed)
 
-	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution}
+	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.Fs}
 
 	return nil
 }
@@ -194,6 +200,16 @@ func (o *Options) Run(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// fs returns the filesystem to read, which is the real one unless the caller
+// named another.
+func (o *Options) fs() afero.Fs {
+	if o.Fs == nil {
+		return afero.NewOsFs()
+	}
+
+	return o.Fs
 }
 
 // registerSettingsFlag declares --config. Every command honours it: the
@@ -229,7 +245,10 @@ func (o *Options) registerRuleFlags(cmd *cobra.Command) {
 
 // runLint resolves what to check and how to report it, then does the work.
 func (o *Options) runLint(cmd *cobra.Command, paths []string) error {
-	files, err := scanner.New(splitList(o.exclude)).Scan(paths)
+	sc := scanner.New(splitList(o.exclude))
+	sc.Fs = o.Fs
+
+	files, err := sc.Scan(paths)
 	if err != nil {
 		return fmt.Errorf("collect files: %w", err)
 	}
@@ -333,6 +352,7 @@ func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 
 	return lint.New(lint.Options{
 		Schema:               cat,
+		Fs:                   o.Fs,
 		Availability:         lint.NewVersionIndex(o.store),
 		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
 		Severities:           severities,
@@ -425,13 +445,13 @@ type settings struct {
 
 // loadSettings reads a settings file. When path is empty the default file is
 // used if it exists, and a missing default is not an error.
-func loadSettings(path string) (*settings, error) {
+func loadSettings(fsys afero.Fs, path string) (*settings, error) {
 	required := path != ""
 	if path == "" {
 		path = DefaultSettingsFile
 	}
 
-	src, err := os.ReadFile(path)
+	src, err := afero.ReadFile(fsys, path)
 	if err != nil {
 		if !required && errors.Is(err, fs.ErrNotExist) {
 			return &settings{}, nil //nolint:exhaustruct // an absent file means every option keeps its default

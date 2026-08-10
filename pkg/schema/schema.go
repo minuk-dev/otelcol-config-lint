@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -271,7 +271,12 @@ func Read(r io.Reader) (*Schema, error) {
 
 // ReadFile decodes a schema from a file on disk.
 func ReadFile(path string) (*Schema, error) {
-	f, err := os.Open(path)
+	return readFile(afero.NewOsFs(), path)
+}
+
+// readFile decodes a schema from a file on the given filesystem.
+func readFile(fsys afero.Fs, path string) (*Schema, error) {
+	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open schema: %w", err)
 	}

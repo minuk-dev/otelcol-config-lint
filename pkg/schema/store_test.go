@@ -6,8 +6,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/spf13/afero"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
@@ -431,6 +434,58 @@ func TestDistributionPlaceholderInATemplate(t *testing.T) {
 
 	if cat.Distribution != distCore {
 		t.Errorf("unexpected schema: %+v", cat)
+	}
+}
+
+// TestStoreFsReadsAnInMemoryRegistry pins that Fs governs every local read a
+// store does: the index it enumerates from and the schema it loads. Nothing
+// here is written to disk.
+func TestStoreFsReadsAnInMemoryRegistry(t *testing.T) {
+	t.Parallel()
+
+	fsys := afero.NewMemMapFs()
+	root := filepath.FromSlash("/registry")
+
+	memWrite(t, fsys, filepath.Join(root, schema.IndexFile),
+		`{"distributions":{"core":["v0.150.0"]}}`)
+	memWrite(t, fsys, filepath.Join(root, distCore, "v0.150.0.json"),
+		`{"collectorVersion":"v0.150.0","distribution":"core","components":{}}`)
+
+	store := schema.Store{Locations: []string{root}, Distribution: distCore, Fs: fsys}
+
+	if got := store.Versions(); !slices.Equal(got, []string{"v0.150.0"}) {
+		t.Errorf("Versions() = %v, want the in-memory index", got)
+	}
+
+	cat, err := store.Load(schema.Latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cat.CollectorVersion != "v0.150.0" {
+		t.Errorf("unexpected schema: %+v", cat)
+	}
+}
+
+// TestStoreFsIsNotTheRealFilesystem pins the other half: once an Fs is given,
+// a location that exists on disk is no longer reachable.
+func TestStoreFsIsNotTheRealFilesystem(t *testing.T) {
+	t.Parallel()
+
+	store := schema.Store{Locations: []string{repoSchemas}, Fs: afero.NewMemMapFs()}
+
+	_, err := store.Load(schema.Latest)
+	if err == nil {
+		t.Error("want an error: the committed schemas are not on the given Fs")
+	}
+}
+
+func memWrite(t *testing.T, fsys afero.Fs, path, content string) {
+	t.Helper()
+
+	err := afero.WriteFile(fsys, path, []byte(content), 0o600)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

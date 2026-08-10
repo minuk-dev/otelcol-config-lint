@@ -13,6 +13,7 @@ linters:
             - $gostd
             - github.com/minuk-dev/otelcol-config-lint
             - github.com/samber/mo
+            - github.com/spf13/afero
             - github.com/spf13/cobra
             - gopkg.in/yaml.v3
         test:
@@ -22,6 +23,7 @@ linters:
             - $gostd
             - github.com/minuk-dev/otelcol-config-lint
             - github.com/samber/mo
+            - github.com/spf13/afero
             - github.com/spf13/cobra
             - github.com/stretchr/testify
             - gopkg.in/yaml.v3
@@ -57,6 +59,9 @@ linters:
         - anon
         - Rule$
         - Formatter$
+        # afero.Fs is how a filesystem is passed around; there is no concrete
+        # type to return instead.
+        - Fs$
     varnamelen:
       ignore-type-assert-ok: true
       ignore-map-index-ok: true
@@ -96,6 +101,10 @@ linters:
         linters:
           - dupl
           - funlen
+          # A fake filesystem has to return afero's interfaces, and wrapping an
+          # error a test is about to assert on only hides it.
+          - ireturn
+          - wrapcheck
           - maintidx
           # Fixtures contain deliberate typos and duplicate keys, because that
           # is exactly what the rules under test are meant to catch.

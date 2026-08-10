@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"sort"
+
+	"github.com/spf13/afero"
 )
 
 // IndexFile is the name a registry publishes its index under.
@@ -60,7 +61,12 @@ func ReadIndex(r io.Reader) (*Index, error) {
 
 // ReadIndexFile decodes a registry index from a file on disk.
 func ReadIndexFile(path string) (*Index, error) {
-	f, err := os.Open(path)
+	return readIndexFile(afero.NewOsFs(), path)
+}
+
+// readIndexFile decodes a registry index from a file on the given filesystem.
+func readIndexFile(fsys afero.Fs, path string) (*Index, error) {
+	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open index: %w", err)
 	}

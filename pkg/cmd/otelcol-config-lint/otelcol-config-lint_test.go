@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
+
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 )
 
@@ -429,6 +431,47 @@ func TestAnEmptySettingsFileKeepsTheDefaults(t *testing.T) {
 
 	if out != "" {
 		t.Errorf("the default text output should stay in force, got %q", out)
+	}
+}
+
+// TestOptionsFsRunsEntirelyInMemory pins that Options.Fs governs every file the
+// command reads -- the settings file, the schema location and the configs it
+// walks to -- so an embedder can run a lint against a tree that was never
+// written to disk.
+func TestOptionsFsRunsEntirelyInMemory(t *testing.T) {
+	t.Parallel()
+
+	fsys := afero.NewMemMapFs()
+
+	memWrite(t, fsys, "/schemas/v0.157.0.json",
+		`{"collectorVersion":"v0.157.0","components":{`+
+			`"receiver":{"otlp":{"type":"otlp","signals":["traces"]}},`+
+			`"exporter":{"debug":{"type":"debug","signals":["traces"]}}}}`)
+	memWrite(t, fsys, "/etc/settings.yaml", "schemaLocations: [/schemas]\nminSeverity: error\n")
+	memWrite(t, fsys, "/configs/agent.yaml",
+		"receivers:\n  otlp:\nexporters:\n  debug:\n"+
+			"service:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [debug]\n")
+
+	var stdout, stderr bytes.Buffer
+
+	cmd := otelcolconfiglint.NewCommand(&otelcolconfiglint.Options{Fs: fsys})
+	cmd.SetArgs([]string{"run", "--config", "/etc/settings.yaml", "/configs"})
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	code := otelcolconfiglint.ExitCode(cmd.Execute())
+	if code != 0 {
+		t.Fatalf("exit %d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func memWrite(t *testing.T, fsys afero.Fs, path, content string) {
+	t.Helper()
+
+	err := afero.WriteFile(fsys, path, []byte(content), 0o600)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

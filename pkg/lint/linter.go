@@ -4,8 +4,9 @@ package lint
 import (
 	"errors"
 	"io"
-	"os"
 	"sync"
+
+	"github.com/spf13/afero"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -50,6 +51,8 @@ func (r Result) Message() string {
 type Options struct {
 	// Schema describes the collector release to check against.
 	Schema *schema.Schema
+	// Fs is the filesystem LintFile reads from. A nil Fs means the real one.
+	Fs afero.Fs
 	// Availability lets diagnostics mention other releases. May be nil.
 	Availability rule.Availability
 	// Distributions lets diagnostics mention other distributions. May be nil.
@@ -115,7 +118,7 @@ func (l *Linter) SeverityFor(r rule.Rule) diag.Severity {
 
 // LintFile reads and checks a single config file.
 func (l *Linter) LintFile(path string) Result {
-	src, err := os.ReadFile(path)
+	src, err := afero.ReadFile(l.fs(), path)
 	if err != nil {
 		return Result{Path: path, Status: Error, Err: err}
 	}
@@ -213,6 +216,16 @@ func (l *Linter) LintAll(paths []string, n int) <-chan Result {
 	}()
 
 	return out
+}
+
+// fs returns the filesystem to read, which is the real one unless the caller
+// named another.
+func (l *Linter) fs() afero.Fs {
+	if l.opts.Fs == nil {
+		return afero.NewOsFs()
+	}
+
+	return l.opts.Fs
 }
 
 // Summary counts results by status and diagnostics by severity.
