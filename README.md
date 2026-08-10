@@ -322,8 +322,8 @@ for stdout); `--registry` is what fills a directory with the
 `<distribution>/<version>.<ext>` layout and its `index.json`:
 
 ```sh
-go run ./cmd/schemagen --builder ./builder.yaml --out ./my-collector.yaml
-go run ./cmd/schemagen --builder acme=./builder.yaml --registry ./schemas
+go run ./cmd/schemagen generate --builder ./builder.yaml --out ./my-collector.yaml
+go run ./cmd/schemagen generate --builder acme=./builder.yaml --registry ./schemas
 ```
 
 `cmd/schemagen` downloads every module the manifest names, plus everything they
@@ -364,7 +364,7 @@ drops and renames, and the ones that crossed the beta line, which is what
 config gets.
 
 ```sh
-go run ./cmd/schemagen --builder acme=./builder.yaml --registry ./schemas \
+go run ./cmd/schemagen generate --builder acme=./builder.yaml --registry ./schemas \
   --summary -
 ```
 
