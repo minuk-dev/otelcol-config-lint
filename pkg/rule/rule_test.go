@@ -92,6 +92,8 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
   batch:
 exporters:
   otlp:

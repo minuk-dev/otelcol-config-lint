@@ -39,8 +39,12 @@ linters:
         # Option and result structs are meant to be partially set, with the
         # zero value carrying the default behaviour.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|FormatterOptions|Result|Summary)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(EnvironmentPolicy|EnvironmentOverride)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/schema\.(Store|Schema|Component|Field)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'
+        # An environment nobody described is the zero value, and saying so is
+        # the point: the rules that need one then report nothing.
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Environment'
         # cobra.Command has some forty fields and its zero values are the
         # defaults every command wants; each one sets only what it changes.
         - 'github\.com/spf13/cobra\.Command'
@@ -89,6 +93,13 @@ linters:
         - id
         - in # table-driven test input
         - tt # table-driven test case
+        # The Kubernetes memory units, whose names are what a manifest writes.
+        - Ki
+        - Mi
+        - Gi
+        - Ti
+        - Pi
+        - Ei
     cyclop:
       max-complexity: 15 # default 10 is too strict for the config walkers
     funlen:

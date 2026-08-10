@@ -94,7 +94,10 @@ type Options struct {
 	exclude          string
 	minSeverity      string
 	failOn           string
+	memoryRequest    string
+	memoryLimit      string
 	workers          int
+	kubernetes       bool
 	strict           bool
 	ignoreMissing    bool
 	summary          bool
@@ -104,6 +107,15 @@ type Options struct {
 
 	// internal state
 	store schema.Store
+	// kubernetesEnabled is what the flag or the settings file said about
+	// running in Kubernetes; nil when neither said anything, which leaves the
+	// answer to be read from the memory numbers.
+	kubernetesEnabled *bool
+	// kubernetesOverrides are the per-path environments, which only the
+	// settings file can state.
+	kubernetesOverrides []kubernetesOverride
+	// envPolicy resolves the environment of each file linted.
+	envPolicy lint.EnvironmentPolicy
 }
 
 // NewCommand builds the root command. A nil opts is allowed, in which case a
@@ -162,6 +174,9 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.StringVar(&o.failOn, "fail-on", "error", "severity that makes a file invalid: error, warning or info")
 	// Spelled -n before cobra; the shorthand keeps that working.
 	flags.IntVarP(&o.workers, "n", "n", defaultWorkers(), "number of files to check in parallel")
+	flags.BoolVar(&o.kubernetes, "kubernetes", false, "the config runs in a Kubernetes pod")
+	flags.StringVar(&o.memoryRequest, "memory-request", "", "container memory request, e.g. 256Mi")
+	flags.StringVar(&o.memoryLimit, "memory-limit", "", "container memory limit, e.g. 512Mi")
 	flags.BoolVar(&o.strict, "strict", false, "report unknown component settings as errors")
 	flags.BoolVar(&o.ignoreMissing, "ignore-missing-schemas", false,
 		"do not fail on components missing from the schema")
@@ -182,6 +197,11 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 	o.applySettings(fileSettings, cmd.Flags().Changed)
 
 	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.Fs}
+
+	o.envPolicy, err = o.environmentPolicy()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -302,10 +322,18 @@ func (o *Options) lintAll(
 		results[r.Path] = r
 	}
 
+	// An environment decides whether some rules run at all, so a verbose run
+	// says which one each file resolved to.
+	sayEnvironment := o.verbose && o.envPolicy.Configured()
+
 	for _, f := range sets.List(files) {
 		r := results[f]
 
 		summary.Add(r)
+
+		if sayEnvironment {
+			cmd.PrintErrf("otelcol-config-lint: %s: %s\n", r.Path, describeEnvironment(o.envPolicy.Resolve(r.Path)))
+		}
 
 		err := formatter.Result(r)
 		if err != nil {
@@ -356,6 +384,7 @@ func (o *Options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 		Availability:         lint.NewVersionIndex(o.store),
 		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
 		Severities:           severities,
+		Environment:          o.envPolicy.Resolve,
 		Strict:               o.strict,
 		IgnoreMissingSchemas: o.ignoreMissing,
 		MinSeverity:          minSeverity,
@@ -441,6 +470,9 @@ type settings struct {
 	Disable              []string          `yaml:"disable"`
 	Severity             map[string]string `yaml:"severity"`
 	Exclude              []string          `yaml:"exclude"`
+	// Kubernetes describes the pods the configs run in, per path, for the
+	// rules that cannot judge a config without knowing what it runs in.
+	Kubernetes kubernetesSettings `yaml:"kubernetes"`
 }
 
 // loadSettings reads a settings file. When path is empty the default file is
@@ -488,6 +520,8 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 	}
 
 	str("collector-version", &o.collectorVersion, s.CollectorVersion)
+	str("memory-request", &o.memoryRequest, s.Kubernetes.MemoryRequest)
+	str("memory-limit", &o.memoryLimit, s.Kubernetes.MemoryLimit)
 	str("distribution", &o.distribution, s.Distribution)
 	str("output", &o.output, s.Output)
 	str("min-severity", &o.minSeverity, s.MinSeverity)
@@ -495,6 +529,17 @@ func (o *Options) applySettings(s *settings, changed func(name string) bool) {
 	boolean("strict", &o.strict, s.Strict)
 	boolean("ignore-missing-schemas", &o.ignoreMissing, s.IgnoreMissingSchemas)
 	boolean("summary", &o.summary, s.Summary)
+
+	// The deployment environment is a tri-state: the flag wins, then the file,
+	// and with neither the memory numbers speak for themselves.
+	switch {
+	case changed("kubernetes"):
+		o.kubernetesEnabled = &o.kubernetes
+	case s.Kubernetes.Enabled != nil:
+		o.kubernetesEnabled = s.Kubernetes.Enabled
+	}
+
+	o.kubernetesOverrides = s.Kubernetes.Overrides
 
 	if !changed("schema-location") && len(s.SchemaLocations) > 0 {
 		o.schemaLocations = append(o.schemaLocations, s.SchemaLocations...)

@@ -22,6 +22,8 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
   batch:
 exporters:
   debug:
@@ -312,5 +314,26 @@ func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 
 	if len(idx.Versions("exporter", "definitely_not_a_component")) != 0 {
 		t.Error("an unknown component should have no versions")
+	}
+}
+
+// TestAMissingCheckIntervalIsReportedOnce pins that memory-limiter-config
+// stands down where the field schema already marks check_interval required:
+// one missing key, one finding, not two about the same line.
+func TestAMissingCheckIntervalIsReportedOnce(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(good, "    check_interval: 1s\n", "", 1)
+
+	var about []string
+
+	for _, d := range newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src)).Diagnostics {
+		if strings.Contains(d.Message, "check_interval") {
+			about = append(about, d.Rule)
+		}
+	}
+
+	if len(about) != 1 {
+		t.Errorf("want one finding about check_interval, got %v", about)
 	}
 }

@@ -65,6 +65,12 @@ type Options struct {
 	// IgnoreMissingSchemas keeps components that are absent from the schema
 	// from failing the run, for configs using a custom distribution.
 	IgnoreMissingSchemas bool
+	// Environment resolves the deployment environment of one config file, for
+	// the rules that cannot judge a config on its own. It is called from every
+	// worker LintAll starts, so it must be safe for concurrent use and must
+	// not change once linting has begun. A nil resolver leaves every file's
+	// environment unknown, which keeps those rules silent.
+	Environment func(path string) rule.Environment
 	// MinSeverity drops diagnostics less serious than this level.
 	MinSeverity diag.Severity
 	// FailOn is the severity at which a file counts as invalid.
@@ -159,6 +165,7 @@ func (l *Linter) Lint(path string, src []byte) Result {
 		Avail:  l.opts.Availability,
 		Dists:  l.opts.Distributions,
 		Strict: l.opts.Strict,
+		Env:    l.environment(path),
 	}
 
 	var found diag.Diagnostics
@@ -226,6 +233,16 @@ func (l *Linter) fs() afero.Fs {
 	}
 
 	return l.opts.Fs
+}
+
+// environment resolves where a file is deployed, which is unknown unless the
+// caller supplied a resolver.
+func (l *Linter) environment(path string) rule.Environment {
+	if l.opts.Environment == nil {
+		return rule.Environment{}
+	}
+
+	return l.opts.Environment(path)
 }
 
 // Summary counts results by status and diagnostics by severity.

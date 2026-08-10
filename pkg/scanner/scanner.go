@@ -155,25 +155,44 @@ func (s *Scanner) wanted(name string) bool {
 	return slices.Contains(s.Extensions, strings.ToLower(filepath.Ext(name)))
 }
 
-// excluded reports whether a path matches any exclude pattern. Patterns are
-// matched against both the full path and the base name.
+// excluded reports whether a path matches any exclude pattern.
 func (s *Scanner) excluded(path string) bool {
-	base := filepath.Base(path)
 	for _, pattern := range s.Exclude {
-		if ok, _ := filepath.Match(pattern, base); ok {
-			return true
-		}
-
-		if ok, _ := filepath.Match(pattern, path); ok {
-			return true
-		}
-
-		// A pattern with a star also matches anywhere in the path, so
-		// "*generated*" reaches files a plain glob would not.
-		if strings.Contains(pattern, "*") && strings.Contains(path, strings.Trim(pattern, "*")) {
+		if Match(pattern, path) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// Match reports whether a path matches a glob pattern. The pattern is tried
+// against both the whole path and the base name, so "*.tmpl.yaml" reaches a
+// file wherever it sits. It is exported so that every path pattern the tool
+// takes -- excludes, and the settings file's per-path environments -- behaves
+// the same way, including which patterns do not work.
+func Match(pattern, path string) bool {
+	if ok, _ := filepath.Match(pattern, filepath.Base(path)); ok {
+		return true
+	}
+
+	if ok, _ := filepath.Match(pattern, path); ok {
+		return true
+	}
+
+	// A pattern with a star also matches anywhere in the path, so
+	// "*generated*" reaches files a plain glob would not.
+	return strings.Contains(pattern, "*") && strings.Contains(path, strings.Trim(pattern, "*"))
+}
+
+// CheckPattern reports a glob filepath.Match cannot parse, so a bad pattern is
+// a clear error at startup rather than a pattern that silently matches
+// nothing.
+func CheckPattern(pattern string) error {
+	_, err := filepath.Match(pattern, "")
+	if err != nil {
+		return fmt.Errorf("pattern %q: %w", pattern, err)
+	}
+
+	return nil
 }
