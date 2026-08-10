@@ -84,6 +84,10 @@ type Finding struct {
 	Message string
 	// Hint optionally suggests a fix.
 	Hint string
+	// Docs optionally links to the upstream documentation the finding rests
+	// on. A rule that reports what upstream requires or recommends should say
+	// where it says so.
+	Docs string
 	// Severity overrides the rule's default for this one finding.
 	Severity diag.Severity
 }
@@ -102,6 +106,7 @@ func (c *Context) Report(f Finding) {
 		Position: c.File.Pos(f.Node),
 		Path:     f.Path,
 		Hint:     f.Hint,
+		Docs:     f.Docs,
 	})
 }
 

@@ -40,6 +40,7 @@ func (r processorOrder) Check(ctx *Context) {
 					Message: "memory_limiter is processor " + itoa(i+1) + " in pipeline " + quote(p.Key) +
 						"; it must be first",
 					Hint: "move " + quote(ref.ID.String()) + " to the front of " + path,
+					Docs: memoryLimiterDocs,
 				})
 			}
 
@@ -52,6 +53,7 @@ func (r processorOrder) Check(ctx *Context) {
 					Node: ref.Node, Path: "service." + ref.Path,
 					Message:  "batch runs before other processors in pipeline " + quote(p.Key),
 					Hint:     "put batch last so upstream processors see individual items and cannot drop whole batches",
+					Docs:     batchDocs,
 					Severity: diag.Info,
 				})
 			}
@@ -71,6 +73,7 @@ func (r missingMemoryLimiter) Check(ctx *Context) {
 			Node: nodeOr(p.ProcessorsNode, p.KeyNode), Path: "service.pipelines." + p.Key + ".processors",
 			Message: "pipeline " + quote(p.Key) + " has no memory_limiter processor",
 			Hint:    "add memory_limiter as the first processor to bound the collector's memory use",
+			Docs:    memoryLimiterDocs,
 		})
 	}
 }
@@ -87,6 +90,7 @@ func (r missingBatch) Check(ctx *Context) {
 			Node: nodeOr(p.ProcessorsNode, p.KeyNode), Path: "service.pipelines." + p.Key + ".processors",
 			Message: "pipeline " + quote(p.Key) + " has no batch processor",
 			Hint:    "add batch before the exporters to reduce the number of outgoing requests",
+			Docs:    batchDocs,
 		})
 	}
 }
@@ -117,6 +121,7 @@ func (r insecureTLS) Check(ctx *Context) {
 					Message: quote(shortPath(hit.path)) + " disables TLS verification for " +
 						string(kind) + " " + quote(c.ID.String()),
 					Hint: "supply ca_file/cert_file instead of skipping verification outside local testing",
+					Docs: tlsDocs,
 				})
 			}
 		}

@@ -168,6 +168,10 @@ func (f *textFormatter) diagnostic(d diag.Diagnostic) error {
 		err = writef(f.w, "    %s %s\n", f.color(ansiDim, "hint:"), d.Hint)
 	}
 
+	if err == nil && d.Docs != "" {
+		err = writef(f.w, "    %s %s\n", f.color(ansiDim, "docs:"), d.Docs)
+	}
+
 	return err
 }
 
@@ -363,6 +367,10 @@ func (f *githubFormatter) Result(r Result) error {
 		msg := d.Message + " [" + d.Rule + "]"
 		if d.Hint != "" {
 			msg += "\nhint: " + d.Hint
+		}
+
+		if d.Docs != "" {
+			msg += "\ndocs: " + d.Docs
 		}
 
 		err := writef(f.w, "::%s file=%s,line=%d,col=%d::%s\n",

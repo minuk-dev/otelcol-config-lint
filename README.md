@@ -17,7 +17,15 @@ config.yaml:22:3: error: unknown exporter type "logging" in collector v0.157.0 [
     hint: "logging" exists in v0.110.0 but not in v0.157.0
 config.yaml:29:30: error: service.extensions references "pprof" which is not declared under extensions [undefined-reference]
     hint: declared extensions: health_check
+config.yaml:34:5: error: processor "memory_limiter" sets neither limit_mib nor limit_percentage: 'limit_mib' or 'limit_percentage' must be greater than zero [memory-limiter-config]
+    hint: set limit_mib to the memory the collector may use; spike_limit_mib then defaults to 20% of it
+    docs: https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/memorylimiterprocessor/README.md
 ```
+
+A rule that reports what the collector requires or recommends carries a `docs:`
+link to the upstream page that says so, so the claim can be checked rather than
+taken on trust. It is in the JSON output as `docs`, and in the GitHub
+annotations.
 
 No collector binary and no Go toolchain are needed at lint time. The component
 schemas are fetched from the published registry, so a new collector release
@@ -232,6 +240,10 @@ alone.
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `insecure-tls`, `memory-limiter-config`,
 `memory-limiter-sizing`.
+
+Every practice rule cites the upstream page it rests on — the
+`memorylimiterprocessor` and `batchprocessor` READMEs, `configtls`, and the
+Kubernetes resource docs for the container's request and limit.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:

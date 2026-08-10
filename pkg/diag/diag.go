@@ -96,6 +96,10 @@ type Diagnostic struct {
 	Path string `json:"path,omitempty"`
 	// Hint is an optional suggested fix shown below the message.
 	Hint string `json:"hint,omitempty"`
+	// Docs optionally links to where upstream states what the finding is
+	// based on, so a rule that says "this is what upstream recommends" can be
+	// checked rather than taken on trust.
+	Docs string `json:"docs,omitempty"`
 }
 
 // Diagnostics is an ordered collection of findings.

@@ -309,3 +309,30 @@ func TestMemoryLimiterSizingLeavesExpansionsAlone(t *testing.T) {
 		t.Errorf("a limit resolved at runtime cannot be sized, got %+v", found)
 	}
 }
+
+// TestFindingsCiteUpstream pins that a rule reporting what the collector
+// requires says where upstream says so, rather than asking to be believed.
+func TestFindingsCiteUpstream(t *testing.T) {
+	t.Parallel()
+
+	const memoryLimiterDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
+		"/blob/main/processor/memorylimiterprocessor/README.md"
+
+	found := checkRule(t, "memory-limiter-config", limiter("memory_limiter", ""), rule.Environment{})
+	if len(found) == 0 {
+		t.Fatal("an empty memory_limiter should be reported")
+	}
+
+	for _, d := range found {
+		if d.Docs != memoryLimiterDocs {
+			t.Errorf("finding %q links to %q, want the processor's README", d.Message, d.Docs)
+		}
+	}
+
+	env := rule.Environment{Kubernetes: true, MemoryRequest: 128 * quantity.Mi, MemoryLimit: 256 * quantity.Mi}
+	for _, d := range checkRule(t, "memory-limiter-sizing", sized("512"), env) {
+		if d.Docs == "" {
+			t.Errorf("finding %q cites nothing", d.Message)
+		}
+	}
+}

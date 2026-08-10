@@ -239,6 +239,7 @@ func (r memoryLimiterConfig) checkInterval(ctx *Context, lim memoryLimiter) {
 			Message: lim.name() + " has no check_interval, and its default of 0s is rejected: " +
 				"'check_interval' must be greater than zero",
 			Hint: "set check_interval: 1s, the value upstream recommends",
+			Docs: memoryLimiterDocs,
 		})
 	case lim.checkInterval.known && interval <= 0:
 		ctx.Report(Finding{
@@ -246,6 +247,7 @@ func (r memoryLimiterConfig) checkInterval(ctx *Context, lim memoryLimiter) {
 			Message: lim.name() + " sets check_interval to " + interval.String() +
 				": 'check_interval' must be greater than zero",
 			Hint: "set check_interval: 1s, the value upstream recommends",
+			Docs: memoryLimiterDocs,
 		})
 	case lim.checkInterval.known && (interval < intervalFloor || interval > intervalCeiling):
 		ctx.Report(Finding{
@@ -253,6 +255,7 @@ func (r memoryLimiterConfig) checkInterval(ctx *Context, lim memoryLimiter) {
 			Message: lim.name() + " checks memory every " + interval.String() +
 				"; upstream recommends " + recommendedInterval.String(),
 			Hint: "a long interval lets memory run away between checks, a very short one costs CPU",
+			Docs: memoryLimiterDocs,
 		})
 	}
 }
@@ -275,6 +278,7 @@ func (r memoryLimiterConfig) checkLimits(ctx *Context, lim memoryLimiter) {
 			"'limit_mib' or 'limit_percentage' must be greater than zero",
 		Hint: "set limit_mib to the memory the collector may use; spike_limit_mib then defaults to " +
 			itoa(spikeDefaultPercent) + "% of it",
+		Docs: memoryLimiterDocs,
 	})
 }
 
@@ -289,6 +293,7 @@ func (r memoryLimiterConfig) checkSpikes(ctx *Context, lim memoryLimiter) {
 				": 'spike_limit_mib' must be smaller than 'limit_mib'",
 			Hint: "leave spike_limit_mib out to take the default of " + itoa(spikeDefaultPercent) +
 				"% of limit_mib, which is where upstream suggests starting",
+			Docs: memoryLimiterDocs,
 		})
 	}
 
@@ -298,6 +303,7 @@ func (r memoryLimiterConfig) checkSpikes(ctx *Context, lim memoryLimiter) {
 			Message: lim.name() + " sets spike_limit_percentage to " + itoa64(lim.spikePercent.num) +
 				" and limit_percentage to " + itoa64(lim.limitPercent.num) +
 				": 'spike_limit_percentage' must be smaller than 'limit_percentage'",
+			Docs: memoryLimiterDocs,
 		})
 	}
 
@@ -314,6 +320,7 @@ func (r memoryLimiterConfig) checkSpikes(ctx *Context, lim memoryLimiter) {
 				Message: lim.name() + " sets " + pct.key + " to " + itoa64(pct.val.num) +
 					": 'limit_percentage' and 'spike_limit_percentage' must be greater than zero " +
 					"and less than or equal to hundred",
+				Docs: memoryLimiterDocs,
 			})
 		}
 	}
@@ -371,6 +378,7 @@ func (r memoryLimiterSizing) checkPercentage(ctx *Context, lim memoryLimiter) {
 		Message: lim.name() + " limits memory by percentage, but the container has no memory limit",
 		Hint: "the percentage resolves against the node's memory instead, so the limiter is effectively off; " +
 			"set a container memory limit, or use limit_mib",
+		Docs: memoryLimiterDocs,
 	})
 }
 
@@ -388,6 +396,7 @@ func (r memoryLimiterSizing) checkLimit(ctx *Context, lim memoryLimiter, hard in
 		Hint: "keep the hard limit near " + itoa(ceilingPercent) + "% of the container memory limit, " +
 			"and set GOMEMLIMIT to about " + itoa(ceilingPercent) + "% of the hard limit so the collector " +
 			"collects garbage before the limiter has to refuse data",
+		Docs: memoryLimiterDocs,
 	}
 
 	switch {
@@ -424,6 +433,7 @@ func (r memoryLimiterSizing) checkRequest(ctx *Context, lim memoryLimiter, hard 
 			quantity.Format(request),
 		Hint: "the pod is Burstable and is evicted first under node pressure; " +
 			"collectors usually set the memory request equal to the limit",
+		Docs: kubernetesResourceDocs,
 	})
 }
 
