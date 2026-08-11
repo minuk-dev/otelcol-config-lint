@@ -25,6 +25,9 @@ func TestParse(t *testing.T) {
 			in: "  512Mi  ", want: 512 * quantity.Mi,
 		},
 		"zero": {in: "0", want: 0},
+		// The largest whole unit that still fits, which is where the overflow
+		// bound has to sit rather than one unit lower.
+		"the largest size that fits": {in: "7Ei", want: 7 * quantity.Ei},
 	}
 
 	for name, tt := range tests {
@@ -46,7 +49,14 @@ func TestParse(t *testing.T) {
 func TestParseRejectsWhatIsNotASize(t *testing.T) {
 	t.Parallel()
 
-	for _, in := range []string{"", "  ", "512MB", "512 Mi", "lots", "-1Mi", "1m", "Mi", "1e30Ei"} {
+	// "8Ei" is 2^63, the first byte count that does not fit. It is the case a
+	// bound of MaxInt64 lets through, because a float64 rounds MaxInt64 up to
+	// exactly that number: the conversion that follows would then saturate on
+	// one architecture and wrap to a negative size on another.
+	for _, in := range []string{
+		"", "  ", "512MB", "512 Mi", "lots", "-1Mi", "1m", "Mi", "1e30Ei",
+		"8Ei", "9223372036854775807", "16Ei",
+	} {
 		t.Run(in, func(t *testing.T) {
 			t.Parallel()
 

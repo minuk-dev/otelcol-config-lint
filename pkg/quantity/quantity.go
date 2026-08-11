@@ -10,6 +10,9 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/samber/lo"
+	"github.com/samber/mo"
 )
 
 // ErrInvalid reports a string that is not a memory quantity.
@@ -34,6 +37,15 @@ const (
 	peta = 1e15
 	exa  = 1e18
 )
+
+// overflow is the first byte count that does not fit. A float64 cannot hold
+// MaxInt64 exactly -- the nearest value it has is 2^63, one above -- so the
+// bound has to be that value rather than MaxInt64, which would round up to it
+// and let 8Ei through. Converting an out-of-range float to an int64 is
+// implementation-defined in Go: it saturates on arm64 and wraps to the most
+// negative int64 on amd64, so a number past the bound has to be an error here
+// rather than a different answer per architecture.
+const overflow = 1 << 63
 
 // unit is one accepted suffix and what it multiplies by. The suffixes are
 // listed longest first so "Mi" is not read as "M" with a stray "i".
@@ -71,7 +83,7 @@ func Parse(text string) (int64, error) {
 
 	digits, suffix := split(trimmed)
 
-	factor, ok := factorOf(suffix)
+	factor, ok := factorOf(suffix).Get()
 	if !ok {
 		return 0, fmt.Errorf("%q is %w: %q is not a memory suffix (want Ki, Mi, Gi, Ti, Pi, Ei, k, M, G, T, P or E)",
 			text, ErrInvalid, suffix)
@@ -82,12 +94,12 @@ func Parse(text string) (int64, error) {
 		return 0, fmt.Errorf("%q is %w: want a non-negative number, optionally with a suffix", text, ErrInvalid)
 	}
 
-	bytes := value * factor
-	if bytes > math.MaxInt64 {
+	bytes := math.Round(value * factor)
+	if bytes >= overflow {
 		return 0, fmt.Errorf("%q is %w: it does not fit in a byte count", text, ErrInvalid)
 	}
 
-	return int64(math.Round(bytes)), nil
+	return int64(bytes), nil
 }
 
 // split cuts a quantity into its number and its suffix.
@@ -100,14 +112,12 @@ func split(text string) (string, string) {
 	return text[:end], text[end:]
 }
 
-func factorOf(suffix string) (float64, bool) {
-	for _, candidate := range units() {
-		if candidate.suffix == suffix {
-			return candidate.factor, true
-		}
-	}
+// factorOf returns what a suffix multiplies by, and nothing at all when it is
+// not one of the accepted suffixes.
+func factorOf(suffix string) mo.Option[float64] {
+	found, ok := lo.Find(units(), func(candidate unit) bool { return candidate.suffix == suffix })
 
-	return 0, false
+	return mo.TupleToOption(found.factor, ok)
 }
 
 // Format renders a byte count the way a manifest would state it, so a
@@ -126,11 +136,13 @@ func Format(bytes int64) string {
 		{suffix: "Ki", factor: Ki},
 	}
 
-	for _, candidate := range binary {
+	whole, ok := lo.Find(binary, func(candidate unit) bool {
 		size := int64(candidate.factor)
-		if bytes >= size && bytes%size == 0 {
-			return strconv.FormatInt(bytes/size, 10) + candidate.suffix
-		}
+
+		return bytes >= size && bytes%size == 0
+	})
+	if ok {
+		return strconv.FormatInt(bytes/int64(whole.factor), 10) + whole.suffix
 	}
 
 	// Not a whole number of any unit: one decimal place of the largest unit

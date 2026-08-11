@@ -3,6 +3,7 @@ module github.com/minuk-dev/otelcol-config-lint
 go 1.25.4
 
 require (
+	github.com/samber/lo v1.53.0
 	github.com/samber/mo v1.17.0
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
