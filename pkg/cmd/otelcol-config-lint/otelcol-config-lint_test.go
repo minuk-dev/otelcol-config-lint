@@ -11,7 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/lo"
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 )
@@ -763,6 +766,15 @@ service:
       exporters: [debug]
 `
 
+// limiterWith is limiterConfig with the memory_limiter settings replaced, for
+// the cases where the limiter itself is what is wrong. The settings are written
+// already indented by four spaces.
+func limiterWith(settings string) string {
+	const declared = "    check_interval: 1s\n    limit_mib: 512\n    spike_limit_mib: 128\n"
+
+	return strings.Replace(limiterConfig, declared, settings+"\n", 1)
+}
+
 // writeFile writes a fixture, creating the directories leading to it.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -778,17 +790,26 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-// rulesFired returns the rules each file in a JSON report was flagged by.
-func rulesFired(t *testing.T, out string) map[string][]string {
+// finding is one diagnostic of a JSON report, as a test reads it.
+type finding struct {
+	Rule     string `json:"rule"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+	Docs     string `json:"docs"`
+}
+
+// fileReport is one file's entry in a JSON report.
+type fileReport struct {
+	Filename    string    `json:"filename"`
+	Diagnostics []finding `json:"diagnostics"`
+}
+
+// findings returns the diagnostics of a JSON report, keyed by file base name.
+func findings(t *testing.T, out string) map[string][]finding {
 	t.Helper()
 
 	var report struct {
-		Files []struct {
-			Filename    string `json:"filename"`
-			Diagnostics []struct {
-				Rule string `json:"rule"`
-			} `json:"diagnostics"`
-		} `json:"files"`
+		Files []fileReport `json:"files"`
 	}
 
 	err := json.Unmarshal([]byte(out), &report)
@@ -796,16 +817,20 @@ func rulesFired(t *testing.T, out string) map[string][]string {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
 	}
 
-	fired := map[string][]string{}
+	byFile := lo.GroupBy(report.Files, func(f fileReport) string { return filepath.Base(f.Filename) })
 
-	for _, f := range report.Files {
-		for _, d := range f.Diagnostics {
-			name := filepath.Base(f.Filename)
-			fired[name] = append(fired[name], d.Rule)
-		}
-	}
+	return lo.MapValues(byFile, func(files []fileReport, _ string) []finding {
+		return lo.FlatMap(files, func(f fileReport, _ int) []finding { return f.Diagnostics })
+	})
+}
 
-	return fired
+// rulesFired returns the rules each file in a JSON report was flagged by.
+func rulesFired(t *testing.T, out string) map[string][]string {
+	t.Helper()
+
+	return lo.MapValues(findings(t, out), func(found []finding, _ string) []string {
+		return lo.Map(found, func(d finding, _ int) string { return d.Rule })
+	})
 }
 
 // TestEnvironmentIsResolvedPerFile is the point of the whole kubernetes block:
@@ -917,4 +942,257 @@ func TestVerboseSaysWhichEnvironmentAFileGot(t *testing.T) {
 	if strings.Contains(errOut, "no deployment environment") {
 		t.Errorf("with no environment configured there is nothing to say:\n%s", errOut)
 	}
+}
+
+// TestVerboseSaysWhenAFileHasNoEnvironment is the other half of the question
+// --verbose answers: with a policy in force, a file the policy opts out has to
+// say so, or a rule that stayed silent looks like a rule that passed.
+func TestVerboseSaysWhenAFileHasNoEnvironment(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "configs", "old.yaml"), limiterConfig)
+
+	settings := filepath.Join(dir, "settings.yaml")
+	writeFile(t, settings, "kubernetes:\n  memoryLimit: 256Mi\n  overrides:\n"+
+		"    - paths: [\"old.yaml\"]\n      enabled: false\n")
+
+	_, out, errOut := lint(t, "", "--config", settings, "--verbose", filepath.Join(dir, "configs"))
+
+	assert.Contains(t, errOut, "old.yaml: no deployment environment", "an opted-out file should say so")
+	assert.NotContains(t, out, "memory-limiter-sizing", "an opted-out file is not sized")
+}
+
+// TestMemoryLimiterConfigReachesTheCommandLine pins that the rule's findings
+// survive the whole path a user sees -- the real schema, the severity gate and
+// the text formatter -- and that a config the collector refuses to start on
+// fails the run.
+func TestMemoryLimiterConfigReachesTheCommandLine(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		settings string
+		says     string
+	}{
+		"a check_interval of zero": {
+			settings: "    check_interval: 0s\n    limit_mib: 512",
+			says:     "'check_interval' must be greater than zero",
+		},
+		"no limit at all": {
+			settings: "    check_interval: 1s",
+			says:     "'limit_mib' or 'limit_percentage' must be greater than zero",
+		},
+		"a spike at the limit": {
+			settings: "    check_interval: 1s\n    limit_mib: 512\n    spike_limit_mib: 512",
+			says:     "'spike_limit_mib' must be smaller than 'limit_mib'",
+		},
+		"a percentage above a hundred": {
+			settings: "    check_interval: 1s\n    limit_percentage: 120",
+			says:     "less than or equal to hundred",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			code, out, errOut := lint(t, limiterWith(tt.settings), "-")
+			require.Equal(t, 1, code, "a limiter the collector rejects should fail the run: %s%s", out, errOut)
+
+			assert.Contains(t, out, tt.says)
+			assert.Contains(t, out, "[memory-limiter-config]")
+		})
+	}
+}
+
+// TestAWorkingLimiterPassesTheCommandLine is the other side of the rule: the
+// configuration upstream recommends comes through clean, down to the last
+// remark, or the rule is noise a project will turn off.
+func TestAWorkingLimiterPassesTheCommandLine(t *testing.T) {
+	t.Parallel()
+
+	code, out, errOut := lint(t, limiterConfig, "--fail-on", "info", "--min-severity", "warning", "-")
+	require.Equal(t, 0, code, "a recommended limiter should pass: %s%s", out, errOut)
+}
+
+// TestFindingsCiteUpstreamInEveryFormat pins that the citation reaches whoever
+// is reading. A link the reporter drops is not a citation, and the machine
+// formats are where a reviewer meets the finding.
+func TestFindingsCiteUpstreamInEveryFormat(t *testing.T) {
+	t.Parallel()
+
+	const docs = "processor/memorylimiterprocessor/README.md"
+
+	src := limiterWith("    check_interval: 1s")
+
+	_, text, _ := lint(t, src, "-")
+	assert.Contains(t, text, "docs: https://", "the text report should cite upstream")
+	assert.Contains(t, text, docs)
+
+	_, out, _ := lint(t, src, "--output", "json", "-")
+	cited := lo.ContainsBy(findings(t, out)["stdin"], func(d finding) bool {
+		return d.Rule == "memory-limiter-config" && strings.Contains(d.Docs, docs)
+	})
+	assert.True(t, cited, "the JSON report should carry a docs field:\n%s", out)
+
+	_, github, _ := lint(t, src, "--output", "github", "-")
+	assert.Contains(t, github, "%0Adocs: https://", "an annotation carries the citation, newline escaped")
+}
+
+// TestSizingIsAWarningNotAGate pins the severity the rule was given: a limiter
+// that merely leaves too little headroom is a remark, and only a stricter gate
+// turns it into a failure.
+func TestSizingIsAWarningNotAGate(t *testing.T) {
+	t.Parallel()
+
+	// 512Mi enforced in a 600Mi container: above the documented 80% ceiling,
+	// but not yet a limit the kernel wins.
+	const container = "600Mi"
+
+	code, out, errOut := lint(t, limiterConfig, "--memory-limit", container, "-")
+	require.Equal(t, 0, code, "a sizing warning does not fail the run: %s%s", out, errOut)
+	require.Contains(t, out, "[memory-limiter-sizing]")
+
+	code, _, _ = lint(t, limiterConfig, "--memory-limit", container, "--fail-on", "warning", "-")
+	assert.Equal(t, 1, code, "--fail-on warning should make the sizing warning fail")
+
+	code, out, _ = lint(t, limiterConfig, "--memory-limit", container, "--disable", "memory-limiter-sizing", "-")
+	assert.Equal(t, 0, code)
+	assert.NotContains(t, out, "memory-limiter-sizing", "the rule is switchable off like any other")
+}
+
+// TestAnOverrideReplacesTheDefaults pins the documented merge rule: what a file
+// resolves to is stated in one place, so an override naming only a limit does
+// not inherit the default request.
+func TestAnOverrideReplacesTheDefaults(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "configs", "agent-node.yaml"), limiterConfig)
+	writeFile(t, filepath.Join(dir, "configs", "other.yaml"), limiterConfig)
+
+	settings := filepath.Join(dir, "settings.yaml")
+	writeFile(t, settings, `
+kubernetes:
+  memoryRequest: 128Mi
+  memoryLimit: 4Gi
+  overrides:
+    - paths: ["agent-*.yaml"]
+      memoryLimit: 4Gi
+`)
+
+	_, out, _ := lint(t, "", "--config", settings, "--output", "json", filepath.Join(dir, "configs"))
+
+	found := findings(t, out)
+	said := func(file string) string {
+		return strings.Join(lo.Map(found[file], func(d finding, _ int) string { return d.Message }), "\n")
+	}
+
+	assert.Contains(t, said("other.yaml"), "memory request of 128Mi",
+		"a file no override matches takes the defaults")
+	assert.NotContains(t, said("agent-node.yaml"), "memory request",
+		"an override states the whole environment, so the default request is gone")
+}
+
+// TestTheFirstMatchingOverrideWins pins the order rule, which is what lets a
+// single file be carved out of a pattern that also covers it.
+func TestTheFirstMatchingOverrideWins(t *testing.T) {
+	t.Parallel()
+
+	const overrides = `
+kubernetes:
+  memoryLimit: 4Gi
+  overrides:
+    - paths: [%q]
+      memoryLimit: %s
+    - paths: [%q]
+      memoryLimit: %s
+`
+
+	tests := map[string]struct {
+		settings string
+		sized    bool
+	}{
+		"the roomy container is named first": {
+			settings: fmt.Sprintf(overrides, "*.yaml", "4Gi", "agent-node.yaml", "128Mi"),
+			sized:    false,
+		},
+		"the tight container is named first": {
+			settings: fmt.Sprintf(overrides, "agent-node.yaml", "128Mi", "*.yaml", "4Gi"),
+			sized:    true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "configs", "agent-node.yaml"), limiterConfig)
+
+			settings := filepath.Join(dir, "settings.yaml")
+			writeFile(t, settings, tt.settings)
+
+			_, out, _ := lint(t, "", "--config", settings, "--output", "json", filepath.Join(dir, "configs"))
+
+			fired := rulesFired(t, out)["agent-node.yaml"]
+			if tt.sized {
+				assert.Contains(t, fired, "memory-limiter-sizing", "the first matching override decides")
+			} else {
+				assert.NotContains(t, fired, "memory-limiter-sizing", "the first matching override decides")
+			}
+		})
+	}
+}
+
+// TestStdinTakesTheDefaultEnvironment pins what the README promises about a
+// config with no path: it is reported as "stdin", which the overrides are not
+// meant to match, so it resolves to the defaults rather than to whichever
+// pattern happens to be broad.
+func TestStdinTakesTheDefaultEnvironment(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	settings := filepath.Join(dir, "settings.yaml")
+	writeFile(t, settings, "kubernetes:\n  memoryLimit: 256Mi\n  overrides:\n"+
+		"    - paths: [\"*.yaml\"]\n      memoryLimit: 4Gi\n")
+
+	_, out, _ := lint(t, limiterConfig, "--config", settings, "--output", "json", "-")
+
+	assert.Contains(t, rulesFired(t, out)["stdin"], "memory-limiter-sizing",
+		"stdin should have taken the 256Mi default")
+}
+
+// TestAMemoryQuantityThatDoesNotFitIsRejected pins the boundary of the byte
+// count. 8Ei is 2^63, the first size an int64 cannot hold; converting it would
+// give a different number per architecture, so it has to stop the run the way
+// any other unreadable quantity does.
+func TestAMemoryQuantityThatDoesNotFitIsRejected(t *testing.T) {
+	t.Parallel()
+
+	for _, flag := range []string{"--memory-limit", "--memory-request"} {
+		t.Run(flag, func(t *testing.T) {
+			t.Parallel()
+
+			code, _, errOut := lint(t, "", flag, "8Ei", validConfig)
+			assert.Equal(t, 2, code, "%s 8Ei should stop the run: %s", flag, errOut)
+			assert.Contains(t, errOut, "does not fit in a byte count")
+		})
+	}
+}
+
+// TestALimitTooLargeToSizeIsNotGivenANumber pins that a limit_mib no byte count
+// can hold leaves the file unsized. Multiplying it out wraps, and the wrapped
+// product lands back in a plausible range: the limiter below would otherwise be
+// reported as enforcing exactly the container's 512Mi, a figure written nowhere.
+func TestALimitTooLargeToSizeIsNotGivenANumber(t *testing.T) {
+	t.Parallel()
+
+	// 2^44 MiB is 2^64 bytes plus the 512Mi a wrap would leave behind.
+	src := limiterWith("    check_interval: 1s\n    limit_mib: 17592186044928")
+
+	_, out, _ := lint(t, src, "--memory-limit", "512Mi", "--output", "json", "-")
+
+	assert.NotContains(t, rulesFired(t, out)["stdin"], "memory-limiter-sizing",
+		"a limit that does not fit in a byte count cannot be sized")
 }

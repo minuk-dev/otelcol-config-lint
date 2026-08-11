@@ -12,6 +12,7 @@ linters:
           allow:
             - $gostd
             - github.com/minuk-dev/otelcol-config-lint
+            - github.com/samber/lo
             - github.com/samber/mo
             - github.com/spf13/afero
             - github.com/spf13/cobra
@@ -22,6 +23,7 @@ linters:
           allow:
             - $gostd
             - github.com/minuk-dev/otelcol-config-lint
+            - github.com/samber/lo
             - github.com/samber/mo
             - github.com/spf13/afero
             - github.com/spf13/cobra
