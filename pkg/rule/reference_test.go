@@ -1,31 +1,22 @@
 package rule_test
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
-// hints reports whether any finding carries a hint mentioning substr.
-func hints(found diag.Diagnostics, substr string) bool {
-	for _, d := range found {
-		if strings.Contains(d.Hint, substr) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func TestUndefinedExtensionReference(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		src  string
-		want string // a phrase the finding has to carry
-		hint string // a phrase its hint has to carry
+		src     string
+		message string
+		hint    string // a phrase the hint has to carry
 	}{
 		"storage extension nothing declares": {
 			src: `
@@ -39,7 +30,7 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [otlp]}
 `,
-			want: `exporter "otlp" references storage extension "file_storage" ` +
+			message: `exporter "otlp" references storage extension "file_storage" ` +
 				`which is not declared under extensions`,
 			hint: "no extensions are declared in this config",
 		},
@@ -57,7 +48,7 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [otlp]}
 `,
-			want: `exporter "otlp" references auth extension "oauth2client" ` +
+			message: `exporter "otlp" references auth extension "oauth2client" ` +
 				`which is not declared under extensions`,
 			hint: "declared extensions: zpages",
 		},
@@ -74,7 +65,7 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [otlp]}
 `,
-			want: `references storage extension "file_storage" which is declared but ` +
+			message: `exporter "otlp" references storage extension "file_storage" which is declared but ` +
 				`missing from service.extensions, so the collector never starts it`,
 			hint: `add "file_storage" to service.extensions`,
 		},
@@ -91,7 +82,8 @@ service:
   pipelines:
     traces: {receivers: [otlp], processors: [batch], exporters: [otlp]}
 `,
-			want: `references storage extension "batch" which is not declared under extensions`,
+			message: `exporter "otlp" references storage extension "batch" ` +
+				`which is not declared under extensions`,
 			hint: `"batch" is declared under processors`,
 		},
 		"authenticator on a receiver protocol": {
@@ -107,8 +99,8 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [debug]}
 `,
-			want: `receiver "otlp" references auth extension "oidc"`,
-			hint: "no extensions are declared in this config",
+			message: `receiver "otlp" references auth extension "oidc" which is not declared under extensions`,
+			hint:    "no extensions are declared in this config",
 		},
 		"a named instance written without its underscores": {
 			src: `
@@ -124,7 +116,8 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [otlp]}
 `,
-			want: `references storage extension "filestorage/wal" which is not declared under extensions`,
+			message: `exporter "otlp" references storage extension "filestorage/wal" ` +
+				`which is not declared under extensions`,
 			hint: `did you mean "file_storage/wal"?`,
 		},
 	}
@@ -134,15 +127,36 @@ service:
 			t.Parallel()
 
 			found := checkRule(t, "undefined-extension-reference", tt.src, rule.Environment{})
-			if !reports(found, tt.want) {
-				t.Errorf("want a finding carrying %q, got %+v", tt.want, found)
-			}
-
-			if !hints(found, tt.hint) {
-				t.Errorf("want a hint carrying %q, got %+v", tt.hint, found)
-			}
+			require.Len(t, found, 1)
+			assert.Equal(t, tt.message, found[0].Message)
+			assert.Contains(t, found[0].Hint, tt.hint)
+			assert.Equal(t, diag.Error, found[0].Severity)
 		})
 	}
+}
+
+// A finding has to point at the line the name is written on, not at the
+// component, so the reader can go straight to it.
+func TestUndefinedExtensionReferenceIsAnchored(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+exporters:
+  otlp:
+    endpoint: backend:4317
+    sending_queue:
+      storage: file_storage
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlp]}
+`
+
+	found := checkRule(t, "undefined-extension-reference", src, rule.Environment{})
+	require.Len(t, found, 1)
+	assert.Equal(t, "exporters.otlp.sending_queue.storage", found[0].Path)
+	assert.Equal(t, 7, found[0].Position.Line)
+	assert.Contains(t, found[0].Docs, "exporter/exporterhelper/README.md")
 }
 
 func TestUndefinedExtensionReferenceStaysQuiet(t *testing.T) {
@@ -213,9 +227,7 @@ extensions: {file_storage: }
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if found := checkRule(t, "undefined-extension-reference", src, rule.Environment{}); len(found) > 0 {
-				t.Errorf("expected no findings, got %+v", found)
-			}
+			assert.Empty(t, checkRule(t, "undefined-extension-reference", src, rule.Environment{}))
 		})
 	}
 }
@@ -241,9 +253,7 @@ service:
 `
 
 	found := checkRule(t, "undefined-extension-reference", src, rule.Environment{})
-	if len(found) != 2 {
-		t.Fatalf("want a finding for each exporter, got %+v", found)
-	}
+	require.Len(t, found, 2, "each exporter names the extension")
 }
 
 // unused-component reports an extension the service block does not list. Once
@@ -265,7 +275,6 @@ service:
     traces: {receivers: [otlp], exporters: [otlp]}
 `
 
-	if found := checkRule(t, "unused-component", src, rule.Environment{}); len(found) > 0 {
-		t.Errorf("an extension named by a component's settings is used, got %+v", found)
-	}
+	assert.Empty(t, checkRule(t, "unused-component", src, rule.Environment{}),
+		"an extension named by a component's settings is used")
 }

@@ -1,6 +1,8 @@
 package rule
 
 import (
+	"github.com/samber/lo"
+	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -198,20 +200,16 @@ const maxSettingsDepth = 16
 // extensionRefs collects every extension reference in the file's component
 // settings, in declaration order.
 func extensionRefs(f *config.File) []ExtensionRef {
-	var out []ExtensionRef
-
-	for _, kind := range config.Kinds() {
+	return lo.FlatMap(config.Kinds(), func(kind config.Kind, _ int) []ExtensionRef {
 		sec := f.Sections[kind]
 		if sec == nil {
-			continue
+			return nil
 		}
 
-		for _, c := range sec.Components {
-			out = append(out, componentExtensionRefs(c)...)
-		}
-	}
-
-	return out
+		return lo.FlatMap(sec.Components, func(c config.Component, _ int) []ExtensionRef {
+			return componentExtensionRefs(c)
+		})
+	})
 }
 
 func componentExtensionRefs(c config.Component) []ExtensionRef {
@@ -221,51 +219,47 @@ func componentExtensionRefs(c config.Component) []ExtensionRef {
 
 	walkSettings(c.ValueNode, c.Kind.Section()+"."+c.ID.String(), 0, func(n *yaml.Node, path string) {
 		for _, e := range mapEntries(n, path) {
-			for _, field := range fields {
-				if e.key != field.parent {
-					continue
-				}
-
-				name, ok := scalarChild(e.node, field.key)
-				if !ok {
-					continue
-				}
-
-				out = append(out, ExtensionRef{
-					ID: config.ParseID(name.Value), Node: name,
-					Path: joinPath(e.path, field.key), Component: c,
-					Role: field.role, Docs: field.docs,
-				})
+			field, held := lo.Find(fields, func(f extensionField) bool { return f.parent == e.key })
+			if !held {
+				continue
 			}
+
+			name, named := scalarChild(e.node, field.key).Get()
+			if !named {
+				continue
+			}
+
+			out = append(out, ExtensionRef{
+				ID: config.ParseID(name.Value), Node: name,
+				Path: joinPath(e.path, field.key), Component: c,
+				Role: field.role, Docs: field.docs,
+			})
 		}
 	})
 
 	return out
 }
 
-// scalarChild returns the named scalar of a mapping, if it holds a name worth
-// resolving. An empty value is not a reference, and one built from a confmap
-// expansion is only known once the collector starts.
-func scalarChild(n *yaml.Node, key string) (*yaml.Node, bool) {
+// scalarChild returns the named scalar of a mapping, when it holds a name
+// worth resolving. An empty value is not a reference, and one built from a
+// confmap expansion is only known once the collector starts.
+func scalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
 	n = resolveAlias(n)
 	if n == nil || n.Kind != yaml.MappingNode {
-		return nil, false
+		return mo.None[*yaml.Node]()
 	}
 
-	for _, e := range mapEntries(n, "") {
-		if e.key != key {
-			continue
-		}
-
-		val := resolveAlias(e.node)
-		if val == nil || val.Kind != yaml.ScalarNode || val.Value == "" || hasExpansion(val.Value) {
-			return nil, false
-		}
-
-		return val, true
+	e, found := lo.Find(mapEntries(n, ""), func(e mapEntry) bool { return e.key == key })
+	if !found {
+		return mo.None[*yaml.Node]()
 	}
 
-	return nil, false
+	val := resolveAlias(e.node)
+	if val == nil || val.Kind != yaml.ScalarNode || val.Value == "" || hasExpansion(val.Value) {
+		return mo.None[*yaml.Node]()
+	}
+
+	return mo.Some(val)
 }
 
 // walkSettings visits every mapping inside a component's settings, together
