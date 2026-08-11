@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/quantity"
@@ -297,6 +299,26 @@ service:
 	if !reports(found, "\"memory_limiter\"") || !reports(found, "\"memory_limiter/aggressive\"") {
 		t.Errorf("both instances share the one container limit and both should be named: %+v", found)
 	}
+}
+
+// TestMemoryLimiterSizingDoesNotInventANumber pins that a limit_mib too large
+// to hold as a byte count leaves the hard limit unknown. Multiplying it out
+// wraps, and a wrapped product lands back in a plausible range: the limiter
+// below would otherwise be reported as enforcing exactly the container's 512Mi,
+// a figure that appears nowhere in the config.
+func TestMemoryLimiterSizingDoesNotInventANumber(t *testing.T) {
+	t.Parallel()
+
+	env := rule.Environment{Kubernetes: true, MemoryRequest: 0, MemoryLimit: 512 * quantity.Mi}
+
+	// 2^44 MiB is 2^64 bytes plus the 512Mi that the wrap leaves behind.
+	assert.Empty(t, checkRule(t, "memory-limiter-sizing", sized("17592186044928"), env),
+		"a limit that does not fit in a byte count cannot be sized")
+
+	// The same for a percentage large enough to overflow the multiplication.
+	src := limiter("memory_limiter", "    check_interval: 1s\n    limit_percentage: 99999999999999")
+	assert.Empty(t, checkRule(t, "memory-limiter-sizing", src, env),
+		"a percentage that does not fit cannot be sized")
 }
 
 func TestMemoryLimiterSizingLeavesExpansionsAlone(t *testing.T) {

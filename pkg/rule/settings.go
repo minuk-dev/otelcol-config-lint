@@ -1,9 +1,12 @@
 package rule
 
 import (
+	"math"
 	"strconv"
 	"time"
 
+	"github.com/samber/lo"
+	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -92,28 +95,39 @@ func (m memoryLimiter) name() string { return "processor " + quote(m.id.String()
 // back to the instance itself when the key is absent.
 func (m memoryLimiter) at(s setting) *yaml.Node { return nodeOr(s.node, m.node) }
 
-// hardLimit returns the number of bytes the limiter will actually enforce, and
-// whether it could be worked out at all. limit_mib wins over limit_percentage,
-// as it does upstream, and a percentage is only a number when the container's
-// memory limit is known.
+// hardLimit returns the number of bytes the limiter will actually enforce, or
+// nothing when it cannot be worked out at all. limit_mib wins over
+// limit_percentage, as it does upstream, and a percentage is only a number when
+// the container's memory limit is known.
 //
 // A value resolved at runtime leaves the whole figure unknown: a partly known
 // hard limit is worse than none, since every finding about it would be
 // confident about a number nobody has yet.
-func (m memoryLimiter) hardLimit(env Environment) (int64, bool) {
+func (m memoryLimiter) hardLimit(env Environment) mo.Option[int64] {
 	if unknownValue(m.limitMiB) || unknownValue(m.limitPercent) {
-		return 0, false
+		return mo.None[int64]()
 	}
 
+	// A figure that does not fit in a byte count is left unknown rather than
+	// wrapped: a wrapped product is a plausible-looking number that appears
+	// nowhere in the config, and a finding quoting it would be worse than none.
 	if m.limitMiB.positive() {
-		return m.limitMiB.num * mib, true
+		if m.limitMiB.num > math.MaxInt64/mib {
+			return mo.None[int64]()
+		}
+
+		return mo.Some(m.limitMiB.num * mib)
 	}
 
 	if m.limitPercent.positive() && env.MemoryLimit > 0 {
-		return env.MemoryLimit * m.limitPercent.num / wholePercent, true
+		if env.MemoryLimit > math.MaxInt64/m.limitPercent.num {
+			return mo.None[int64]()
+		}
+
+		return mo.Some(env.MemoryLimit * m.limitPercent.num / wholePercent)
 	}
 
-	return 0, false
+	return mo.None[int64]()
 }
 
 // memoryLimiters returns every declared memory_limiter. Instances are matched
@@ -124,15 +138,11 @@ func memoryLimiters(f *config.File) []memoryLimiter {
 		return nil
 	}
 
-	var out []memoryLimiter
+	declared := lo.Filter(sec.Components, func(c config.Component, _ int) bool {
+		return c.ID.Type == memoryLimiterType
+	})
 
-	for _, c := range sec.Components {
-		if c.ID.Type == memoryLimiterType {
-			out = append(out, readMemoryLimiter(c))
-		}
-	}
-
-	return out
+	return lo.Map(declared, func(c config.Component, _ int) memoryLimiter { return readMemoryLimiter(c) })
 }
 
 func readMemoryLimiter(c config.Component) memoryLimiter {
@@ -355,7 +365,7 @@ func (r memoryLimiterSizing) Check(ctx *Context) {
 	for _, lim := range memoryLimiters(ctx.File) {
 		r.checkPercentage(ctx, lim)
 
-		hard, ok := lim.hardLimit(ctx.Env)
+		hard, ok := lim.hardLimit(ctx.Env).Get()
 		if !ok {
 			continue
 		}
