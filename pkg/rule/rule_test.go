@@ -217,6 +217,21 @@ service:
 			want: "undefined-reference",
 		},
 		{
+			name: "storage extension named by a queue but never declared",
+			src: `
+receivers: {otlp: }
+exporters:
+  otlp:
+    endpoint: backend:4317
+    sending_queue:
+      storage: file_storage
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlp]}
+`,
+			want: "undefined-extension-reference",
+		},
+		{
 			name: "declared but never referenced",
 			src: `
 receivers: {otlp: , jaeger: }

@@ -21,6 +21,14 @@ const (
 	// tlsDocs states what the TLS settings mean, insecure among them.
 	tlsDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/config/configtls/README.md"
+	// exporterQueueDocs states that sending_queue.storage names the storage
+	// extension a persistent queue writes through.
+	exporterQueueDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
+		"/blob/main/exporter/exporterhelper/README.md"
+	// authDocs states that auth.authenticator names an extension, and which
+	// extensions implement the interface it needs.
+	authDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
+		"/blob/main/config/configauth/README.md"
 	// kubernetesResourceDocs states what requests and limits do, and the QoS
 	// class a pod lands in when they differ.
 	kubernetesResourceDocs = "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
