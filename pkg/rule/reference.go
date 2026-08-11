@@ -61,7 +61,7 @@ func (r undefinedReference) Check(ctx *Context) {
 func misplacedHint(ctx *Context, id config.ID, want config.Kind) string {
 	if k, ok := ctx.Index.KindOf(id); ok && k != want {
 		return quote(id.String()) + " is declared under " + k.Section() +
-			"; it cannot be used as a " + string(want)
+			"; it cannot be used as " + article(string(want)) + " " + string(want)
 	}
 
 	if declared := declaredIDs(ctx, want); len(declared) > 0 {
@@ -105,14 +105,16 @@ func (r unusedComponent) Check(ctx *Context) {
 				continue
 			}
 
-			where := "no pipeline"
+			// An extension is wired up by being listed, not by being
+			// referenced from a pipeline, so it needs its own wording.
+			missing := "referenced by no pipeline"
 			if kind == config.KindExtension {
-				where = "service.extensions"
+				missing = "not listed in service.extensions"
 			}
 
 			ctx.Report(Finding{
 				Node: c.KeyNode, Path: kind.Section() + "." + c.ID.String(),
-				Message: string(kind) + " " + quote(c.ID.String()) + " is declared but referenced by " + where,
+				Message: string(kind) + " " + quote(c.ID.String()) + " is declared but " + missing,
 				Hint:    "remove it, or reference it so it actually runs",
 			})
 		}
