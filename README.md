@@ -243,7 +243,7 @@ alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `insecure-tls`, `memory-limiter-config`,
-`memory-limiter-sizing`.
+`memory-limiter-sizing`, `batch-size-bounds`.
 
 Every practice rule cites the upstream page it rests on — the
 `memorylimiterprocessor` and `batchprocessor` READMEs, `configtls`, and the
@@ -263,6 +263,20 @@ above is still decoration if `limit_mib` sits at or above the container limit,
 because the kernel kills the collector before the limiter ever engages. It runs
 only for files the [`kubernetes` block](#the-deployment-environment) describes,
 so a run that configures nothing sees nothing new.
+
+`batch-size-bounds` is the same idea for the `batch` processor, whose
+`Validate()` relates two fields a field schema only ever sees one at a time:
+`send_batch_size` is the count that triggers a send, `send_batch_max_size` is a
+hard cap, and a cap below the trigger is refused at startup. The names read
+backwards from the semantics, so capping at something reasonable-looking like
+`1000` while leaving `send_batch_size` at its default of `8192` is exactly the
+shape that fails — and since nobody wrote the 8192, the finding says it is the
+default rather than quoting it back as if they had. It also reports a negative
+`timeout` and a key repeated in `metadata_keys`, which are compared
+case-insensitively, so `tenant` and `Tenant` are one key. Both sizes are
+`uint32` upstream, a range the published field schemas flatten to `int`, so a
+negative or over-large count is reported here too — it fails to load rather than
+to validate, and saying so beats hinting at a fix that still will not start.
 
 ## Schemas
 
