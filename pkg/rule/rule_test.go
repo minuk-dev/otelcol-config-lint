@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
@@ -518,5 +521,86 @@ func TestEveryRuleIsDocumented(t *testing.T) {
 		default:
 			t.Errorf("rule %q has an unusable default severity %q", r.Name(), r.Severity())
 		}
+	}
+}
+
+// A finding is a sentence a reader acts on, so the wiring rules are pinned on
+// what they actually say, not only on having fired.
+func TestWiringFindingsReadAsSentences(t *testing.T) {
+	t.Parallel()
+
+	const removeOrReference = "remove it, or reference it so it actually runs"
+
+	tests := map[string]struct {
+		rule    string
+		src     string
+		message string
+		hint    string
+	}{
+		"an extension nothing enables": {
+			rule: "unused-component",
+			src: `
+receivers: {otlp: }
+exporters: {debug: }
+extensions: {zpages: }
+service:
+  extensions: []
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`,
+			message: `extension "zpages" is declared but not listed in service.extensions`,
+			hint:    removeOrReference,
+		},
+		"a processor no pipeline lists": {
+			rule: "unused-component",
+			src: `
+receivers: {otlp: }
+processors: {batch: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`,
+			message: `processor "batch" is declared but referenced by no pipeline`,
+			hint:    removeOrReference,
+		},
+		"a processor listed as an extension": {
+			rule: "undefined-reference",
+			src: `
+receivers: {otlp: }
+processors: {batch: }
+exporters: {debug: }
+service:
+  extensions: [batch]
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch], exporters: [debug]}
+`,
+			message: `service.extensions references "batch" which is not declared under extensions`,
+			hint:    `"batch" is declared under processors; it cannot be used as an extension`,
+		},
+		"an extension listed as an exporter": {
+			rule: "undefined-reference",
+			src: `
+receivers: {otlp: }
+extensions: {zpages: }
+service:
+  extensions: [zpages]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [zpages]}
+`,
+			message: `pipeline "traces" references exporter "zpages" which is not declared under exporters`,
+			hint:    `"zpages" is declared under extensions; it cannot be used as an exporter`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkRule(t, tt.rule, tt.src, rule.Environment{})
+			require.Len(t, found, 1)
+			assert.Equal(t, tt.message, found[0].Message)
+			assert.Equal(t, tt.hint, found[0].Hint)
+		})
 	}
 }
