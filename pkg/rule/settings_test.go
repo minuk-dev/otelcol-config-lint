@@ -379,6 +379,14 @@ func TestBatchSizeBounds(t *testing.T) {
 			settings: "    send_batch_size: 5000000000\n    send_batch_max_size: 20000",
 			want:     "which the field cannot hold",
 		},
+		"a size the field cannot hold next to one resolved at runtime": {
+			settings: "    send_batch_size: ${env:SIZE}\n    send_batch_max_size: -1",
+			want:     "which the field cannot hold",
+		},
+		"a cap written in octal": {
+			settings: "    send_batch_max_size: 010000",
+			want:     "sets send_batch_max_size to 4096",
+		},
 	}
 
 	for name, tt := range tests {
@@ -445,6 +453,26 @@ service:
 `
 	assert.Empty(t, checkRule(t, "batch-size-bounds", src, rule.Environment{}),
 		"a size the merge key supplies is not the default")
+}
+
+// TestBatchSizeBoundsReadsTheBaseTheCollectorReads pins that a value is
+// resolved the way confmap's own decoder resolves it. yaml.v3 reads a leading
+// zero as octal and 0x as hex, so reading base 10 here would quote back a
+// number the collector never sees -- and pass a config that will not start.
+func TestBatchSizeBoundsReadsTheBaseTheCollectorReads(t *testing.T) {
+	t.Parallel()
+
+	// 010000 is 4096, below the 8192 default, however much it looks like ten
+	// thousand.
+	found := checkRule(t, "batch-size-bounds", batcher("batch", "    send_batch_max_size: 010000"),
+		rule.Environment{})
+	require.Lenf(t, found, 1, "an octal cap below the default should be reported, got %+v", found)
+	assert.Contains(t, found[0].Message, "sets send_batch_max_size to 4096")
+
+	// 0x400 is 1024, which base 10 cannot read at all; the collector can.
+	found = checkRule(t, "batch-size-bounds", batcher("batch", "    send_batch_max_size: 0x400"), rule.Environment{})
+	require.Lenf(t, found, 1, "a hex cap below the default should be reported, got %+v", found)
+	assert.Contains(t, found[0].Message, "sets send_batch_max_size to 1024")
 }
 
 func TestBatchSizeBoundsAcceptsAWorkingBatch(t *testing.T) {

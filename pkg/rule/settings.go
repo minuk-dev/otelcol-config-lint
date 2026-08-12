@@ -191,16 +191,22 @@ func readMemoryLimiter(c config.Component) memoryLimiter {
 
 func absent() setting { return setting{node: nil, present: false, known: false, num: 0} }
 
-// readInt reads an integer setting. A value nothing can know before the
-// collector starts -- an expansion, or text of the wrong type -- is present
-// but not known, which stops every check that would need the number.
+// readInt reads an integer setting, in the base the collector's own decoder
+// reads it: confmap unmarshals through yaml.v3, which resolves 0x400 as 1024,
+// 8_192 as 8192, and a leading zero as octal, so 0100 is 64 and not a hundred.
+// Reading base 10 here would compare, and quote back, a number the collector
+// never sees.
+//
+// A value nothing can know before the collector starts -- an expansion, or text
+// of the wrong type -- is present but not known, which stops every check that
+// would need the number.
 func readInt(node *yaml.Node) setting {
 	out := setting{node: node, present: true, known: false, num: 0}
 	if node == nil || node.Kind != yaml.ScalarNode || hasExpansion(node.Value) {
 		return out
 	}
 
-	num, err := strconv.ParseInt(node.Value, 10, 64)
+	num, err := strconv.ParseInt(node.Value, 0, 64)
 	if err != nil {
 		return out
 	}
@@ -547,7 +553,13 @@ type batchSizeBounds struct{ base }
 
 func (r batchSizeBounds) Check(ctx *Context) {
 	for _, proc := range batchProcessors(ctx.File) {
-		r.checkSizes(ctx, proc)
+		// A size the field cannot hold stands on its own: it fails to decode
+		// whatever the other field says, and it stops the comparison, which
+		// the collector never reaches.
+		if !r.checkRange(ctx, proc) {
+			r.checkSizes(ctx, proc)
+		}
+
 		r.checkTimeout(ctx, proc)
 		r.checkMetadataKeys(ctx, proc)
 	}
@@ -559,12 +571,6 @@ func (r batchSizeBounds) Check(ctx *Context) {
 // is how large one may get, and a cap below the trigger is rejected.
 func (r batchSizeBounds) checkSizes(ctx *Context, proc batchProcessor) {
 	if unknownValue(proc.sendBatchSize) || unknownValue(proc.sendBatchMaxSize) {
-		return
-	}
-
-	// A value the field cannot hold never reaches Validate(), so comparing the
-	// two numbers would name a constraint that is not the one being broken.
-	if r.checkRange(ctx, proc) {
 		return
 	}
 
@@ -681,7 +687,7 @@ func (r batchSizeBounds) checkMetadataKeys(ctx *Context, proc batchProcessor) {
 
 		ctx.Report(Finding{
 			Node: item, Path: indexPath(path, i),
-			Message: proc.name() + " repeats " + quote(item.Value) + " in metadata_keys: " +
+			Message: proc.name() + " repeats " + quote(item.Value) + ": " +
 				"duplicate entry in metadata_keys: " + quote(folded) + " (case-insensitive)",
 			Hint: "the keys are compared case-insensitively, so " + quote(item.Value) +
 				" is one already listed; remove it",
