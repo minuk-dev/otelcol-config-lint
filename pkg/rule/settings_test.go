@@ -371,6 +371,14 @@ func TestBatchSizeBounds(t *testing.T) {
 			settings: "    metadata_keys: [tenant, Tenant]",
 			want:     `duplicate entry in metadata_keys: "tenant" (case-insensitive)`,
 		},
+		"a negative cap": {
+			settings: "    send_batch_size: 100\n    send_batch_max_size: -1",
+			want:     "which the field cannot hold",
+		},
+		"a size larger than a uint32": {
+			settings: "    send_batch_size: 5000000000\n    send_batch_max_size: 20000",
+			want:     "which the field cannot hold",
+		},
 	}
 
 	for name, tt := range tests {
@@ -398,6 +406,45 @@ func TestBatchSizeBoundsSaysTheDefaultIsADefault(t *testing.T) {
 	found := checkRule(t, "batch-size-bounds", batcher("batch", "    send_batch_max_size: 1000"), rule.Environment{})
 	assert.Truef(t, reports(found, "below the default send_batch_size of 8192"),
 		"the message should say 8192 is the default, got %+v", found)
+}
+
+// TestBatchSizeBoundsDiagnosesTheRealConstraint pins that a size the uint32
+// field cannot hold is reported as what it is. Such a value fails to decode, so
+// the collector never reaches the bounds check, and comparing the two numbers
+// would hint at a fix that still does not load.
+func TestBatchSizeBoundsDiagnosesTheRealConstraint(t *testing.T) {
+	t.Parallel()
+
+	settings := "    send_batch_size: 5000000000\n    send_batch_max_size: 20000"
+
+	found := checkRule(t, "batch-size-bounds", batcher("batch", settings), rule.Environment{})
+	require.Lenf(t, found, 1, "want one finding about the size that does not fit, got %+v", found)
+	assert.NotContains(t, found[0].Message, "must be greater or equal to send_batch_size")
+	assert.Contains(t, found[0].Hint, "between 0 and 4294967295")
+}
+
+// TestBatchSizeBoundsLeavesAMergedConfigAlone pins that a merge key stops the
+// default from being filled in. The document is read as written, so a
+// send_batch_size the merge supplies looks absent here, while the collector
+// resolves it before either number is read.
+func TestBatchSizeBoundsLeavesAMergedConfigAlone(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+processors:
+  batch/defaults: &defaults
+    send_batch_size: 500
+  batch:
+    <<: *defaults
+    send_batch_max_size: 1000
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch], exporters: [debug]}
+`
+	assert.Empty(t, checkRule(t, "batch-size-bounds", src, rule.Environment{}),
+		"a size the merge key supplies is not the default")
 }
 
 func TestBatchSizeBoundsAcceptsAWorkingBatch(t *testing.T) {

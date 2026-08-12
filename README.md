@@ -273,7 +273,10 @@ backwards from the semantics, so capping at something reasonable-looking like
 shape that fails — and since nobody wrote the 8192, the finding says it is the
 default rather than quoting it back as if they had. It also reports a negative
 `timeout` and a key repeated in `metadata_keys`, which are compared
-case-insensitively, so `tenant` and `Tenant` are one key.
+case-insensitively, so `tenant` and `Tenant` are one key. Both sizes are
+`uint32` upstream, a range the published field schemas flatten to `int`, so a
+negative or over-large count is reported here too — it fails to load rather than
+to validate, and saying so beats hinting at a fix that still will not start.
 
 ## Schemas
 

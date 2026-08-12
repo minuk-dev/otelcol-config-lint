@@ -465,6 +465,10 @@ const (
 	// defaultBatchTimeout is how long a batch waits before it is sent
 	// regardless of size, when timeout is left out.
 	defaultBatchTimeout = 200 * time.Millisecond
+	// maxBatchSize is the largest value the two size fields can hold: upstream
+	// types both as uint32. The published field schemas flatten that to "int",
+	// so nothing else in the linter knows the range.
+	maxBatchSize = math.MaxUint32
 )
 
 // batchProcessor is one declared batch instance and the settings the collector
@@ -483,6 +487,10 @@ type batchProcessor struct {
 	// written. The entries are read where the duplicates are reported, since
 	// each finding names the entry it found.
 	metadataKeys *yaml.Node
+	// merged reports a YAML merge key, "<<", among the settings. The document
+	// is read as written, so a key the merge supplies looks absent here, and a
+	// check that would otherwise fill in a default has to say nothing instead.
+	merged bool
 }
 
 // name renders the instance for a message, so a file with more than one batch
@@ -508,6 +516,7 @@ func readBatch(c config.Component) batchProcessor {
 		sendBatchMaxSize: absent(),
 		timeout:          absent(),
 		metadataKeys:     nil,
+		merged:           false,
 	}
 
 	if c.ValueNode == nil || c.ValueNode.Kind != yaml.MappingNode {
@@ -524,6 +533,8 @@ func readBatch(c config.Component) batchProcessor {
 			proc.timeout = readDuration(e.node)
 		case "metadata_keys":
 			proc.metadataKeys = e.node
+		case "<<":
+			proc.merged = true
 		default:
 			// Every other setting is the field schema's business.
 		}
@@ -551,14 +562,27 @@ func (r batchSizeBounds) checkSizes(ctx *Context, proc batchProcessor) {
 		return
 	}
 
+	// A value the field cannot hold never reaches Validate(), so comparing the
+	// two numbers would name a constraint that is not the one being broken.
+	if r.checkRange(ctx, proc) {
+		return
+	}
+
 	// A cap of zero, the default, means batches are not capped at all.
 	if !proc.sendBatchMaxSize.positive() {
 		return
 	}
 
 	size := int64(defaultSendBatchSize)
-	if proc.sendBatchSize.known {
+
+	switch {
+	case proc.sendBatchSize.known:
 		size = proc.sendBatchSize.num
+	case proc.merged:
+		// The merge key may be what sets send_batch_size, and the collector
+		// resolves it before either number is read. Filling in the default
+		// here would report a figure the config overrides.
+		return
 	}
 
 	if proc.sendBatchMaxSize.num >= size {
@@ -581,6 +605,39 @@ func (r batchSizeBounds) checkSizes(ctx *Context, proc batchProcessor) {
 			" or more, or leave it out so batches are not split at all",
 		Docs: batchDocs,
 	})
+}
+
+// checkRange reports a size outside the uint32 the field holds, and reports
+// whether it found one. Such a value fails to decode, so the collector never
+// gets as far as the bounds check: quoting it back in a comparison would
+// diagnose the wrong problem and hint at a fix that still does not load.
+func (r batchSizeBounds) checkRange(ctx *Context, proc batchProcessor) bool {
+	var found bool
+
+	for _, size := range []struct {
+		key string
+		val setting
+	}{
+		{key: "send_batch_size", val: proc.sendBatchSize},
+		{key: "send_batch_max_size", val: proc.sendBatchMaxSize},
+	} {
+		if !size.val.known || (size.val.num >= 0 && size.val.num <= maxBatchSize) {
+			continue
+		}
+
+		found = true
+
+		ctx.Report(Finding{
+			Node: proc.at(size.val), Path: joinPath(proc.path, size.key),
+			Message: proc.name() + " sets " + size.key + " to " + itoa64(size.val.num) +
+				", which the field cannot hold: it counts items as a uint32, " +
+				"so the collector fails to load the config before it validates it",
+			Hint: "write a whole number between 0 and " + itoa64(maxBatchSize),
+			Docs: batchDocs,
+		})
+	}
+
+	return found
 }
 
 // checkTimeout reports the one value the collector rejects outright. Zero is
