@@ -33,6 +33,11 @@ const (
 	typeList = "list"
 )
 
+// boolTag is the tag yaml.v3 resolves a boolean scalar to. A setting is only
+// read as one when the document actually wrote a boolean, so the string
+// "false" is not mistaken for the value.
+const boolTag = "!!bool"
+
 // fieldWalker validates a component's settings against its schema schema.
 // Each rule supplies the callbacks it cares about and ignores the rest.
 type fieldWalker struct {
@@ -195,7 +200,7 @@ func matchesType(schema *schema.Field, node *yaml.Node) bool {
 	case "string":
 		return node.Kind == yaml.ScalarNode
 	case "bool":
-		return node.Tag == "!!bool"
+		return node.Tag == boolTag
 	case "int":
 		return node.Tag == "!!int"
 	case "float":
