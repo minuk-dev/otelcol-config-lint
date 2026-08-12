@@ -48,6 +48,19 @@ func testSchema() *schema.Schema {
 								"insecure": {Type: "bool"},
 							}},
 						}}},
+				// otlphttp is the exporter with a queue, so the rules that read
+				// one have a type whose schema says it has it. The debug and
+				// otlp entries above deliberately do not, which is what a
+				// schema that describes an exporter without a queue looks like.
+				"otlphttp": {Type: "otlphttp", Signals: []config.Signal{"traces", "metrics", "logs"},
+					Fields: &schema.Field{Type: "map", Children: map[string]*schema.Field{
+						"endpoint": {Type: "string"},
+						"sending_queue": {Type: "map", Open: true, Children: map[string]*schema.Field{
+							"enabled":    {Type: "bool"},
+							"queue_size": {Type: "int"},
+							"storage":    {Type: "string"},
+						}},
+					}}},
 				"logging": {Type: "logging", Signals: []config.Signal{"traces"},
 					Deprecated: "use the debug exporter instead"},
 			},
@@ -405,6 +418,19 @@ service:
     traces: {receivers: [otlp], exporters: [otlp]}
 `,
 			want: "insecure-tls",
+		},
+		{
+			name: "a queue with nowhere to persist to",
+			src: `
+receivers: {otlp: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp]}
+`,
+			want: "no-persistent-queue",
 		},
 	}
 

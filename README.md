@@ -243,11 +243,12 @@ alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `insecure-tls`, `memory-limiter-config`,
-`memory-limiter-sizing`, `batch-size-bounds`.
+`memory-limiter-sizing`, `batch-size-bounds`, `no-persistent-queue`.
 
 Every practice rule cites the upstream page it rests on — the
-`memorylimiterprocessor` and `batchprocessor` READMEs, `configtls`, and the
-Kubernetes resource docs for the container's request and limit.
+`memorylimiterprocessor`, `batchprocessor` and `exporterhelper` READMEs,
+`configtls`, and the Kubernetes resource docs for the container's request and
+limit.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:
@@ -277,6 +278,37 @@ case-insensitively, so `tenant` and `Tenant` are one key. Both sizes are
 `uint32` upstream, a range the published field schemas flatten to `int`, so a
 negative or over-large count is reported here too — it fails to load rather than
 to validate, and saying so beats hinting at a fix that still will not start.
+
+`no-persistent-queue` is the one opinionated rule, and it reports at `info` for
+that reason. The sending queue is on by default and lives in memory, so a
+deploy, an OOM kill or a node drain takes everything still in it — and nothing
+in the config says so, because an exporter with a `storage` extension and one
+without look identical until the restart.
+
+```yaml
+exporters:
+  otlp:
+    endpoint: backend:4317
+    sending_queue:
+      storage: file_storage    # without this, a restart drops the queue
+```
+
+Persistence takes three steps — a storage extension declared, listed in
+`service.extensions`, and named here — which is why the finding names all three
+and why `undefined-extension-reference` above is worth having alongside it. The
+rule stays quiet on `sending_queue.enabled: false`, on an exporter no pipeline
+references, and on exporters whose field schema has no queue at all, so `debug`
+and `nop` are never mentioned.
+
+It reports once per exporter, not once per config: the fix is written per
+exporter, each queue names its own storage, and a finding without a position
+cannot say which of eight exporters to edit. It is also the rule most likely to
+be unwanted — a sidecar next to an application that can re-send, or an agent
+whose source keeps its own buffer, is right not to want a writable volume. There
+is deliberately no default-disabled rule concept for it: `info` is already below
+`--min-severity warning`, which is a normal way to run, and `disable:
+[no-persistent-queue]` in the settings file turns it off for good. A second
+mechanism that means roughly the same thing would only be another place to look.
 
 ## Schemas
 
