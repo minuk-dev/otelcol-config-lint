@@ -12,6 +12,8 @@ func referenceRules() []Rule {
 	return []Rule{
 		undefinedReference{base{"undefined-reference",
 			"the service block may only reference components declared in the config", diag.Error}},
+		undefinedExtensionReference{base{"undefined-extension-reference",
+			"an extension a component's own settings name, that nothing declares or starts", diag.Error}},
 		unusedComponent{base{"unused-component",
 			"a declared component that no pipeline references is never instantiated", diag.Warning}},
 		duplicateReference{base{"duplicate-reference",
@@ -53,6 +55,47 @@ func (r undefinedReference) Check(ctx *Context) {
 				})
 			}
 		}
+	}
+}
+
+// undefinedExtensionReference checks the references a component writes into
+// its own settings, which undefinedReference never sees: it walks the service
+// block, and these sit several levels down inside a component. Getting one
+// wrong is a startup failure, and the collector's own error does not say which
+// of the three places is missing the name.
+type undefinedExtensionReference struct{ base }
+
+func (r undefinedExtensionReference) Check(ctx *Context) {
+	for _, ref := range ctx.Index.ExtensionRefs() {
+		subject := string(ref.Component.Kind) + " " + quote(ref.Component.ID.String()) +
+			" references " + ref.Role + " extension " + quote(ref.ID.String())
+
+		if _, declared := ctx.Index.Declared(config.KindExtension, ref.ID); !declared {
+			// A name declared under another section lands here too; the hint
+			// is what tells that apart from a name nothing declares at all.
+			ctx.Report(Finding{
+				Node: ref.Node, Path: ref.Path,
+				Message: subject + " which is not declared under extensions",
+				Hint:    misplacedHint(ctx, ref.ID, config.KindExtension),
+				Docs:    ref.Docs,
+			})
+
+			continue
+		}
+
+		// Without a service block nothing is enabled at all, and
+		// serviceRequired already says so.
+		if ctx.File.Service.Node == nil || ctx.Index.Enabled(ref.ID) {
+			continue
+		}
+
+		ctx.Report(Finding{
+			Node: ref.Node, Path: ref.Path,
+			Message: subject + " which is declared but missing from service.extensions, " +
+				"so the collector never starts it",
+			Hint: "add " + quote(ref.ID.String()) + " to service.extensions",
+			Docs: ref.Docs,
+		})
 	}
 }
 

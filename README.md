@@ -218,7 +218,11 @@ There is deliberately no flag form of the overrides.
 `unknown-service-key`, `invalid-pipeline-key`, `empty-pipeline`,
 `unknown-pipeline-key`, `duplicate-key`, `wrong-node-type`.
 
-**Wiring** — `undefined-reference`, `unused-component`, `duplicate-reference`,
+**Wiring** — `undefined-reference`, `undefined-extension-reference` (an
+extension a component's own settings name — an exporter's
+`sending_queue.storage`, an `auth.authenticator` — that nothing declares, or
+that is declared and then left out of `service.extensions`, which the collector
+refuses to start on), `unused-component`, `duplicate-reference`,
 `connector-wiring` (a connector must export from one pipeline and receive into
 another, and must not close a loop).
 
