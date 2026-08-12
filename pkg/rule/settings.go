@@ -3,6 +3,7 @@ package rule
 import (
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/samber/lo"
@@ -19,6 +20,8 @@ import (
 // and comparisons between one field and another.
 func settingsRules() []Rule {
 	return []Rule{
+		batchSizeBounds{base{"batch-size-bounds",
+			"a batch processor the collector will refuse to start", diag.Error}},
 		memoryLimiterConfig{base{"memory-limiter-config",
 			"a memory_limiter the collector will refuse to start", diag.Error}},
 		memoryLimiterSizing{base{"memory-limiter-sizing",
@@ -133,16 +136,21 @@ func (m memoryLimiter) hardLimit(env Environment) mo.Option[int64] {
 // memoryLimiters returns every declared memory_limiter. Instances are matched
 // on their type, so "memory_limiter/aggressive" is covered too.
 func memoryLimiters(f *config.File) []memoryLimiter {
+	return processorsOfType(f, memoryLimiterType, readMemoryLimiter)
+}
+
+// processorsOfType returns every declared processor of one type, read into
+// whatever the caller needs. Matching on the type rather than the whole id is
+// what covers named instances such as "batch/traces".
+func processorsOfType[T any](f *config.File, typ string, read func(config.Component) T) []T {
 	sec := f.Sections[config.KindProcessor]
 	if sec == nil {
 		return nil
 	}
 
-	declared := lo.Filter(sec.Components, func(c config.Component, _ int) bool {
-		return c.ID.Type == memoryLimiterType
-	})
+	declared := lo.Filter(sec.Components, func(c config.Component, _ int) bool { return c.ID.Type == typ })
 
-	return lo.Map(declared, func(c config.Component, _ int) memoryLimiter { return readMemoryLimiter(c) })
+	return lo.Map(declared, func(c config.Component, _ int) T { return read(c) })
 }
 
 func readMemoryLimiter(c config.Component) memoryLimiter {
@@ -445,6 +453,184 @@ func (r memoryLimiterSizing) checkRequest(ctx *Context, lim memoryLimiter, hard 
 			"collectors usually set the memory request equal to the limit",
 		Docs: kubernetesResourceDocs,
 	})
+}
+
+// The numbers upstream defaults to, in the batchprocessor's factory.
+const (
+	// defaultSendBatchSize is the number of items a batch is sent at when
+	// send_batch_size is left out. It is the figure that makes the bounds
+	// check worth having: a cap picked to look reasonable, say 1000, sits
+	// below it without anyone writing 8192 anywhere.
+	defaultSendBatchSize = 8192
+	// defaultBatchTimeout is how long a batch waits before it is sent
+	// regardless of size, when timeout is left out.
+	defaultBatchTimeout = 200 * time.Millisecond
+)
+
+// batchProcessor is one declared batch instance and the settings the collector
+// validates before it starts.
+type batchProcessor struct {
+	id config.ID
+	// node anchors findings about the instance as a whole.
+	node *yaml.Node
+	// path is the dotted path of the instance, e.g. "processors.batch".
+	path string
+
+	sendBatchSize    setting
+	sendBatchMaxSize setting
+	timeout          setting
+	// metadataKeys is the metadata_keys sequence, or nil when the key was not
+	// written. The entries are read where the duplicates are reported, since
+	// each finding names the entry it found.
+	metadataKeys *yaml.Node
+}
+
+// name renders the instance for a message, so a file with more than one batch
+// processor says which is meant.
+func (b batchProcessor) name() string { return "processor " + quote(b.id.String()) }
+
+// at returns the value node of one of the instance's settings, falling back to
+// the instance itself when the key is absent.
+func (b batchProcessor) at(s setting) *yaml.Node { return nodeOr(s.node, b.node) }
+
+// batchProcessors returns every declared batch processor, matched on type so
+// "batch/traces" is covered too.
+func batchProcessors(f *config.File) []batchProcessor {
+	return processorsOfType(f, batchType, readBatch)
+}
+
+func readBatch(c config.Component) batchProcessor {
+	proc := batchProcessor{
+		id:               c.ID,
+		node:             nodeOr(c.KeyNode, c.ValueNode),
+		path:             config.KindProcessor.Section() + "." + c.ID.String(),
+		sendBatchSize:    absent(),
+		sendBatchMaxSize: absent(),
+		timeout:          absent(),
+		metadataKeys:     nil,
+	}
+
+	if c.ValueNode == nil || c.ValueNode.Kind != yaml.MappingNode {
+		return proc
+	}
+
+	for _, e := range mapEntries(c.ValueNode, proc.path) {
+		switch e.key {
+		case "send_batch_size":
+			proc.sendBatchSize = readInt(e.node)
+		case "send_batch_max_size":
+			proc.sendBatchMaxSize = readInt(e.node)
+		case "timeout":
+			proc.timeout = readDuration(e.node)
+		case "metadata_keys":
+			proc.metadataKeys = e.node
+		default:
+			// Every other setting is the field schema's business.
+		}
+	}
+
+	return proc
+}
+
+type batchSizeBounds struct{ base }
+
+func (r batchSizeBounds) Check(ctx *Context) {
+	for _, proc := range batchProcessors(ctx.File) {
+		r.checkSizes(ctx, proc)
+		r.checkTimeout(ctx, proc)
+		r.checkMetadataKeys(ctx, proc)
+	}
+}
+
+// checkSizes compares the cap against the threshold that triggers a send.
+// Neither number is wrong on its own, so a schema describing one field at a
+// time sees nothing: send_batch_size is when a batch goes, send_batch_max_size
+// is how large one may get, and a cap below the trigger is rejected.
+func (r batchSizeBounds) checkSizes(ctx *Context, proc batchProcessor) {
+	if unknownValue(proc.sendBatchSize) || unknownValue(proc.sendBatchMaxSize) {
+		return
+	}
+
+	// A cap of zero, the default, means batches are not capped at all.
+	if !proc.sendBatchMaxSize.positive() {
+		return
+	}
+
+	size := int64(defaultSendBatchSize)
+	if proc.sendBatchSize.known {
+		size = proc.sendBatchSize.num
+	}
+
+	if proc.sendBatchMaxSize.num >= size {
+		return
+	}
+
+	// The default is the whole point of the rule, and also the one number in
+	// the message the reader will not find in their file, so it is named as a
+	// default rather than quoted back at them as if they had written it.
+	written := " and send_batch_size to " + itoa64(size)
+	if !proc.sendBatchSize.present {
+		written = ", below the default send_batch_size of " + itoa64(size)
+	}
+
+	ctx.Report(Finding{
+		Node: proc.at(proc.sendBatchMaxSize), Path: joinPath(proc.path, "send_batch_max_size"),
+		Message: proc.name() + " sets send_batch_max_size to " + itoa64(proc.sendBatchMaxSize.num) + written +
+			": send_batch_max_size must be greater or equal to send_batch_size",
+		Hint: "raise send_batch_max_size to " + itoa64(size) +
+			" or more, or leave it out so batches are not split at all",
+		Docs: batchDocs,
+	})
+}
+
+// checkTimeout reports the one value the collector rejects outright. Zero is
+// allowed and means every batch is sent as soon as it is formed.
+func (r batchSizeBounds) checkTimeout(ctx *Context, proc batchProcessor) {
+	if !proc.timeout.known || proc.timeout.num >= 0 {
+		return
+	}
+
+	ctx.Report(Finding{
+		Node: proc.at(proc.timeout), Path: joinPath(proc.path, "timeout"),
+		Message: proc.name() + " sets timeout to " + time.Duration(proc.timeout.num).String() +
+			": timeout must be greater or equal to 0",
+		Hint: "leave timeout out to take the default of " + defaultBatchTimeout.String() +
+			", or set 0 to send each batch as soon as it is formed",
+		Docs: batchDocs,
+	})
+}
+
+// checkMetadataKeys reports an entry listed twice. The keys are folded to lower
+// case before they are compared, so a duplicate need not look like one.
+func (r batchSizeBounds) checkMetadataKeys(ctx *Context, proc batchProcessor) {
+	if proc.metadataKeys == nil || proc.metadataKeys.Kind != yaml.SequenceNode {
+		return
+	}
+
+	path := joinPath(proc.path, "metadata_keys")
+	seen := map[string]bool{}
+
+	for i, item := range proc.metadataKeys.Content {
+		if item.Kind != yaml.ScalarNode || hasExpansion(item.Value) {
+			continue
+		}
+
+		folded := strings.ToLower(item.Value)
+		if !seen[folded] {
+			seen[folded] = true
+
+			continue
+		}
+
+		ctx.Report(Finding{
+			Node: item, Path: indexPath(path, i),
+			Message: proc.name() + " repeats " + quote(item.Value) + " in metadata_keys: " +
+				"duplicate entry in metadata_keys: " + quote(folded) + " (case-insensitive)",
+			Hint: "the keys are compared case-insensitively, so " + quote(item.Value) +
+				" is one already listed; remove it",
+			Docs: batchDocs,
+		})
+	}
 }
 
 // itoa64 renders a setting's value for a message.

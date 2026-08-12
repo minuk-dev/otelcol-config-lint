@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -17,14 +18,10 @@ func checkRule(t *testing.T, name, src string, env rule.Environment) diag.Diagno
 	t.Helper()
 
 	f, err := config.Parse("test.yaml", []byte(src))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
+	require.NoError(t, err, "parse")
 
 	r, ok := rule.Lookup(name)
-	if !ok {
-		t.Fatalf("rule %q is not registered", name)
-	}
+	require.Truef(t, ok, "rule %q is not registered", name)
 
 	return rule.Run(r, rule.Context{File: f, Schema: testSchema(), Index: rule.NewIndex(f), Env: env}, r.Severity())
 }
@@ -330,6 +327,136 @@ func TestMemoryLimiterSizingLeavesExpansionsAlone(t *testing.T) {
 	if found := checkRule(t, "memory-limiter-sizing", src, env); len(found) > 0 {
 		t.Errorf("a limit resolved at runtime cannot be sized, got %+v", found)
 	}
+}
+
+// batcher wraps batch processor settings in a config that is otherwise clean.
+// The settings are written already indented by four spaces.
+func batcher(name, settings string) string {
+	return `
+receivers: {otlp: }
+processors:
+  ` + name + `:
+` + settings + `
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [` + name + `], exporters: [debug]}
+`
+}
+
+func TestBatchSizeBounds(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		settings string
+		want     string // a phrase the finding has to carry
+	}{
+		"a cap below the default size": {
+			settings: "    send_batch_max_size: 1000",
+			want:     "send_batch_max_size must be greater or equal to send_batch_size",
+		},
+		"a cap below the size written next to it": {
+			settings: "    send_batch_size: 4096\n    send_batch_max_size: 1000",
+			want:     "sets send_batch_max_size to 1000 and send_batch_size to 4096",
+		},
+		"a negative timeout": {
+			settings: "    timeout: -5s",
+			want:     "timeout must be greater or equal to 0",
+		},
+		"a key listed twice": {
+			settings: "    metadata_keys: [tenant, tenant]",
+			want:     `duplicate entry in metadata_keys: "tenant" (case-insensitive)`,
+		},
+		"a key listed twice in another case": {
+			settings: "    metadata_keys: [tenant, Tenant]",
+			want:     `duplicate entry in metadata_keys: "tenant" (case-insensitive)`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkRule(t, "batch-size-bounds", batcher("batch", tt.settings), rule.Environment{})
+			assert.Truef(t, reports(found, tt.want), "no finding mentioned %q; got %+v", tt.want, found)
+
+			for _, d := range found {
+				assert.Containsf(t, d.Message, "batch", "a finding should name the instance: %q", d.Message)
+				assert.Containsf(t, d.Docs, "processor/batchprocessor/README.md",
+					"finding %q links to %q, want the processor's README", d.Message, d.Docs)
+			}
+		})
+	}
+}
+
+// TestBatchSizeBoundsSaysTheDefaultIsADefault pins that the one number in the
+// message the reader will not find in their file is named as a default, not
+// quoted back at them as if they had written it.
+func TestBatchSizeBoundsSaysTheDefaultIsADefault(t *testing.T) {
+	t.Parallel()
+
+	found := checkRule(t, "batch-size-bounds", batcher("batch", "    send_batch_max_size: 1000"), rule.Environment{})
+	assert.Truef(t, reports(found, "below the default send_batch_size of 8192"),
+		"the message should say 8192 is the default, got %+v", found)
+}
+
+func TestBatchSizeBoundsAcceptsAWorkingBatch(t *testing.T) {
+	t.Parallel()
+
+	for name, settings := range map[string]string{
+		"nothing set at all":               "",
+		"a cap above the default size":     "    send_batch_max_size: 10000",
+		"a cap above the size set":         "    send_batch_size: 1000\n    send_batch_max_size: 2000",
+		"a cap equal to the size set":      "    send_batch_size: 1000\n    send_batch_max_size: 1000",
+		"no cap at all":                    "    send_batch_size: 10000\n    send_batch_max_size: 0",
+		"a size of zero, which is off":     "    send_batch_size: 0\n    send_batch_max_size: 1000",
+		"a timeout of zero, which is fine": "    timeout: 0s",
+		"keys that differ":                 "    metadata_keys: [tenant, region]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Empty(t, checkRule(t, "batch-size-bounds", batcher("batch", settings), rule.Environment{}),
+				"a valid batch processor should be quiet")
+		})
+	}
+}
+
+func TestBatchSizeBoundsMatchesOnType(t *testing.T) {
+	t.Parallel()
+
+	found := checkRule(t, "batch-size-bounds", batcher("batch/traces", "    send_batch_max_size: 1000"),
+		rule.Environment{})
+	assert.Truef(t, reports(found, "batch/traces"), "a named instance should be checked and named, got %+v", found)
+}
+
+func TestBatchSizeBoundsLeavesExpansionsAlone(t *testing.T) {
+	t.Parallel()
+
+	for name, settings := range map[string]string{
+		"the cap is resolved at runtime":  "    send_batch_max_size: ${env:MAX}",
+		"the size is resolved at runtime": "    send_batch_size: ${env:SIZE}\n    send_batch_max_size: 1000",
+		"a key is resolved at runtime":    `    metadata_keys: ["${env:KEY}", "${env:KEY}"]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Empty(t, checkRule(t, "batch-size-bounds", batcher("batch", settings), rule.Environment{}),
+				"values resolved at runtime cannot be checked")
+		})
+	}
+}
+
+// TestBatchSizeBoundsPointsAtTheDuplicate pins that a duplicate key is reported
+// against the entry that repeats, not against the processor as a whole.
+func TestBatchSizeBoundsPointsAtTheDuplicate(t *testing.T) {
+	t.Parallel()
+
+	src := batcher("batch", "    metadata_keys: [tenant, region, Tenant]")
+
+	found := checkRule(t, "batch-size-bounds", src, rule.Environment{})
+	require.Lenf(t, found, 1, "want one finding about the repeated key, got %+v", found)
+	assert.Equal(t, "processors.batch.metadata_keys[2]", found[0].Path)
 }
 
 // TestFindingsCiteUpstream pins that a rule reporting what the collector
