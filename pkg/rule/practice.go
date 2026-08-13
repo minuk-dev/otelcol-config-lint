@@ -171,7 +171,7 @@ func (r noPersistentQueue) Check(ctx *Context) {
 
 		queue := readSendingQueue(c)
 
-		if queue.disabled || queue.persisted || queue.merged || !acceptsQueue(ctx, c.ID.Type, queue.written) {
+		if queue.disabled || queue.persisted || queue.unresolved || !acceptsQueue(ctx, c.ID.Type, queue.written) {
 			continue
 		}
 
@@ -203,10 +203,12 @@ type sendingQueue struct {
 	// counts: it resolves to an extension the linter cannot see, not to
 	// nothing. Only an empty or null value is nobody naming anything.
 	persisted bool
-	// merged reports a YAML merge key among the settings the queue is read
-	// from. A merge may be what supplies storage, and reporting a queue the
-	// document does not fully spell out would name a setting that is there.
-	merged bool
+	// unresolved reports that the document does not settle the question here: a
+	// merge key that may be what supplies storage, or an enabled the collector
+	// only learns once an expansion resolves. Either way the queue read here is
+	// not necessarily the queue that runs, and a finding would be about a
+	// config nobody wrote.
+	unresolved bool
 }
 
 // describe renders what the exporter did, so a written queue missing one field
@@ -225,7 +227,7 @@ func (q sendingQueue) describe() string {
 // an exporter that wraps another, such as loadbalancing, carries a queue per
 // protocol whose fix is written somewhere else again.
 func readSendingQueue(c config.Component) sendingQueue {
-	queue := sendingQueue{node: nil, written: false, disabled: false, persisted: false, merged: false}
+	queue := sendingQueue{node: nil, written: false, disabled: false, persisted: false, unresolved: false}
 
 	settings := resolveAlias(c.ValueNode)
 	if settings == nil || settings.Kind != yaml.MappingNode {
@@ -240,7 +242,7 @@ func readSendingQueue(c config.Component) sendingQueue {
 			queue.node, queue.written, block = e.node, true, resolveAlias(e.node)
 		case "<<":
 			// The merge may be what supplies the whole block.
-			queue.merged = true
+			queue.unresolved = true
 		default:
 			// Every other setting is another rule's business.
 		}
@@ -252,8 +254,8 @@ func readSendingQueue(c config.Component) sendingQueue {
 
 	// A merge outside the block cannot reach into one the exporter writes
 	// itself: a key present locally replaces the merged value outright. Only
-	// what is inside the block can still supply storage.
-	queue.merged = false
+	// what is inside the block can still leave the queue unsettled.
+	queue.unresolved = false
 	readQueueBlock(block, &queue)
 
 	return queue
@@ -270,6 +272,15 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 
 		switch e.key {
 		case "enabled":
+			// An expansion is read the same way here as under storage: as a
+			// value this rule cannot see rather than one nobody wrote. A
+			// variable that resolves to false is an exporter with no queue,
+			// and a finding about the queue it lost would be about a config
+			// the collector never runs.
+			if val.Kind == yaml.ScalarNode && hasExpansion(val.Value) {
+				queue.unresolved = true
+			}
+
 			queue.disabled = val.Tag == boolTag && val.Value == "false"
 		case storageKey:
 			// Anything but an empty or null value is the setting written.
@@ -277,7 +288,7 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 			// invalid-value's and undefined-extension-reference's to say.
 			queue.persisted = !isNull(val) && (val.Kind != yaml.ScalarNode || val.Value != "")
 		case "<<":
-			queue.merged = true
+			queue.unresolved = true
 		default:
 			// Every other queue setting is the field schema's business.
 		}
@@ -285,16 +296,19 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 }
 
 // acceptsQueue reports whether the exporter type has a sending queue at all.
-// Plenty do not -- debug, nop and every exporter that writes its own client --
-// and telling them they lose a queue they never had is worse than saying
-// nothing.
+// Plenty do not -- debug and nop among them -- and telling them they lose a
+// queue they never had is worse than saying nothing.
 //
 // The field schema is the authority wherever it describes the type's settings
-// completely. Where it does not -- no schema was resolved, the type is not in
-// it, or its settings are left open because upstream hands them to a
-// third-party config -- a queue the config writes is the only evidence there is,
-// and a block the component turns out not to accept is unknown-field's to
-// report.
+// completely, which is what keeps debug quiet. Where it does not, a queue the
+// config writes is the only evidence there is. That covers three shapes:
+// no schema was resolved at all, the type is not in it, and the type is in it
+// with no fields -- which reads as "nothing could be resolved for this
+// component" rather than "this component has no settings", since the datadog
+// exporter, which has a queue and a great many other settings, sits in that
+// bucket next to nop. A queue written under an exporter that really has none
+// is then reported here as well as by unknown-field, which is the price of not
+// staying silent about datadog.
 func acceptsQueue(ctx *Context, typ string, written bool) bool {
 	fields := exporterFields(ctx, typ)
 	if fields == nil || fields.Open || len(fields.Children) == 0 {

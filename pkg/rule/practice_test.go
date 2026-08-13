@@ -65,6 +65,19 @@ func TestNoPersistentQueue(t *testing.T) {
 			settings: "    sending_queue:\n      enabled: false",
 			want:     false,
 		},
+		// The variable may resolve to false, and then there is no queue to
+		// lose. enabled is read the same way storage is: a value this rule
+		// cannot see, not one nobody wrote.
+		"a queue enabled at runtime": {
+			settings: "    sending_queue:\n      enabled: ${env:QUEUE}",
+			want:     false,
+		},
+		// A string is not the boolean confmap wants, so it does not turn the
+		// queue off; invalid-value is what reports the type.
+		"the queue turned off with a string": {
+			settings: `    sending_queue:` + "\n" + `      enabled: "false"`,
+			want:     true,
+		},
 	}
 
 	for name, tt := range tests {
@@ -193,6 +206,33 @@ exporters:
 			assert.Empty(t, checkRule(t, "no-persistent-queue", src, rule.Environment{}))
 		})
 	}
+}
+
+// A component the schema resolved no fields for is not a component known to
+// have no settings: the datadog exporter, which has a queue, sits in that
+// bucket next to nop. What the config writes is then the only evidence there
+// is. testSchema's logging exporter has the same shape.
+func TestNoPersistentQueueWithoutFields(t *testing.T) {
+	t.Parallel()
+
+	const declared = `
+receivers: {otlp: }
+exporters:
+  logging:
+`
+
+	const wired = `
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [logging]}
+`
+
+	quiet := checkRule(t, "no-persistent-queue", declared+wired, rule.Environment{})
+	assert.Empty(t, quiet, "an exporter that writes no queue says nothing about having one")
+
+	written := checkRule(t, "no-persistent-queue",
+		declared+"    sending_queue:\n      queue_size: 5000\n"+wired, rule.Environment{})
+	assert.Len(t, written, 1)
 }
 
 // Without a schema there is nothing to say which exporters have a queue, so

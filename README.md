@@ -296,9 +296,12 @@ exporters:
 Persistence takes three steps — a storage extension declared, listed in
 `service.extensions`, and named here — which is why the finding names all three
 and why `undefined-extension-reference` above is worth having alongside it. The
-rule stays quiet on `sending_queue.enabled: false`, on an exporter no pipeline
-references, and on exporters whose field schema has no queue at all, so `debug`
-and `nop` are never mentioned.
+The rule stays quiet on `sending_queue.enabled: false`, on an exporter no
+pipeline references, and on exporters whose field schema describes their
+settings and has no queue among them, which is what keeps `debug` out of it.
+Where the schema resolved nothing for a component — the `datadog` exporter and
+`nop` share that — a queue the config writes is the only evidence there is, and
+it is taken at face value.
 
 It reports once per exporter, not once per config: the fix is written per
 exporter, each queue names its own storage, and a finding without a position
