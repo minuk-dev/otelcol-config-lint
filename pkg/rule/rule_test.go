@@ -33,10 +33,18 @@ func testSchema() *schema.Schema {
 				"memory_limiter": {Type: "memory_limiter", Signals: []config.Signal{"traces", "metrics", "logs"}},
 			},
 			config.KindExporter: {
+				// debug carries a sending_queue, as the published schemas do since
+				// exporterhelper's v2 queue: what keeps it out of
+				// no-persistent-queue is its type, not its schema, and a fixture
+				// that omitted the queue would test the wrong thing.
 				"debug": {Type: "debug", Signals: []config.Signal{"traces", "metrics", "logs"},
 					Fields: &schema.Field{Type: "map", Children: map[string]*schema.Field{
 						"verbosity":        {Type: "string", Enum: []string{"basic", "normal", "detailed"}},
 						"sampling_initial": {Type: "int"},
+						"sending_queue": {Type: "map", Open: true, Children: map[string]*schema.Field{
+							"enabled": {Type: "bool"},
+							"storage": {Type: "string"},
+						}},
 					}}},
 				"otlp": {Type: "otlp", Signals: []config.Signal{"traces", "metrics", "logs"},
 					Fields: &schema.Field{Type: "map", Required: []string{"endpoint"},
@@ -63,6 +71,19 @@ func testSchema() *schema.Schema {
 					}}},
 				"logging": {Type: "logging", Signals: []config.Signal{"traces"},
 					Deprecated: "use the debug exporter instead"},
+				// datadog stands for the components the schema resolved no
+				// fields for, which is not the same as a component with no
+				// settings: it has a queue and a great many other settings.
+				"datadog": {Type: "datadog", Signals: []config.Signal{"traces", "metrics", "logs"}},
+				// nop carries a queue in the published schemas too, for the same
+				// reason debug does.
+				"nop": {Type: "nop", Signals: []config.Signal{"traces", "metrics", "logs"},
+					Fields: &schema.Field{Type: "map", Children: map[string]*schema.Field{
+						"sending_queue": {Type: "map", Open: true, Children: map[string]*schema.Field{
+							"enabled": {Type: "bool"},
+							"storage": {Type: "string"},
+						}},
+					}}},
 			},
 			config.KindExtension: {
 				"zpages": {Type: "zpages", Stability: map[string]schema.Stability{"extension": "beta"}},

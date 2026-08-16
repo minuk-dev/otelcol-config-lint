@@ -312,19 +312,19 @@ func TestNoPersistentQueueStaysQuiet(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		// The schema says the debug exporter has no queue, so there is none to
-		// lose.
-		"an exporter with no queue": `
+		// The debug exporter writes what it is handed to the collector's own
+		// log, so a queue in front of it is nothing to lose on a restart. Its
+		// schema carries a sending_queue like every other exporter's, which is
+		// why the exclusion is by type rather than by schema.
+		"an exporter whose output never leaves the process": `
 receivers: {otlp: }
 exporters: {debug: }
 service:
   pipelines:
     traces: {receivers: [otlp], exporters: [debug]}
 `,
-		// Writing a queue does not give an exporter one. The schema says debug
-		// has no sending_queue, so there is nothing to persist and
-		// unknown-field is what has something to say about the block.
-		"a queue on an exporter that has none": `
+		// Writing the queue out does not make persisting it worth advising.
+		"a queue written on an exporter that logs what it is given": `
 receivers: {otlp: }
 exporters:
   debug:
@@ -333,6 +333,14 @@ exporters:
 service:
   pipelines:
     traces: {receivers: [otlp], exporters: [debug]}
+`,
+		// nop and the deprecated logging exporter are the same case.
+		"a queue on the nop exporter": `
+receivers: {otlp: }
+exporters: {nop: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [nop]}
 `,
 		// unused-component is what has something to say about this one; an
 		// exporter no pipeline reaches is never instantiated.
@@ -403,23 +411,46 @@ exporters:
 	}
 }
 
+// The exporters whose output never leaves the process are excluded on type,
+// and this pins why the schema cannot be asked instead: since exporterhelper's
+// v2 queue every exporter carries a sending_queue, debug's included, so a
+// schema-driven test would advise a writable volume for a file_storage
+// extension to persist what an exporter prints to stdout.
+func TestNoPersistentQueueExcludesSinksByType(t *testing.T) {
+	t.Parallel()
+
+	fields, ok := testSchema().Lookup(config.KindExporter, "debug")
+	require.True(t, ok)
+	require.NotNil(t, fields.Fields)
+	require.Contains(t, fields.Fields.Children, "sending_queue",
+		"the fixture has to carry the queue the published schemas do, or this tests nothing")
+
+	assert.Empty(t, checkRule(t, "no-persistent-queue", `
+receivers: {otlp: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`, rule.Environment{}))
+}
+
 // A component the schema resolved no fields for is not a component known to
-// have no settings: the datadog exporter, which has a queue, sits in that
-// bucket next to nop. What the config writes is then the only evidence there
-// is. testSchema's logging exporter has the same shape.
+// have no settings: the datadog exporter, which has a queue and a great many
+// other settings, sits in that bucket. What the config writes is then the only
+// evidence there is. testSchema's datadog exporter has that shape.
 func TestNoPersistentQueueWithoutFields(t *testing.T) {
 	t.Parallel()
 
 	const declared = `
 receivers: {otlp: }
 exporters:
-  logging:
+  datadog:
 `
 
 	const wired = `
 service:
   pipelines:
-    traces: {receivers: [otlp], exporters: [logging]}
+    traces: {receivers: [otlp], exporters: [datadog]}
 `
 
 	quiet := checkRule(t, "no-persistent-queue", declared+wired, rule.Environment{})

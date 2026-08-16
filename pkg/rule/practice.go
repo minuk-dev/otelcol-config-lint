@@ -32,6 +32,8 @@ const (
 	memoryLimiterType = "memory_limiter"
 	batchType         = "batch"
 	debugType         = "debug"
+	nopType           = "nop"
+	loggingType       = "logging"
 )
 
 // verbosityKey is the debug exporter's setting for how much of every record it
@@ -153,6 +155,10 @@ func (r noPersistentQueue) Check(ctx *Context) {
 		// An exporter no pipeline reaches is never instantiated, so it has no
 		// queue to lose; unused-component is what has something to say about it.
 		if !ctx.Index.Used(config.KindExporter, c.ID) {
+			continue
+		}
+
+		if contains(sinkExporters(), c.ID.Type) {
 			continue
 		}
 
@@ -282,20 +288,33 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 	}
 }
 
+// sinkExporters are the exporters whose output never leaves the process: what
+// they are handed is written to the collector's own log, or dropped. A queue in
+// front of one is nothing to lose on a restart, so they are excluded on type
+// rather than on what their schema says.
+//
+// The schema cannot make this call. Since exporterhelper gained its v2 queue,
+// every exporter carries a sending_queue -- the published schemas list one
+// under debug, complete with its batch sub-block -- so a schema-driven test
+// puts "declare a file_storage extension and mount it a writable volume" on an
+// exporter that prints to stdout. Matching on the type is what keeps the advice
+// somebody could act on.
+func sinkExporters() []string { return []string{debugType, nopType, loggingType} }
+
 // acceptsQueue reports whether the exporter type has a sending queue at all.
-// Plenty do not -- debug and nop among them -- and telling them they lose a
-// queue they never had is worse than saying nothing.
+// It answers for the exporters sinkExporters does not already exclude: a type
+// the targeted release genuinely gives no queue, whose owner should not be told
+// they lose one.
 //
 // The field schema is the authority wherever it describes the type's settings
-// completely, which is what keeps debug quiet. Where it does not, a queue the
-// config writes is the only evidence there is. That covers three shapes:
-// no schema was resolved at all, the type is not in it, and the type is in it
-// with no fields -- which reads as "nothing could be resolved for this
-// component" rather than "this component has no settings", since the datadog
-// exporter, which has a queue and a great many other settings, sits in that
-// bucket next to nop. A queue written under an exporter that really has none
-// is then reported here as well as by unknown-field, which is the price of not
-// staying silent about datadog.
+// completely. Where it does not, a queue the config writes is the only evidence
+// there is. That covers three shapes: no schema was resolved at all, the type
+// is not in it, and the type is in it with no fields -- which reads as "nothing
+// could be resolved for this component" rather than "this component has no
+// settings", since the datadog exporter, which has a queue and a great many
+// other settings, sits in that bucket. A queue written under an exporter that
+// really has none is then reported here as well as by unknown-field, which is
+// the price of not staying silent about datadog.
 func acceptsQueue(ctx *Context, typ string, written bool) bool {
 	fields := exporterFields(ctx, typ)
 	if fields == nil || fields.Open || len(fields.Children) == 0 {
