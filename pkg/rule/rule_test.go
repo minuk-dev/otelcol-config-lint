@@ -459,6 +459,102 @@ service:
 	}
 }
 
+// config.Ref.Path is the path from the root of the document, so a rule
+// reporting a reference has nothing to prepend to it. Every rule that reports
+// one is here, since the mistake is the kind that spreads by being copied from
+// the rule next door.
+func TestServiceReferencePathsAreWrittenOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		rule string
+		src  string
+		path string
+	}{
+		"an extension the service block enables but nobody declares": {
+			rule: "undefined-reference",
+			src: `
+receivers: {otlp: }
+exporters: {debug: }
+service:
+  extensions: [zpages]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`,
+			path: "service.extensions[0]",
+		},
+		"a receiver a pipeline names but nobody declares": {
+			rule: "undefined-reference",
+			src: `
+receivers: {otlp: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp, jaeger], exporters: [debug]}
+`,
+			path: "service.pipelines.traces.receivers[1]",
+		},
+		"a receiver listed twice in one slot": {
+			rule: "duplicate-reference",
+			src: `
+receivers: {otlp: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp, otlp], exporters: [debug]}
+`,
+			path: "service.pipelines.traces.receivers[1]",
+		},
+		"a receiver that does not carry the pipeline's signal": {
+			rule: "signal-support",
+			src: `
+receivers: {jaeger: }
+exporters: {debug: }
+service:
+  pipelines:
+    metrics: {receivers: [jaeger], exporters: [debug]}
+`,
+			path: "service.pipelines.metrics.receivers[0]",
+		},
+		"a memory_limiter that is not the first processor": {
+			rule: "processor-order",
+			src: `
+receivers: {otlp: }
+processors: {batch: , memory_limiter: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch, memory_limiter], exporters: [debug]}
+`,
+			path: "service.pipelines.traces.processors[1]",
+		},
+		// processor-order's other clause, which reports a different processor
+		// in the same slot and so is a second place the prefix could come back.
+		"a batch that runs before another processor": {
+			rule: "processor-order",
+			src: `
+receivers: {otlp: }
+processors: {batch: , batch/second: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch, batch/second], exporters: [debug]}
+`,
+			path: "service.pipelines.traces.processors[0]",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkRule(t, tt.rule, tt.src, rule.Environment{})
+			require.NotEmpty(t, found)
+			assert.Equal(t, tt.path, found[0].Path)
+		})
+	}
+}
+
 func TestEnvExpansionSkipsValueChecks(t *testing.T) {
 	t.Parallel()
 
