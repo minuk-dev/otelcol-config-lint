@@ -372,9 +372,12 @@ receivers and extensions bind, while an exporter's or a connector's `endpoint`
 names somewhere to send to. `0.0.0.0` there is also wrong, but it is a different
 mistake with a different fix, and a bind-address hint on a line about a backend
 would be worse than silence. Within a component the walk is by key name rather
-than by a table of where each type keeps its endpoint, since `otlp` writes one
-per protocol and most others write one at the top; each is reported separately,
-because each is its own line to edit. A receiver no pipeline names and an
+than by a table of where each type keeps its address, since `otlp` writes one per
+protocol and most others write one at the top; each is reported separately,
+because each is its own line to edit. Two key names are read, not one: the
+stanza-based log receivers call it `listen_address` — `tcplog`, `udplog`, and
+`syslog` under each of its `tcp` and `udp` blocks — and reading only `endpoint`
+would leave every one of them unreported. A receiver no pipeline names and an
 extension `service.extensions` leaves out are both skipped — neither is ever
 instantiated, so neither binds anything — as is an endpoint nobody wrote, which
 takes the component's own default. `${env:MY_POD_IP}:4317` is the fix, so it is

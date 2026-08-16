@@ -593,6 +593,17 @@ func bracketed(endpoint string) string {
 	return endpoint
 }
 
+// bindKeys are the settings a component writes the address it listens on in.
+// endpoint is what most of them use, and what the field schemas describe a
+// server's address as. The stanza-based log receivers are the exception:
+// tcplog and udplog spell it listen_address, and syslog carries one under each
+// of its tcp and udp blocks. Reading only endpoint would leave every one of
+// those unreported, which is why the walk is over two key names rather than
+// one.
+//
+// It returns a fresh slice so callers cannot alter what everyone else sees.
+func bindKeys() []string { return []string{endpointKey, "listen_address"} }
+
 // probeExtensions are the extensions a correct deployment binds to every
 // interface on purpose. A Kubernetes liveness probe is issued by the kubelet,
 // which reaches the container from off its loopback interface, so a health
@@ -633,19 +644,22 @@ func (r receiverBindsAllInterfaces) Check(ctx *Context) {
 			}
 
 			// The nesting varies: otlp writes its endpoints under
-			// protocols.grpc and protocols.http, and most other components
-			// write one at the top. Walking for the key covers both without a
-			// table of where every component keeps it, at the cost of matching
-			// an endpoint nested under something else -- which, in a section
-			// holding only things that listen, is a price worth paying.
+			// protocols.grpc and protocols.http, syslog under tcp and udp, and
+			// most other components write one at the top. Walking for the key
+			// covers all of them without a table of where every component keeps
+			// it, at the cost of matching an address nested under something
+			// else -- which, in a section holding only things that listen, is a
+			// price worth paying.
 			walkSettings(c.ValueNode, kind.Section()+"."+c.ID.String(), 0, func(m *yaml.Node, path string) {
-				node, written := childNode(m, endpointKey).Get()
-				if !written {
-					return
-				}
+				for _, key := range bindKeys() {
+					node, written := childNode(m, key).Get()
+					if !written {
+						continue
+					}
 
-				if scalar, readable := endpointScalar(node).Get(); readable {
-					r.report(ctx, kind, c, scalar, joinPath(path, endpointKey))
+					if scalar, readable := endpointScalar(node).Get(); readable {
+						r.report(ctx, kind, c, scalar, joinPath(path, key))
+					}
 				}
 			})
 		}

@@ -753,3 +753,49 @@ func TestReceiverBindsAllInterfacesLeavesExtensionsToTheirOwnRules(t *testing.T)
 			"%s bound to every interface is a correct deployment", typ)
 	}
 }
+
+// The stanza-based log receivers write the address they listen on under
+// listen_address rather than endpoint, and syslog carries one per transport.
+// Reading only endpoint would leave every one of them unreported.
+func TestReceiverBindsAllInterfacesReadsListenAddress(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		name     string // the receiver declaration
+		settings string
+		path     string
+	}{
+		"tcplog": {
+			name:     "tcplog",
+			settings: "    listen_address: 0.0.0.0:54525",
+			path:     "receivers.tcplog.listen_address",
+		},
+		"udplog": {
+			name:     "udplog",
+			settings: `    listen_address: ":54526"`,
+			path:     "receivers.udplog.listen_address",
+		},
+		"syslog under a transport": {
+			name:     "syslog",
+			settings: "    tcp:\n      listen_address: 0.0.0.0:54527",
+			path:     "receivers.syslog.tcp.listen_address",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			src := "receivers:\n  " + tt.name + ":\n" + tt.settings + `
+exporters: {debug: }
+service:
+  pipelines:
+    logs: {receivers: [` + tt.name + `], exporters: [debug]}
+`
+
+			found := checkRule(t, "receiver-binds-all-interfaces", src, rule.Environment{})
+			require.Len(t, found, 1)
+			assert.Equal(t, tt.path, found[0].Path)
+		})
+	}
+}
