@@ -461,6 +461,71 @@ service:
 	assert.NotEmpty(t, checkRule(t, "unused-component", src, rule.Environment{}))
 }
 
+// TestUnwrittenEndpointFollowsTheTargetedRelease covers the endpoint nobody
+// wrote, whose exposure is a property of the release rather than of the file.
+// Upstream made UseLocalHostAsDefaultHost the default in v0.110.0; before it
+// the same silence bound every interface, and --collector-version already says
+// which of the two is meant.
+func TestUnwrittenEndpointFollowsTheTargetedRelease(t *testing.T) {
+	t.Parallel()
+
+	const src = `
+receivers: {otlp: }
+exporters: {debug: }
+extensions:
+  pprof:
+service:
+  extensions: [pprof]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`
+
+	tests := map[string]struct {
+		release string
+		want    int
+	}{
+		"a release that defaults to localhost":     {release: "v0.110.0", want: 0},
+		"a release well past the change":           {release: "v0.157.0", want: 0},
+		"a release whose default binds everything": {release: "v0.109.0", want: 1},
+		"a release long before the change":         {release: "v0.80.0", want: 1},
+		"a run whose schema names no release":      {release: "", want: 0},
+		"a run pinned to no version in particular": {release: "latest", want: 0},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkRuleAgainst(t, "debug-extension-exposed", tt.release, src)
+			assert.Len(t, found, tt.want)
+		})
+	}
+}
+
+// The finding about an unwritten endpoint has to say which release it rests on,
+// since the same config is silent against a newer one.
+func TestUnwrittenEndpointNamesTheRelease(t *testing.T) {
+	t.Parallel()
+
+	found := checkRuleAgainst(t, "debug-extension-exposed", "v0.100.0", `
+receivers: {otlp: }
+exporters: {debug: }
+extensions:
+  pprof:
+service:
+  extensions: [pprof]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`)
+
+	require.Len(t, found, 1)
+	assert.Equal(t, `extension "pprof" writes no endpoint, and v0.100.0 defaults it to every interface `+
+		"of the host, serving heap profiles, goroutine dumps and the collector's command line",
+		found[0].Message)
+	assert.Equal(t, "extensions.pprof", found[0].Path)
+	assert.Equal(t, diag.Warning, found[0].Severity)
+}
+
 // TestMergedEndpointIsRead covers the endpoint a component does not write
 // itself. A "<<" merge is how one debugging block is shared between several
 // extensions, and reading only local keys would miss every one of them.

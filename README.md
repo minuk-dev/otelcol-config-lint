@@ -382,11 +382,16 @@ would take `pprof` down with it.
 The rule only reports extensions `service.extensions` actually lists, since
 that is the only thing that starts one — a declaration left out of it binds no
 port, and `unused-component` is what has something to say about it. An endpoint
-nobody wrote is left alone too: it takes the extension's own default, which has
-been `localhost` for both since upstream made `UseLocalHostAsDefaultHost` the
-default in `v0.110`. So is a hostname other than `localhost`, since what a name
-resolves to is a property of the network rather than of the file, and an
-address supplied by `${env:...}`. An expansion standing in for only the *port*
+nobody wrote takes the extension's own default, and which default that is
+depends on the release rather than on the file: `localhost` for both since
+upstream made `UseLocalHostAsDefaultHost` the default in `v0.110.0`, and
+`0.0.0.0` before it. `--collector-version` already says which release is meant,
+so that case is decided rather than assumed — silence on `v0.110.0` and up, and
+a finding against anything older. A run whose schema names no release, or names
+`latest`, says nothing, since guessing "old" would put a finding on every config
+that leaves the endpoint out. A hostname other than `localhost` is left alone,
+since what a name resolves to is a property of the network rather than of the
+file, and so is an address supplied by `${env:...}`. An expansion standing in for only the *port*
 is still reported — `0.0.0.0:${env:PPROF_PORT}` says plainly who can reach it —
 and an endpoint a `<<` merge supplies is read from the mapping it merges, so
 sharing one debugging block between extensions does not hide it.

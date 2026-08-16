@@ -26,6 +26,24 @@ func checkRule(t *testing.T, name, src string, env rule.Environment) diag.Diagno
 	return rule.Run(r, rule.Context{File: f, Schema: testSchema(), Index: rule.NewIndex(f), Env: env}, r.Severity())
 }
 
+// checkRuleAgainst runs one rule over src as if the run targeted the named
+// collector release, which is what decides the defaults a component takes when
+// it writes no setting of its own.
+func checkRuleAgainst(t *testing.T, name, release, src string) diag.Diagnostics {
+	t.Helper()
+
+	f, err := config.Parse("test.yaml", []byte(src))
+	require.NoError(t, err, "parse")
+
+	r, ok := rule.Lookup(name)
+	require.Truef(t, ok, "rule %q is not registered", name)
+
+	sch := testSchema()
+	sch.CollectorVersion = release
+
+	return rule.Run(r, rule.Context{File: f, Schema: sch, Index: rule.NewIndex(f)}, r.Severity())
+}
+
 // reports whether any finding mentions substr.
 func reports(found diag.Diagnostics, substr string) bool {
 	for _, d := range found {

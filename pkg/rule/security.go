@@ -11,6 +11,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // securityRules check what a config hands to the world around it: the network
@@ -392,14 +393,13 @@ func (r debugExtensionExposed) Check(ctx *Context) {
 			continue
 		}
 
-		// An endpoint nobody wrote takes the extension's own default. Both of
-		// these have defaulted to localhost since upstream made
-		// UseLocalHostAsDefaultHost the default in v0.110, so silence is the
-		// right answer for any release worth targeting; against a release
-		// older than that, where the default was 0.0.0.0, this rule is quiet
-		// about an endpoint that is in fact exposed.
+		// An endpoint nobody wrote takes the extension's own default, and which
+		// default that is depends on the release being targeted rather than on
+		// anything in the file.
 		node, written := endpointNode(c.ValueNode).Get()
 		if !written {
+			r.reportDefault(ctx, c, ext)
+
 			continue
 		}
 
@@ -498,6 +498,60 @@ func (r debugExtensionExposed) report(ctx *Context, c config.Component, ext debu
 		// Loopback is the answer this rule is asking for, and a hostname it
 		// cannot place is not evidence of anything.
 	}
+}
+
+// reportDefault reports a debugging extension that writes no endpoint of its
+// own, on a release whose default binds every interface.
+//
+// Both extensions have defaulted to localhost since upstream made
+// UseLocalHostAsDefaultHost the default in v0.110.0, so on any release worth
+// targeting silence is the right answer and this says nothing. Against an older
+// one the same silence is a pprof endpoint on every interface the host has --
+// and the targeted release is a thing the linter was told, so there is no need
+// to guess.
+func (r debugExtensionExposed) reportDefault(ctx *Context, c config.Component, ext debugExtension) {
+	release, placed := targetedRelease(ctx).Get()
+	if !placed || schema.Compare(release, localhostDefaultRelease) >= 0 {
+		return
+	}
+
+	ctx.Report(Finding{
+		Node: c.KeyNode, Path: config.KindExtension.Section() + "." + c.ID.String(),
+		Message: "extension " + quote(c.ID.String()) + " writes no " + endpointKey + ", and " + release +
+			" defaults it to every interface of the host, serving " + ext.serves,
+		Hint: "write " + endpointKey + ": localhost:<port> rather than relying on the default, which binds " +
+			"everything before " + localhostDefaultRelease + "; upstream's advice is not to expose telemetry " +
+			"or debugging data outside the collector by default",
+		Docs: securityDocs,
+	})
+}
+
+// localhostDefaultRelease is the release upstream made UseLocalHostAsDefaultHost
+// the default in. From it on, a component that writes no address binds
+// localhost; before it, the same silence bound 0.0.0.0.
+const localhostDefaultRelease = "v0.110.0"
+
+// releaseRE matches a version string this linter can order against another. A
+// schema that names no release, or names "latest", says nothing about which
+// defaults are in force.
+var releaseRE = regexp.MustCompile(`^v\d+\.\d+`)
+
+// targetedRelease returns the collector release the run is validating against,
+// when the schema in hand names one that can be placed on the timeline. A run
+// with no schema, or one whose version cannot be read, gets nothing: assuming
+// an old release would put a finding on every config that leaves an endpoint
+// out, which is most of them.
+func targetedRelease(ctx *Context) mo.Option[string] {
+	if ctx.Schema == nil {
+		return mo.None[string]()
+	}
+
+	release := schema.Normalize(ctx.Schema.CollectorVersion)
+	if !releaseRE.MatchString(release) {
+		return mo.None[string]()
+	}
+
+	return mo.Some(release)
 }
 
 // classifyEndpoint places the host part of an endpoint. The port does not
