@@ -39,6 +39,10 @@ const (
 	// collector by default, and names the extensions that do.
 	securityDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/docs/security-best-practices.md"
+	// configSecurityDocs is the other half of it, for the file rather than the
+	// process: sensitive settings belong in a secret store or on an encrypted
+	// filesystem, pulled into the config by expansion.
+	configSecurityDocs = "https://opentelemetry.io/docs/security/config-best-practices/"
 	// kubernetesResourceDocs states what requests and limits do, and the QoS
 	// class a pod lands in when they differ.
 	kubernetesResourceDocs = "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"

@@ -242,14 +242,15 @@ coverage never produces false positives. `${env:...}` expansions are left
 alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
-`missing-batch`, `insecure-tls`, `memory-limiter-config`,
-`memory-limiter-sizing`, `batch-size-bounds`, `no-persistent-queue`,
-`debug-exporter-verbosity`.
+`missing-batch`, `memory-limiter-config`, `memory-limiter-sizing`,
+`batch-size-bounds`, `no-persistent-queue`, `debug-exporter-verbosity`.
 
-Every practice rule cites the upstream page it rests on — the
+**Security** — `insecure-tls`, `debug-extension-exposed`, `hardcoded-secret`.
+
+Every practice and security rule cites the upstream page it rests on — the
 `memorylimiterprocessor`, `batchprocessor`, `exporterhelper` and
-`debugexporter` READMEs, `configtls`, and the Kubernetes resource docs for the
-container's request and limit.
+`debugexporter` READMEs, `configtls`, upstream's security best practices, and
+the Kubernetes resource docs for the container's request and limit.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:
@@ -344,10 +345,8 @@ report; the `logging` exporter that came before it is `deprecated-component`'s.
 legitimate and should not fail a CI job, and `--severity
 debug-exporter-verbosity=error` is there for anyone who wants it fatal.
 
-**Security** — `debug-extension-exposed`.
-
-Upstream's [security guidance](https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md)
-is direct about avoiding "exposing health or telemetry data outside the
+`debug-extension-exposed` rests on upstream's [security guidance](https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md),
+which is direct about avoiding "exposing health or telemetry data outside the
 Collector by default", and the debugging extensions are the ones that do it.
 `pprof` serves heap profiles, goroutine dumps and the collector's command line;
 `zpages` serves live traces and pipeline internals.
@@ -387,6 +386,43 @@ address supplied by `${env:...}`. An expansion standing in for only the *port*
 is still reported — `0.0.0.0:${env:PPROF_PORT}` says plainly who can reach it —
 and an endpoint a `<<` merge supplies is read from the mapping it merges, so
 sharing one debugging block between extensions does not hide it.
+
+`hardcoded-secret` is the one rule about the file rather than the collector.
+Configs live in git, and exporter credentials are written in the same file as
+everything else:
+
+```yaml
+exporters:
+  otlp:
+    endpoint: backend:4317
+    headers:
+      authorization: Bearer ${env:OTLP_TOKEN}   # not the literal token
+```
+
+Upstream's guidance is to keep sensitive values in a secret store or on an
+encrypted filesystem and pull them in with an expansion, and CI is the last
+moment before the value reaches a remote. The rule walks every declared
+component — wired or not, since a credential in the repository has already been
+handed over — and reports a scalar whose key names a credential (`password`,
+`token`, `api_key`, `secret`, `credential`, `private_key`, `key_pem`,
+`access_key`, `passphrase`, matched as a case-insensitive substring, so
+`sasl_password` is covered) and whose value is written out in full. A list is
+matched by the key that named it, so `api_keys: [AKIA…]` is reported too, and
+under `headers:` so are `authorization` and any value opening with `Bearer` or
+`Basic`.
+
+**It never prints the value**, only the path: copying the secret into the CI log
+is the one thing this rule must not do. False positives are the risk it carries,
+so it gives up findings freely. `${env:...}` and `${file:...}` are the fix and
+say so; empty values and placeholders (`changeme`, `<your-token>`, `REPLACE_ME`,
+`none`) are a config with no credential in it yet, behind an auth scheme as much
+as on their own; a boolean is a switch rather than a credential, whatever the
+setting is called; and a key naming *where* a credential lives rather than
+holding one — `private_key_file`, `token_url`, `cert_pem` — is a correctly
+configured component, so keys ending in `_file`, `_path`, `_url`, `_uri` and
+`_name` are excluded before anything else. It reports at `warning`, because a
+local config with a dummy credential is legitimate and this rule will meet
+plenty of them.
 
 ## Schemas
 
