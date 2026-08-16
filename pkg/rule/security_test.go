@@ -48,6 +48,20 @@ func TestHardcodedSecret(t *testing.T) {
 		"a nested password": {settings: "    auth:\n      password: hunter2", want: true},
 		// A number is a credential written out as surely as a string is.
 		"a numeric token": {settings: "    token: 12345678", want: true},
+		// A private key written inline is the worst of these to miss, and a
+		// bare "key" is not matched, so the pem spelling has to be named.
+		"an inline private key": {settings: "    key_pem: BEGIN PRIVATE KEY", want: true},
+		// The prometheus receiver's spelling, outside any headers map.
+		"prometheus credentials": {settings: "    credentials: abc123def456", want: true},
+		// The $VAR shorthand is an expansion only as the whole value; a
+		// generated password containing one is still a password.
+		"a password containing a dollar": {settings: `    password: pa$sw0rd`, want: true},
+
+		// The public half of a keypair is not a credential.
+		"an inline certificate": {settings: "    cert_pem: BEGIN CERTIFICATE", want: false},
+		// A setting whose name matches and whose value is a boolean is a
+		// switch, not a credential.
+		"a credentials switch": {settings: "    use_default_credentials: true", want: false},
 
 		// An expansion is the config doing the right thing, whichever member
 		// of the family it uses.
@@ -144,6 +158,16 @@ func TestHardcodedSecretInHeaders(t *testing.T) {
 			settings: "    headers:\n      x-scope-orgid: tenant-a",
 			want:     false,
 		},
+		// The scheme is not the credential: what follows it is, and a
+		// placeholder written after one is still a placeholder.
+		"a placeholder behind a scheme": {
+			settings: "    headers:\n      authorization: Bearer <YOUR_TOKEN>",
+			want:     false,
+		},
+		"a changeme behind a scheme": {
+			settings: "    headers:\n      authorization: Bearer changeme",
+			want:     false,
+		},
 	}
 
 	for name, tt := range tests {
@@ -221,7 +245,8 @@ service:
 }
 
 // A credential inside a list is still written into the config; the walk has to
-// go through sequences as well as maps.
+// go through sequences as well as maps, and a list of bare scalars is matched
+// by the key that named the list.
 func TestHardcodedSecretInASequence(t *testing.T) {
 	t.Parallel()
 
@@ -230,6 +255,8 @@ receivers: {otlp: }
 exporters:
   otlp:
     endpoint: backend:4317
+    api_keys:
+      - abc123def456
     backends:
       - name: primary
         token: abc123def456
@@ -239,8 +266,9 @@ service:
 `
 
 	found := checkRule(t, "hardcoded-secret", src, rule.Environment{})
-	require.Len(t, found, 1)
-	assert.Equal(t, "exporters.otlp.backends[0].token", found[0].Path)
+	require.Len(t, found, 2)
+	assert.Equal(t, "exporters.otlp.api_keys[0]", found[0].Path)
+	assert.Equal(t, "exporters.otlp.backends[0].token", found[1].Path)
 }
 
 // An alias is the anchor it points at, written once and used twice. Following

@@ -17,8 +17,6 @@ func practiceRules() []Rule {
 			"a pipeline without memory_limiter can be OOM-killed under load", diag.Info}},
 		missingBatch{base{"missing-batch",
 			"exporting without batching costs throughput and export requests", diag.Info}},
-		insecureTLS{base{"insecure-tls",
-			"TLS verification disabled on a component that talks over the network", diag.Warning}},
 		noPersistentQueue{base{"no-persistent-queue",
 			"a sending queue held in memory, which a restart drops along with everything in it", diag.Info}},
 	}
@@ -113,29 +111,6 @@ func hasProcessorType(p config.Pipeline, typ string) bool {
 	}
 
 	return false
-}
-
-type insecureTLS struct{ base }
-
-func (r insecureTLS) Check(ctx *Context) {
-	for _, kind := range config.Kinds() {
-		sec := ctx.File.Sections[kind]
-		if sec == nil {
-			continue
-		}
-
-		for _, c := range sec.Components {
-			for _, hit := range findInsecure(c.ValueNode, kind.Section()+"."+c.ID.String()) {
-				ctx.Report(Finding{
-					Node: hit.node, Path: hit.path,
-					Message: quote(shortPath(hit.path)) + " disables TLS verification for " +
-						string(kind) + " " + quote(c.ID.String()),
-					Hint: "supply ca_file/cert_file instead of skipping verification outside local testing",
-					Docs: tlsDocs,
-				})
-			}
-		}
-	}
 }
 
 // noPersistentQueue reports an exporter whose sending queue lives in memory.
@@ -333,42 +308,4 @@ func exporterFields(ctx *Context, typ string) *schema.Field {
 	}
 
 	return comp.Fields
-}
-
-type tlsHit struct {
-	node *yaml.Node
-	path string
-}
-
-// findInsecure walks a component's settings for tls.insecure or
-// tls.insecure_skip_verify set to true, at any nesting depth. Exporters bury
-// these under sub-blocks such as auth or queue settings.
-func findInsecure(n *yaml.Node, path string) []tlsHit {
-	if n == nil {
-		return nil
-	}
-
-	var out []tlsHit
-
-	switch n.Kind {
-	case yaml.MappingNode:
-		for _, e := range mapEntries(n, path) {
-			switch e.key {
-			case "insecure", "insecure_skip_verify":
-				if e.node.Tag == boolTag && e.node.Value == "true" {
-					out = append(out, tlsHit{node: e.node, path: e.path})
-				}
-			default:
-				out = append(out, findInsecure(e.node, e.path)...)
-			}
-		}
-	case yaml.SequenceNode:
-		for i, item := range n.Content {
-			out = append(out, findInsecure(item, indexPath(path, i))...)
-		}
-	default:
-		// Scalars and aliases hold no settings of their own.
-	}
-
-	return out
 }

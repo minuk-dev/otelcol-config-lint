@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -12,6 +13,8 @@ import (
 // securityRules check for configurations that hand something away.
 func securityRules() []Rule {
 	return []Rule{
+		insecureTLS{base{"insecure-tls",
+			"TLS verification disabled on a component that talks over the network", diag.Warning}},
 		hardcodedSecret{base{"hardcoded-secret",
 			"a credential written into the config instead of expanded at runtime", diag.Warning}},
 	}
@@ -20,6 +23,67 @@ func securityRules() []Rule {
 // headersKey is the map whose keys are HTTP header names rather than settings,
 // and where a credential is most often written out in full.
 const headersKey = "headers"
+
+type insecureTLS struct{ base }
+
+func (r insecureTLS) Check(ctx *Context) {
+	for _, kind := range config.Kinds() {
+		sec := ctx.File.Sections[kind]
+		if sec == nil {
+			continue
+		}
+
+		for _, c := range sec.Components {
+			for _, hit := range findInsecure(c.ValueNode, kind.Section()+"."+c.ID.String()) {
+				ctx.Report(Finding{
+					Node: hit.node, Path: hit.path,
+					Message: quote(shortPath(hit.path)) + " disables TLS verification for " +
+						string(kind) + " " + quote(c.ID.String()),
+					Hint: "supply ca_file/cert_file instead of skipping verification outside local testing",
+					Docs: tlsDocs,
+				})
+			}
+		}
+	}
+}
+
+type tlsHit struct {
+	node *yaml.Node
+	path string
+}
+
+// findInsecure walks a component's settings for tls.insecure or
+// tls.insecure_skip_verify set to true, at any nesting depth. Exporters bury
+// these under sub-blocks such as auth or queue settings.
+func findInsecure(n *yaml.Node, path string) []tlsHit {
+	if n == nil {
+		return nil
+	}
+
+	var out []tlsHit
+
+	switch n.Kind {
+	case yaml.MappingNode:
+		for _, e := range mapEntries(n, path) {
+			switch e.key {
+			case "insecure", "insecure_skip_verify":
+				if e.node.Tag == boolTag && e.node.Value == "true" {
+					out = append(out, tlsHit{node: e.node, path: e.path})
+				}
+			default:
+				out = append(out, findInsecure(e.node, e.path)...)
+			}
+		}
+	case yaml.SequenceNode:
+		for i, item := range n.Content {
+			out = append(out, findInsecure(item, indexPath(path, i))...)
+		}
+	default:
+		// Scalars and aliases hold no settings of their own.
+	}
+
+	return out
+}
 
 // hardcodedSecret reports a credential the config carries itself. Upstream's
 // guidance is to keep sensitive values in a secret store or on an encrypted
@@ -46,7 +110,7 @@ func (r hardcodedSecret) Check(ctx *Context) {
 		}
 
 		for _, c := range sec.Components {
-			for _, hit := range findSecrets(c.ValueNode, kind.Section()+"."+c.ID.String(), false) {
+			for _, hit := range findSecrets(c.ValueNode, kind.Section()+"."+c.ID.String(), "", false) {
 				ctx.Report(Finding{
 					Node: hit.node, Path: hit.path,
 					// The value is never quoted back. Printing it would copy the
@@ -73,9 +137,12 @@ type secretHit struct {
 // nesting depth: an exporter's credentials sit under auth, tls or headers
 // blocks as often as at the top level.
 //
-// inHeaders reports that the walk is inside a headers map, whose keys are
-// header names rather than settings and are matched differently.
-func findSecrets(n *yaml.Node, path string, inHeaders bool) []secretHit {
+// key is the setting the node hangs from, which a scalar is matched by and a
+// list passes down to its items: api_keys is a list of api keys, and dropping
+// the key at the bracket would let a credential through for being written one
+// line lower. inHeaders reports that the walk is inside a headers map, whose
+// keys are header names rather than settings.
+func findSecrets(n *yaml.Node, path, key string, inHeaders bool) []secretHit {
 	if n == nil {
 		return nil
 	}
@@ -85,24 +152,22 @@ func findSecrets(n *yaml.Node, path string, inHeaders bool) []secretHit {
 	switch n.Kind {
 	case yaml.MappingNode:
 		for _, e := range mapEntries(n, path) {
-			if e.node.Kind == yaml.ScalarNode {
-				if isHardcodedSecret(e.key, e.node.Value, inHeaders) {
-					out = append(out, secretHit{node: e.node, path: e.path})
-				}
-
-				continue
-			}
-
-			out = append(out, findSecrets(e.node, e.path, inHeaders || strings.EqualFold(e.key, headersKey))...)
+			out = append(out,
+				findSecrets(e.node, e.path, e.key, inHeaders || strings.EqualFold(e.key, headersKey))...)
 		}
 	case yaml.SequenceNode:
 		for i, item := range n.Content {
-			out = append(out, findSecrets(item, indexPath(path, i), inHeaders)...)
+			out = append(out, findSecrets(item, indexPath(path, i), key, inHeaders)...)
+		}
+	case yaml.ScalarNode:
+		if isHardcodedSecret(key, n.Value, inHeaders) {
+			out = append(out, secretHit{node: n, path: path})
 		}
 	default:
-		// Scalars are matched by their key, above. An alias is the anchor it
-		// points at, which is walked where it is written, so following it here
-		// would report the same value twice.
+		// An alias is a value written once and used twice, and the anchor is
+		// reported where it is written whenever that is somewhere this walk
+		// reaches. Following it here would report the same credential at every
+		// use, and only one of them is somewhere to edit.
 	}
 
 	return out
@@ -113,16 +178,41 @@ func findSecrets(n *yaml.Node, path string, inHeaders bool) []secretHit {
 func isHardcodedSecret(key, value string, inHeaders bool) bool {
 	// Either the key says the value is a credential, or a header value says so
 	// itself by opening with an authentication scheme.
-	named := namesCredential(key, inHeaders) || (inHeaders && carriesAuthScheme(value))
+	scheme := authScheme(value)
+
+	named := namesCredential(key, inHeaders) || (inHeaders && scheme != "")
 	if !named {
 		return false
 	}
 
-	// An expansion -- ${env:TOKEN}, ${file:/run/secrets/token} and the rest of
-	// the family -- is the config doing exactly what it should, and a
+	// The scheme is not the credential, and what follows it is what has to be
+	// judged: "Bearer <YOUR_TOKEN>" is a placeholder, and reading it whole
+	// would find neither the angle brackets nor the expansion in
+	// "Bearer ${env:OTLP_TOKEN}".
+	value = strings.TrimSpace(value[len(scheme):])
+
+	// An expansion is the config doing exactly what it should, and a
 	// placeholder is a config with no credential in it yet.
-	return !hasExpansion(value) && !isPlaceholder(value)
+	return !resolvedAtRuntime(value) && !isPlaceholder(value)
 }
+
+// resolvedAtRuntime reports whether confmap, rather than the file, supplies the
+// value.
+//
+// hasExpansion is the general test and the right one for a schema check, but it
+// also matches the bare $VAR shorthand anywhere inside a string -- and a
+// generated password such as pa$sw0rd contains one. Staying silent about a real
+// credential is the worse failure of the two, so the shorthand counts only when
+// it is the whole value. The ${...} form is unambiguous and counts wherever it
+// appears, including in a value that is only partly expanded.
+func resolvedAtRuntime(value string) bool {
+	return braceExpansionRE.MatchString(value) || shorthandExpansionRE.MatchString(value)
+}
+
+var (
+	braceExpansionRE     = regexp.MustCompile(`\$\{[^}]*\}`)
+	shorthandExpansionRE = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
+)
 
 // namesCredential reports whether a leaf key names a credential.
 //
@@ -154,10 +244,12 @@ func namesCredential(key string, inHeaders bool) bool {
 
 	// "secret" subsumes client_secret and secret_key; "password" subsumes
 	// sasl_password and the rest. A bare "key" is deliberately absent: key,
-	// keys and key_file are ordinary settings across the collector.
+	// keys and key_file are ordinary settings across the collector, which is
+	// why key_pem -- a private key written inline, and the worst of these to
+	// miss -- has to be named. cert_pem and ca_pem are public and are not.
 	for _, name := range []string{
-		"password", "passphrase", "token", "secret",
-		"apikey", "api_key", "access_key", "private_key",
+		"password", "passphrase", "token", "secret", "credential",
+		"apikey", "api_key", "access_key", "private_key", "key_pem",
 	} {
 		if strings.Contains(key, name) {
 			return true
@@ -167,18 +259,20 @@ func namesCredential(key string, inHeaders bool) bool {
 	return false
 }
 
-// carriesAuthScheme reports whether a header value opens with an HTTP
-// authentication scheme, which is the shape a credential takes even when the
-// header is spelled something other than authorization. The schemes are
-// case-insensitive in the protocol, so they are matched that way here.
-func carriesAuthScheme(value string) bool {
+// authScheme returns the HTTP authentication scheme a header value opens with,
+// or "" for one that opens with none. A scheme is the shape a credential takes
+// even when the header is spelled something other than authorization, and it is
+// also a prefix that has to come off before the rest of the value is judged.
+// The schemes are case-insensitive in the protocol, so they are matched that
+// way here.
+func authScheme(value string) string {
 	for _, scheme := range []string{"bearer ", "basic "} {
 		if len(value) >= len(scheme) && strings.EqualFold(value[:len(scheme)], scheme) {
-			return true
+			return value[:len(scheme)]
 		}
 	}
 
-	return false
+	return ""
 }
 
 // isPlaceholder reports whether a value is one of the things people write where
@@ -197,7 +291,10 @@ func isPlaceholder(value string) bool {
 	norm := strings.NewReplacer("-", "", "_", "", " ", "").Replace(strings.ToLower(value))
 
 	switch norm {
-	case "none", "null", "nil", "unset", "empty", "todo", "fixme", "tbd",
+	// A boolean is never a credential, whatever the key is called: a setting
+	// such as use_default_credentials matches the name list and holds true.
+	case "true", "false",
+		"none", "null", "nil", "unset", "empty", "todo", "fixme", "tbd",
 		"changeme", "changeit", "replaceme", "placeholder", "example", "dummy", "test",
 		"secret", "password", "token", "apikey", "xxx":
 		return true

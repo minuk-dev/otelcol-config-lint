@@ -332,21 +332,25 @@ encrypted filesystem and pull them in with an expansion, and CI is the last
 moment before the value reaches a remote. The rule walks every declared
 component — wired or not, since a credential in the repository has already been
 handed over — and reports a scalar whose key names a credential (`password`,
-`token`, `api_key`, `secret`, `private_key`, `access_key`, `passphrase`, matched
-as a case-insensitive substring, so `sasl_password` is covered) and whose value
-is written out in full. `authorization` and any header value opening with
-`Bearer` or `Basic` are covered too.
+`token`, `api_key`, `secret`, `credential`, `private_key`, `key_pem`,
+`access_key`, `passphrase`, matched as a case-insensitive substring, so
+`sasl_password` is covered) and whose value is written out in full. A list is
+matched by the key that named it, so `api_keys: [AKIA…]` is reported too, and
+under `headers:` so are `authorization` and any value opening with `Bearer` or
+`Basic`.
 
 **It never prints the value**, only the path: copying the secret into the CI log
 is the one thing this rule must not do. False positives are the risk it carries,
 so it gives up findings freely. `${env:...}` and `${file:...}` are the fix and
 say so; empty values and placeholders (`changeme`, `<your-token>`, `REPLACE_ME`,
-`none`) are a config with no credential in it yet; and a key naming *where* a
-credential lives rather than holding one — `private_key_file`, `token_url` — is
-a correctly configured component, so keys ending in `_file`, `_path`, `_url`,
-`_uri` and `_name` are excluded before anything else. It reports at `warning`,
-because a local config with a dummy credential is legitimate and this rule will
-meet plenty of them.
+`none`) are a config with no credential in it yet, behind an auth scheme as much
+as on their own; a boolean is a switch rather than a credential, whatever the
+setting is called; and a key naming *where* a credential lives rather than
+holding one — `private_key_file`, `token_url`, `cert_pem` — is a correctly
+configured component, so keys ending in `_file`, `_path`, `_url`, `_uri` and
+`_name` are excluded before anything else. It reports at `warning`, because a
+local config with a dummy credential is legitimate and this rule will meet
+plenty of them.
 
 ## Schemas
 
