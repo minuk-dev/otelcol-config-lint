@@ -23,6 +23,8 @@ func securityRules() []Rule {
 			"TLS verification disabled on a component that talks over the network", diag.Warning}},
 		debugExtensionExposed{base{"debug-extension-exposed",
 			"a debugging extension bound where more than this host can reach it", diag.Warning}},
+		receiverBindsAllInterfaces{base{"receiver-binds-all-interfaces",
+			"a component listening on every network interface the host has", diag.Warning}},
 		hardcodedSecret{base{"hardcoded-secret",
 			"a credential written into the config instead of expanded at runtime", diag.Warning}},
 	}
@@ -312,7 +314,7 @@ func isPlaceholder(value string) bool {
 	return strings.HasPrefix(norm, "your")
 }
 
-// endpointKey is the setting every debugging extension listens on.
+// endpointKey is the setting a component that listens says its address in.
 const endpointKey = "endpoint"
 
 // debugExtension is an extension that serves the collector's own internals,
@@ -366,9 +368,9 @@ const (
 // are the ones that do it: a 0.0.0.0 OTLP receiver accepts data it should not,
 // while a 0.0.0.0 pprof endpoint hands out process internals.
 //
-// The general bind-address checking that issue #45 describes covers receivers.
-// Should it ever grow to cover extensions, it must skip the types listed in
-// debugExtensions, which this rule owns and reports with a sharper message.
+// receiver-binds-all-interfaces is the general bind-address check, and it skips
+// the types listed in debugExtensions, which this rule owns and reports with a
+// sharper message.
 type debugExtensionExposed struct{ base }
 
 func (r debugExtensionExposed) Check(ctx *Context) {
@@ -542,7 +544,7 @@ const expansionMask = "\x00"
 // which is not the same as the port being: "0.0.0.0:${env:PPROF_PORT}" says
 // exactly who can reach it, and only the port is left open.
 func endpointHost(endpoint string) mo.Option[string] {
-	masked := expansionRE.ReplaceAllString(endpoint, expansionMask)
+	masked := expansionRE.ReplaceAllString(bracketed(endpoint), expansionMask)
 
 	host, _, err := net.SplitHostPort(masked)
 	if err != nil {
@@ -556,4 +558,149 @@ func endpointHost(endpoint string) mo.Option[string] {
 	}
 
 	return mo.Some(host)
+}
+
+// endpointPort returns the port an endpoint names, so a suggestion can keep it
+// while changing the address in front of it. It returns nothing when the
+// endpoint names no port, or leaves it to an expansion: the port only ever ends
+// up in a hint, so one that cannot be read costs a little precision there and
+// nothing anywhere else.
+func endpointPort(endpoint string) mo.Option[string] {
+	masked := expansionRE.ReplaceAllString(bracketed(endpoint), expansionMask)
+
+	_, port, err := net.SplitHostPort(masked)
+	if err != nil || strings.Contains(port, expansionMask) {
+		return mo.None[string]()
+	}
+
+	return mo.Some(port)
+}
+
+// bracketed rewrites the one endpoint spelling net.SplitHostPort refuses:
+// ":::4317", the IPv6 unspecified address written without the brackets that
+// tell its colons from the port's. It is what netstat prints for an IPv6
+// listener, so it gets copied into configs from there.
+//
+// Go refuses it outright -- "too many colons in address" -- so a collector
+// handed one does not start at all, and reading it as "[::]:4317" keeps the
+// finding about the address whoever wrote it meant. Binding a specific
+// interface is the fix for both halves of that at once.
+func bracketed(endpoint string) string {
+	if rest, found := strings.CutPrefix(endpoint, ":::"); found {
+		return "[::]:" + rest
+	}
+
+	return endpoint
+}
+
+// probeExtensions are the extensions a correct deployment binds to every
+// interface on purpose. A Kubernetes liveness probe is issued by the kubelet,
+// which reaches the container from off its loopback interface, so a health
+// check on localhost is the configuration that fails. This is the same
+// exclusion debugExtensions documents, for the same reason.
+func probeExtensions() []string { return []string{"health_check", "healthcheckv2"} }
+
+// receiverBindsAllInterfaces reports an endpoint bound to the unspecified
+// address: 0.0.0.0, [::], or a bare ":4317", all of which listen on every
+// interface the host has rather than the one whoever wrote it had in mind.
+// Upstream changed the collector's own default to localhost in v0.110.0 for
+// exactly this reason, but the example configs the ecosystem copies from -- the
+// ones on opentelemetry.io say outright that they use 0.0.0.0 "as a
+// convenience" -- still carry it into production.
+//
+// Only server-side endpoints are read, and the split is by kind: a receiver or
+// an extension listens on its endpoint, while an exporter's or a connector's
+// names somewhere to send to. 0.0.0.0 as a destination is also wrong, but it is
+// a different mistake with a different fix, and reporting it here would put a
+// bind-address hint on a line about a backend.
+//
+// The severity is Warning rather than Error. A gateway behind a service mesh
+// with its own network policy binds every interface deliberately, and so does
+// anything that has to be reachable from another pod without the downward API
+// to hand.
+type receiverBindsAllInterfaces struct{ base }
+
+func (r receiverBindsAllInterfaces) Check(ctx *Context) {
+	for _, kind := range []config.Kind{config.KindReceiver, config.KindExtension} {
+		sec := ctx.File.Sections[kind]
+		if sec == nil {
+			continue
+		}
+
+		for _, c := range sec.Components {
+			if r.skip(ctx, kind, c) {
+				continue
+			}
+
+			// The nesting varies: otlp writes its endpoints under
+			// protocols.grpc and protocols.http, and most other components
+			// write one at the top. Walking for the key covers both without a
+			// table of where every component keeps it, at the cost of matching
+			// an endpoint nested under something else -- which, in a section
+			// holding only things that listen, is a price worth paying.
+			walkSettings(c.ValueNode, kind.Section()+"."+c.ID.String(), 0, func(m *yaml.Node, path string) {
+				node, written := childNode(m, endpointKey).Get()
+				if !written {
+					return
+				}
+
+				if scalar, readable := endpointScalar(node).Get(); readable {
+					r.report(ctx, kind, c, scalar, joinPath(path, endpointKey))
+				}
+			})
+		}
+	}
+}
+
+// skip reports the components this rule has nothing to say about: the ones
+// another rule owns, the ones binding every interface correctly, and the ones
+// that never open a listener at all.
+func (r receiverBindsAllInterfaces) skip(ctx *Context, kind config.Kind, c config.Component) bool {
+	if kind == config.KindExtension {
+		if lo.ContainsBy(debugExtensions(), func(e debugExtension) bool { return e.typ == c.ID.Type }) {
+			return true // debug-extension-exposed says something sharper about these
+		}
+
+		if contains(probeExtensions(), c.ID.Type) {
+			return true
+		}
+
+		// service.extensions is the only thing that starts an extension, so a
+		// declaration left out of it opens no listener; unused-component has
+		// something to say about the declaration itself.
+		return !ctx.Index.Enabled(c.ID)
+	}
+
+	// A receiver no pipeline names is never instantiated, and binds nothing.
+	return !ctx.Index.Used(kind, c.ID)
+}
+
+func (r receiverBindsAllInterfaces) report(
+	ctx *Context, kind config.Kind, c config.Component, node *yaml.Node, path string,
+) {
+	if classifyEndpoint(node.Value) != exposureUnspecified {
+		return
+	}
+
+	ctx.Report(Finding{
+		Node: node, Path: path,
+		Message: quote(shortPath(path)) + " binds " + quote(node.Value) +
+			", every interface the host has, for " + string(kind) + " " + quote(c.ID.String()),
+		Hint: bindHint(endpointPort(node.Value)),
+		Docs: configSecurityDocs,
+	})
+}
+
+// bindHint names the fix upstream documents rather than only saying not to do
+// it: an interface chosen on purpose, and in Kubernetes the pod's own IP, which
+// the downward API supplies and which reaches other pods without also reaching
+// everything else the node is on.
+func bindHint(port mo.Option[string]) string {
+	loopback, pod := "127.0.0.1", "${env:MY_POD_IP}"
+	if p, known := port.Get(); known {
+		loopback, pod = loopback+":"+p, pod+":"+p
+	}
+
+	return "bind the interface you meant, e.g. " + loopback + " when every client is local; " +
+		"in Kubernetes write " + pod + ", the pod IP the downward API supplies"
 }

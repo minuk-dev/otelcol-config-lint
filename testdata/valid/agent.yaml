@@ -1,11 +1,14 @@
 # A collector running as a node agent: receive OTLP, limit memory, batch, ship.
+# The endpoints take the pod's own IP from the downward API, which is reachable
+# from the workloads that send to it without also listening on every other
+# interface the node has.
 receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
+        endpoint: ${env:MY_POD_IP}:4317
       http:
-        endpoint: 0.0.0.0:4318
+        endpoint: ${env:MY_POD_IP}:4318
 
 processors:
   memory_limiter:
