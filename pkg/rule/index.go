@@ -244,6 +244,24 @@ func componentExtensionRefs(c config.Component) []ExtensionRef {
 // worth resolving. An empty value is not a reference, and one built from a
 // confmap expansion is only known once the collector starts.
 func scalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
+	val, written := childNode(n, key).Get()
+	if !written {
+		return mo.None[*yaml.Node]()
+	}
+
+	val = resolveAlias(val)
+	if val == nil || val.Kind != yaml.ScalarNode || val.Value == "" || hasExpansion(val.Value) {
+		return mo.None[*yaml.Node]()
+	}
+
+	return mo.Some(val)
+}
+
+// childNode returns the value a mapping writes under a key, whatever shape it
+// has. What counts as a usable value is the caller's business: an expansion is
+// nothing to a rule resolving a name, and still worth reading to one asking
+// which address a component listens on.
+func childNode(n *yaml.Node, key string) mo.Option[*yaml.Node] {
 	n = resolveAlias(n)
 	if n == nil || n.Kind != yaml.MappingNode {
 		return mo.None[*yaml.Node]()
@@ -254,12 +272,7 @@ func scalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
 		return mo.None[*yaml.Node]()
 	}
 
-	val := resolveAlias(e.node)
-	if val == nil || val.Kind != yaml.ScalarNode || val.Value == "" || hasExpansion(val.Value) {
-		return mo.None[*yaml.Node]()
-	}
-
-	return mo.Some(val)
+	return mo.Some(e.node)
 }
 
 // walkSettings visits every mapping inside a component's settings, together

@@ -343,11 +343,19 @@ component type, so `zpages/internal` is covered.
 liveness probe comes from the kubelet, off the container's loopback interface,
 so a health check bound to `0.0.0.0` is what a correct deployment looks like —
 and a rule that fires on every correct config is a rule people disable, which
-would take `pprof` down with it. An endpoint nobody wrote is left alone too:
-it takes the extension's own default, which upstream already binds to
-localhost. So is one built from an `${env:...}` expansion, and a hostname other
-than `localhost`, since what a name resolves to is a property of the network
-rather than of the file.
+would take `pprof` down with it.
+
+The rule only reports extensions `service.extensions` actually lists, since
+that is the only thing that starts one — a declaration left out of it binds no
+port, and `unused-component` is what has something to say about it. An endpoint
+nobody wrote is left alone too: it takes the extension's own default, which has
+been `localhost` for both since upstream made `UseLocalHostAsDefaultHost` the
+default in `v0.110`. So is a hostname other than `localhost`, since what a name
+resolves to is a property of the network rather than of the file, and an
+address supplied by `${env:...}`. An expansion standing in for only the *port*
+is still reported — `0.0.0.0:${env:PPROF_PORT}` says plainly who can reach it —
+and an endpoint a `<<` merge supplies is read from the mapping it merges, so
+sharing one debugging block between extensions does not hide it.
 
 ## Schemas
 

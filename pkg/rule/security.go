@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -92,17 +93,94 @@ func (r debugExtensionExposed) Check(ctx *Context) {
 			continue
 		}
 
-		// An endpoint nobody wrote takes the extension's own default, which
-		// upstream already binds to localhost. One built from a confmap
-		// expansion is only an address once the collector starts, and
-		// scalarChild leaves both of those unread.
-		node, written := scalarChild(c.ValueNode, endpointKey).Get()
+		// service.extensions is the only thing that starts an extension, so a
+		// declaration left out of it opens no listener at all. Reporting the
+		// address anyway would be a confident claim about a port nothing
+		// binds, and unused-component already has something to say about the
+		// declaration itself.
+		if !ctx.Index.Enabled(c.ID) {
+			continue
+		}
+
+		// An endpoint nobody wrote takes the extension's own default. Both of
+		// these have defaulted to localhost since upstream made
+		// UseLocalHostAsDefaultHost the default in v0.110, so silence is the
+		// right answer for any release worth targeting; against a release
+		// older than that, where the default was 0.0.0.0, this rule is quiet
+		// about an endpoint that is in fact exposed.
+		node, written := endpointNode(c.ValueNode).Get()
 		if !written {
 			continue
 		}
 
 		r.report(ctx, c, ext, node)
 	}
+}
+
+// endpointNode returns the scalar holding a debugging extension's endpoint.
+//
+// Unlike an extension name, an endpoint that carries a confmap expansion is
+// still worth reading: "0.0.0.0:${env:PPROF_PORT}" parameterises the port and
+// leaves the address written plainly, and the address is the whole question
+// here. scalarChild is therefore the wrong reader for it.
+func endpointNode(settings *yaml.Node) mo.Option[*yaml.Node] {
+	settings = resolveAlias(settings)
+	if settings == nil || settings.Kind != yaml.MappingNode {
+		return mo.None[*yaml.Node]()
+	}
+
+	var merges []*yaml.Node
+
+	for _, e := range mapEntries(settings, "") {
+		switch e.key {
+		case endpointKey:
+			// A key the component writes itself replaces a merged one
+			// outright, so there is nothing further to look at.
+			return endpointScalar(e.node)
+		case "<<":
+			merges = append(merges, e.node)
+		default:
+			// Every other setting is another rule's business.
+		}
+	}
+
+	return mergedEndpoint(merges)
+}
+
+// mergedEndpoint reads the endpoint a "<<" merge supplies to a component that
+// wrote none of its own. The value of a merge is one mapping or a list of
+// them, and the first that holds the key wins, which is what the merge does at
+// load time.
+func mergedEndpoint(merges []*yaml.Node) mo.Option[*yaml.Node] {
+	for _, merge := range merges {
+		merge = resolveAlias(merge)
+		if merge == nil {
+			continue
+		}
+
+		targets := []*yaml.Node{merge}
+		if merge.Kind == yaml.SequenceNode {
+			targets = merge.Content
+		}
+
+		for _, target := range targets {
+			if node, held := childNode(target, endpointKey).Get(); held {
+				return endpointScalar(node)
+			}
+		}
+	}
+
+	return mo.None[*yaml.Node]()
+}
+
+// endpointScalar takes an endpoint's value node when it holds text to read.
+func endpointScalar(n *yaml.Node) mo.Option[*yaml.Node] {
+	n = resolveAlias(n)
+	if n == nil || n.Kind != yaml.ScalarNode || n.Value == "" {
+		return mo.None[*yaml.Node]()
+	}
+
+	return mo.Some(n)
 }
 
 func (r debugExtensionExposed) report(ctx *Context, c config.Component, ext debugExtension, node *yaml.Node) {
@@ -135,7 +213,11 @@ func (r debugExtensionExposed) report(ctx *Context, c config.Component, ext debu
 // classifyEndpoint places the host part of an endpoint. The port does not
 // matter here; who can open a connection to it does.
 func classifyEndpoint(endpoint string) exposure {
-	host := endpointHost(endpoint)
+	host, known := endpointHost(endpoint).Get()
+	if !known {
+		return exposureUnknown
+	}
+
 	if host == "" {
 		return exposureUnspecified // a bare ":1777" listens everywhere
 	}
@@ -159,14 +241,29 @@ func classifyEndpoint(endpoint string) exposure {
 	return exposureUnknown
 }
 
+// expansionMask stands in for a confmap expansion while an endpoint is split
+// into host and port. An expansion carries colons of its own -- ${env:PORT} --
+// which SplitHostPort cannot see past; one opaque token in its place splits
+// where the finished endpoint will. It is a byte no endpoint can contain.
+const expansionMask = "\x00"
+
 // endpointHost returns the address an endpoint listens on, without its port.
-// An endpoint written with no port at all is a host on its own, and so is a
-// bracketed IPv6 address that SplitHostPort will not take.
-func endpointHost(endpoint string) string {
-	host, _, err := net.SplitHostPort(endpoint)
+// It returns nothing when the address is only known once the collector starts,
+// which is not the same as the port being: "0.0.0.0:${env:PPROF_PORT}" says
+// exactly who can reach it, and only the port is left open.
+func endpointHost(endpoint string) mo.Option[string] {
+	masked := expansionRE.ReplaceAllString(endpoint, expansionMask)
+
+	host, _, err := net.SplitHostPort(masked)
 	if err != nil {
-		return strings.Trim(endpoint, "[]")
+		// An endpoint written with no port at all is a host on its own, and so
+		// is a bracketed IPv6 address that SplitHostPort will not take.
+		host = strings.Trim(masked, "[]")
 	}
 
-	return host
+	if strings.Contains(host, expansionMask) {
+		return mo.None[string]()
+	}
+
+	return mo.Some(host)
 }

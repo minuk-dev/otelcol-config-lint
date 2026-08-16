@@ -94,6 +94,23 @@ func TestDebugExtensionExposed(t *testing.T) {
 			settings: "    endpoint: ${env:PPROF_ENDPOINT}",
 			want:     diag.Off,
 		},
+		"an address resolved at runtime": {
+			name:     "pprof",
+			settings: "    endpoint: ${env:PPROF_HOST}:1777",
+			want:     diag.Off,
+		},
+		// Only the port is left open, and the port is not what decides who can
+		// reach the endpoint.
+		"a port resolved at runtime": {
+			name:     "pprof",
+			settings: "    endpoint: 0.0.0.0:${env:PPROF_PORT}",
+			want:     diag.Warning,
+		},
+		"a loopback address with a port resolved at runtime": {
+			name:     "pprof",
+			settings: "    endpoint: localhost:${env:PPROF_PORT}",
+			want:     diag.Off,
+		},
 		"a hostname this linter will not resolve": {
 			name:     "pprof",
 			settings: "    endpoint: collector.internal:1777",
@@ -133,6 +150,109 @@ func TestDebugExtensionExposedSaysWhatIsServed(t *testing.T) {
 	assert.Contains(t, found[0].Message, "every interface of the host")
 	assert.Contains(t, found[0].Hint, "localhost")
 	assert.Equal(t, "extensions.pprof.endpoint", found[0].Path)
+}
+
+// TestExtensionNobodyStartsIsNotReported pins the other half of the rule's
+// premise: service.extensions is what instantiates an extension, so a
+// declaration left out of it binds no port for anyone to reach.
+func TestExtensionNobodyStartsIsNotReported(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+exporters: {debug: }
+extensions:
+  pprof:
+    endpoint: 0.0.0.0:1777
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`
+
+	assert.Empty(t, checkRule(t, "debug-extension-exposed", src, rule.Environment{}))
+	// The declaration is not thereby unremarked: another rule owns it.
+	assert.NotEmpty(t, checkRule(t, "unused-component", src, rule.Environment{}))
+}
+
+// TestMergedEndpointIsRead covers the endpoint a component does not write
+// itself. A "<<" merge is how one debugging block is shared between several
+// extensions, and reading only local keys would miss every one of them.
+func TestMergedEndpointIsRead(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		src  string
+		want bool
+	}{
+		"a merge supplies the endpoint": {
+			src: `
+debug: &debug
+  endpoint: 0.0.0.0:1777
+extensions:
+  pprof:
+    <<: *debug
+`,
+			want: true,
+		},
+		"a merge of several mappings": {
+			src: `
+ports: &ports
+  endpoint: 0.0.0.0:1777
+timeouts: &timeouts
+  idle_timeout: 30s
+extensions:
+  pprof:
+    <<: [*timeouts, *ports]
+`,
+			want: true,
+		},
+		"a local endpoint wins over the merged one": {
+			src: `
+debug: &debug
+  endpoint: 0.0.0.0:1777
+extensions:
+  pprof:
+    <<: *debug
+    endpoint: localhost:1777
+`,
+			want: false,
+		},
+		"a merge that supplies no endpoint": {
+			src: `
+debug: &debug
+  idle_timeout: 30s
+extensions:
+  pprof:
+    <<: *debug
+`,
+			want: false,
+		},
+	}
+
+	const wiring = `
+receivers: {otlp: }
+exporters: {debug: }
+service:
+  extensions: [pprof]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkRule(t, "debug-extension-exposed", tt.src+wiring, rule.Environment{})
+			if !tt.want {
+				assert.Empty(t, found)
+
+				return
+			}
+
+			require.Len(t, found, 1)
+			assert.Contains(t, found[0].Message, "0.0.0.0:1777")
+		})
+	}
 }
 
 // TestHealthCheckIsNotReported records the exclusion: the kubelet issues a
