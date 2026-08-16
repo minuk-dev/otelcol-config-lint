@@ -243,12 +243,13 @@ alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `insecure-tls`, `memory-limiter-config`,
-`memory-limiter-sizing`, `batch-size-bounds`, `no-persistent-queue`.
+`memory-limiter-sizing`, `batch-size-bounds`, `no-persistent-queue`,
+`debug-exporter-verbosity`.
 
 Every practice rule cites the upstream page it rests on — the
-`memorylimiterprocessor`, `batchprocessor` and `exporterhelper` READMEs,
-`configtls`, and the Kubernetes resource docs for the container's request and
-limit.
+`memorylimiterprocessor`, `batchprocessor`, `exporterhelper` and
+`debugexporter` READMEs, `configtls`, and the Kubernetes resource docs for the
+container's request and limit.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:
@@ -312,6 +313,36 @@ is deliberately no default-disabled rule concept for it: `info` is already below
 `--min-severity warning`, which is a normal way to run, and `disable:
 [no-persistent-queue]` in the settings file turns it off for good. A second
 mechanism that means roughly the same thing would only be another place to look.
+
+`debug-exporter-verbosity` catches the exporter somebody added to find out why
+an export was failing and never took out again. It prints what it is given to
+the collector's own log, and at `verbosity: detailed` that is every field of
+every span, data point and record in the pipeline — the collector spends its
+time formatting log lines, and the log backend receives a second copy of all the
+telemetry the collector was meant to be forwarding.
+
+```yaml
+exporters:
+  debug:
+    verbosity: detailed    # a line per record, not per batch
+service:
+  pipelines:
+    traces:
+      exporters: [otlp, debug]    # and it ships to production like this
+```
+
+That is the `warning`. Below it, at `info`, is one quiet note for a `debug`
+exporter at any verbosity: `basic` costs a line per batch rather than per
+record, which is cheap enough not to be a warning, but it is still a diagnostic
+tool left running, and upstream keeps no stable output format, so nothing
+downstream should be parsing it either. Both clauses match on the type, so
+`debug/verbose` counts, and both report per pipeline that references the
+exporter — that is what the message names and where the reader takes it out of.
+An exporter no pipeline references prints nothing and is `unused-component`'s to
+report; the `logging` exporter that came before it is `deprecated-component`'s.
+`warning` rather than `error` is deliberate: a deliberate debug run is
+legitimate and should not fail a CI job, and `--severity
+debug-exporter-verbosity=error` is there for anyone who wants it fatal.
 
 **Security** — `debug-extension-exposed`.
 
