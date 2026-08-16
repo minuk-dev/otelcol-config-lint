@@ -243,14 +243,14 @@ alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
 `missing-batch`, `memory-limiter-config`, `memory-limiter-sizing`,
-`batch-size-bounds`, `no-persistent-queue`.
+`batch-size-bounds`, `no-persistent-queue`, `debug-exporter-verbosity`.
 
-**Security** — `insecure-tls`, `hardcoded-secret`.
+**Security** — `insecure-tls`, `debug-extension-exposed`, `hardcoded-secret`.
 
 Every practice and security rule cites the upstream page it rests on — the
-`memorylimiterprocessor`, `batchprocessor` and `exporterhelper` READMEs,
-`configtls`, the config security best practices, and the Kubernetes resource
-docs for the container's request and limit.
+`memorylimiterprocessor`, `batchprocessor`, `exporterhelper` and
+`debugexporter` READMEs, `configtls`, upstream's security best practices, and
+the Kubernetes resource docs for the container's request and limit.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:
@@ -314,6 +314,78 @@ is deliberately no default-disabled rule concept for it: `info` is already below
 `--min-severity warning`, which is a normal way to run, and `disable:
 [no-persistent-queue]` in the settings file turns it off for good. A second
 mechanism that means roughly the same thing would only be another place to look.
+
+`debug-exporter-verbosity` catches the exporter somebody added to find out why
+an export was failing and never took out again. It prints what it is given to
+the collector's own log, and at `verbosity: detailed` that is every field of
+every span, data point and record in the pipeline — the collector spends its
+time formatting log lines, and the log backend receives a second copy of all the
+telemetry the collector was meant to be forwarding.
+
+```yaml
+exporters:
+  debug:
+    verbosity: detailed    # a line per record, not per batch
+service:
+  pipelines:
+    traces:
+      exporters: [otlp, debug]    # and it ships to production like this
+```
+
+That is the `warning`. Below it, at `info`, is one quiet note for a `debug`
+exporter at any verbosity: `basic` costs a line per batch rather than per
+record, which is cheap enough not to be a warning, but it is still a diagnostic
+tool left running, and upstream keeps no stable output format, so nothing
+downstream should be parsing it either. Both clauses match on the type, so
+`debug/verbose` counts, and both report per pipeline that references the
+exporter — that is what the message names and where the reader takes it out of.
+An exporter no pipeline references prints nothing and is `unused-component`'s to
+report; the `logging` exporter that came before it is `deprecated-component`'s.
+`warning` rather than `error` is deliberate: a deliberate debug run is
+legitimate and should not fail a CI job, and `--severity
+debug-exporter-verbosity=error` is there for anyone who wants it fatal.
+
+`debug-extension-exposed` rests on upstream's [security guidance](https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md),
+which is direct about avoiding "exposing health or telemetry data outside the
+Collector by default", and the debugging extensions are the ones that do it.
+`pprof` serves heap profiles, goroutine dumps and the collector's command line;
+`zpages` serves live traces and pipeline internals.
+This is narrower than a general bind-address check, and separate from it
+because the consequence differs in kind: a `0.0.0.0` OTLP receiver accepts data
+it should not, while a `0.0.0.0` pprof endpoint *hands out* process internals.
+
+```yaml
+extensions:
+  pprof:
+    endpoint: 0.0.0.0:1777     # warning: heap profiles, on every interface
+  zpages:
+    endpoint: 10.0.4.7:55679   # info: deliberate, but that network can read it
+```
+
+The two cases are reported apart because they have different fixes. An
+unspecified address — `0.0.0.0`, `[::]`, a bare `:1777` — is reachable from
+every interface the host has and reports at `warning`; a specific non-loopback
+address was chosen by someone and reports at `info`, saying only that the
+network it sits on can read the collector's internals. Both are matched on
+component type, so `zpages/internal` is covered.
+
+`health_check` and `healthcheckv2` are deliberately left out. A Kubernetes
+liveness probe comes from the kubelet, off the container's loopback interface,
+so a health check bound to `0.0.0.0` is what a correct deployment looks like —
+and a rule that fires on every correct config is a rule people disable, which
+would take `pprof` down with it.
+
+The rule only reports extensions `service.extensions` actually lists, since
+that is the only thing that starts one — a declaration left out of it binds no
+port, and `unused-component` is what has something to say about it. An endpoint
+nobody wrote is left alone too: it takes the extension's own default, which has
+been `localhost` for both since upstream made `UseLocalHostAsDefaultHost` the
+default in `v0.110`. So is a hostname other than `localhost`, since what a name
+resolves to is a property of the network rather than of the file, and an
+address supplied by `${env:...}`. An expansion standing in for only the *port*
+is still reported — `0.0.0.0:${env:PPROF_PORT}` says plainly who can reach it —
+and an endpoint a `<<` merge supplies is read from the mapping it merges, so
+sharing one debugging block between extensions does not hide it.
 
 `hardcoded-secret` is the one rule about the file rather than the collector.
 Configs live in git, and exporter credentials are written in the same file as

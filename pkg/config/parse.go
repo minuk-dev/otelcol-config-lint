@@ -93,7 +93,10 @@ func (p Pipeline) Refs(k Kind) []Ref {
 type Ref struct {
 	ID   ID
 	Node *yaml.Node
-	// Path is the dotted YAML path of the reference.
+	// Path is the dotted YAML path of the reference, from the root of the
+	// document rather than from the service block: a pipeline's first exporter
+	// is "service.pipelines.traces.exporters[0]". A caller reporting one has
+	// nothing to prepend.
 	Path string
 }
 
