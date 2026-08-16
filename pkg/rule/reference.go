@@ -34,7 +34,7 @@ func (r undefinedReference) Check(ctx *Context) {
 		}
 
 		ctx.Report(Finding{
-			Node: ref.Node, Path: "service." + ref.Path,
+			Node: ref.Node, Path: ref.Path,
 			Message: "service.extensions references " + quote(ref.ID.String()) + " which is not declared under extensions",
 			Hint:    misplacedHint(ctx, ref.ID, config.KindExtension),
 		})
@@ -48,7 +48,7 @@ func (r undefinedReference) Check(ctx *Context) {
 				}
 
 				ctx.Report(Finding{
-					Node: ref.Node, Path: "service." + ref.Path,
+					Node: ref.Node, Path: ref.Path,
 					Message: "pipeline " + quote(p.Key) + " references " + string(slot) + " " +
 						quote(ref.ID.String()) + " which is not declared under " + slot.Section(),
 					Hint: misplacedHint(ctx, ref.ID, slot),
@@ -173,7 +173,7 @@ func (r duplicateReference) Check(ctx *Context) {
 			for _, ref := range p.Refs(slot) {
 				if seen[ref.ID] {
 					ctx.Report(Finding{
-						Node: ref.Node, Path: "service." + ref.Path,
+						Node: ref.Node, Path: ref.Path,
 						Message: quote(ref.ID.String()) + " is listed twice in " + p.Key + "." + slot.Section(),
 					})
 				}

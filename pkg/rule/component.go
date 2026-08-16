@@ -145,7 +145,7 @@ func (r signalSupport) Check(ctx *Context) {
 				}
 
 				ctx.Report(Finding{
-					Node: ref.Node, Path: "service." + ref.Path,
+					Node: ref.Node, Path: ref.Path,
 					Message: string(decl.Kind) + " " + quote(ref.ID.Type) + " does not support " +
 						string(p.Signal) + " in pipeline " + quote(p.Key),
 					Hint: "it supports: " + comp.SignalList(),

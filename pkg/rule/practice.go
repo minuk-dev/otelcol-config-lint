@@ -46,7 +46,7 @@ func (r processorOrder) Check(ctx *Context) {
 		for i, ref := range p.Processors {
 			if ref.ID.Type == memoryLimiterType && i != 0 {
 				ctx.Report(Finding{
-					Node: ref.Node, Path: "service." + ref.Path,
+					Node: ref.Node, Path: ref.Path,
 					Message: "memory_limiter is processor " + itoa(i+1) + " in pipeline " + quote(p.Key) +
 						"; it must be first",
 					Hint: "move " + quote(ref.ID.String()) + " to the front of " + path,
@@ -60,7 +60,7 @@ func (r processorOrder) Check(ctx *Context) {
 				}
 
 				ctx.Report(Finding{
-					Node: ref.Node, Path: "service." + ref.Path,
+					Node: ref.Node, Path: ref.Path,
 					Message:  "batch runs before other processors in pipeline " + quote(p.Key),
 					Hint:     "put batch last so upstream processors see individual items and cannot drop whole batches",
 					Docs:     batchDocs,
