@@ -34,6 +34,11 @@ const (
 	// extensions implement the interface it needs.
 	authDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/config/configauth/README.md"
+	// securityDocs is upstream's security guidance. Its extensions section is
+	// what says to avoid exposing health or telemetry data outside the
+	// collector by default, and names the extensions that do.
+	securityDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
+		"/blob/main/docs/security-best-practices.md"
 	// kubernetesResourceDocs states what requests and limits do, and the QoS
 	// class a pod lands in when they differ.
 	kubernetesResourceDocs = "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"

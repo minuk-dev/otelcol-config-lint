@@ -344,6 +344,50 @@ report; the `logging` exporter that came before it is `deprecated-component`'s.
 legitimate and should not fail a CI job, and `--severity
 debug-exporter-verbosity=error` is there for anyone who wants it fatal.
 
+**Security** — `debug-extension-exposed`.
+
+Upstream's [security guidance](https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md)
+is direct about avoiding "exposing health or telemetry data outside the
+Collector by default", and the debugging extensions are the ones that do it.
+`pprof` serves heap profiles, goroutine dumps and the collector's command line;
+`zpages` serves live traces and pipeline internals.
+This is narrower than a general bind-address check, and separate from it
+because the consequence differs in kind: a `0.0.0.0` OTLP receiver accepts data
+it should not, while a `0.0.0.0` pprof endpoint *hands out* process internals.
+
+```yaml
+extensions:
+  pprof:
+    endpoint: 0.0.0.0:1777     # warning: heap profiles, on every interface
+  zpages:
+    endpoint: 10.0.4.7:55679   # info: deliberate, but that network can read it
+```
+
+The two cases are reported apart because they have different fixes. An
+unspecified address — `0.0.0.0`, `[::]`, a bare `:1777` — is reachable from
+every interface the host has and reports at `warning`; a specific non-loopback
+address was chosen by someone and reports at `info`, saying only that the
+network it sits on can read the collector's internals. Both are matched on
+component type, so `zpages/internal` is covered.
+
+`health_check` and `healthcheckv2` are deliberately left out. A Kubernetes
+liveness probe comes from the kubelet, off the container's loopback interface,
+so a health check bound to `0.0.0.0` is what a correct deployment looks like —
+and a rule that fires on every correct config is a rule people disable, which
+would take `pprof` down with it.
+
+The rule only reports extensions `service.extensions` actually lists, since
+that is the only thing that starts one — a declaration left out of it binds no
+port, and `unused-component` is what has something to say about it. An endpoint
+nobody wrote is left alone too: it takes the extension's own default, which has
+been `localhost` for both since upstream made `UseLocalHostAsDefaultHost` the
+default in `v0.110`. So is a hostname other than `localhost`, since what a name
+resolves to is a property of the network rather than of the file, and an
+address supplied by `${env:...}`. An expansion standing in for only the *port*
+is still reported — `0.0.0.0:${env:PPROF_PORT}` says plainly who can reach it —
+and an endpoint a `<<` merge supplies is read from the mapping it merges, so
+sharing one debugging block between extensions does not hide it.
+
 ## Schemas
 
 Schemas are published at
