@@ -39,7 +39,8 @@ const (
 	tlsDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/config/configtls/README.md"
 	// exporterQueueDocs states that sending_queue.storage names the storage
-	// extension a persistent queue writes through.
+	// extension a persistent queue writes through, and that sending_queue.batch
+	// batches behind the queue, with the defaults flush_timeout takes.
 	exporterQueueDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/exporter/exporterhelper/README.md"
 	// authDocs states that auth.authenticator names an extension, and which

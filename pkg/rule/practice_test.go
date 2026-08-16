@@ -358,6 +358,286 @@ exporters:
 	}
 }
 
+func TestMissingBatch(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		settings string
+		want     bool // whether the pipeline should be reported
+	}{
+		"no queue settings at all": {
+			settings: "",
+			want:     true,
+		},
+		"a queue that does not batch": {
+			settings: "    sending_queue:\n      queue_size: 5000",
+			want:     true,
+		},
+		// The block is optional upstream, so writing the key is what turns the
+		// batcher on and an empty one takes the defaults.
+		"a queue that batches": {
+			settings: "    sending_queue:\n      batch: {}",
+			want:     false,
+		},
+		"a batch key with nothing under it": {
+			settings: "    sending_queue:\n      batch:",
+			want:     false,
+		},
+		"a batch with settings of its own": {
+			settings: "    sending_queue:\n      batch:\n        flush_timeout: 200ms\n        min_size: 8192",
+			want:     false,
+		},
+		// The queue is on by default and batching is not, so an exporter that
+		// only turns the queue on still sends a span at a time.
+		"a queue turned on and nothing else": {
+			settings: "    sending_queue:\n      enabled: true",
+			want:     true,
+		},
+		// Nothing here can see what the variable holds, and telling an exporter
+		// that already batches to batch is the finding this rule must not make.
+		"a queue built from an expansion": {
+			settings: "    sending_queue: ${env:QUEUE}",
+			want:     false,
+		},
+		"a queue built from a merge key": {
+			settings: "    sending_queue:\n      <<: &queue {queue_size: 5000}\n      storage: file_storage",
+			want:     false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkRule(t, "missing-batch", exporting(tt.settings), rule.Environment{})
+			assert.Len(t, found, map[bool]int{true: 1, false: 0}[tt.want])
+		})
+	}
+}
+
+// The hint is the whole point of the change: exporter-side batching first, with
+// the reason it comes first, and the processor named as what also works.
+func TestMissingBatchReadsAsASentence(t *testing.T) {
+	t.Parallel()
+
+	const hint = "the batch processor also works but drops data that fails to send"
+
+	found := checkRule(t, "missing-batch", exporting(""), rule.Environment{})
+	require.Len(t, found, 1)
+
+	assert.Equal(t, `pipeline "traces" has no batch processor, and none of its exporters batches in sending_queue`,
+		found[0].Message)
+	assert.Equal(t, "configure sending_queue.batch on the exporters, which batches behind the retry queue; "+
+		hint, found[0].Hint)
+	assert.Equal(t, "service.pipelines.traces.processors", found[0].Path)
+	assert.Equal(t, diag.Info, found[0].Severity)
+	assert.Contains(t, found[0].Docs, "exporter/exporterhelper/README.md")
+}
+
+// A pipeline where only some exporters batch is under-batched on the legs that
+// do not, so the finding names the exporter rather than the pipeline: the fix
+// is written in that exporter's settings and nowhere else.
+func TestMissingBatchReportsPerExporter(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+    sending_queue:
+      batch: {}
+  otlphttp/second:
+    endpoint: http://other:4318
+  otlphttp/third:
+    endpoint: http://third:4318
+    sending_queue:
+      batch:
+        flush_timeout: 200ms
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp, otlphttp/second, otlphttp/third]}
+`
+
+	found := checkRule(t, "missing-batch", src, rule.Environment{})
+	require.Len(t, found, 1)
+
+	assert.Equal(t, `exporter "otlphttp/second" sends unbatched in pipeline "traces", `+
+		"which has no batch processor", found[0].Message)
+	assert.Equal(t, "configure sending_queue.batch on this exporter, which batches behind the retry queue; "+
+		"the batch processor also works but drops data that fails to send", found[0].Hint)
+	assert.Equal(t, "service.pipelines.traces.exporters[1]", found[0].Path)
+}
+
+// An exporter the schema says has no sending queue -- debug and nop among them
+// -- can only be batched in front of, and a hint naming a setting it does not
+// have would be no fix.
+func TestMissingBatchWithoutASendingQueue(t *testing.T) {
+	t.Parallel()
+
+	const processorFirst = "add batch before the exporters to reduce the number of outgoing requests; "
+
+	pipeline := checkRule(t, "missing-batch", debugging(""), rule.Environment{})
+	require.Len(t, pipeline, 1)
+	assert.Equal(t, processorFirst+"these exporters have no sending_queue to batch in", pipeline[0].Hint)
+	assert.Contains(t, pipeline[0].Docs, "processor/batchprocessor/README.md")
+
+	mixed := checkRule(t, "missing-batch", `
+receivers: {otlp: }
+exporters:
+  debug:
+  otlphttp:
+    endpoint: http://backend:4318
+    sending_queue: {batch: {}}
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug, otlphttp]}
+`, rule.Environment{})
+	require.Len(t, mixed, 1)
+	assert.Equal(t, `exporter "debug" sends unbatched in pipeline "traces", which has no batch processor`,
+		mixed[0].Message)
+	assert.Equal(t, processorFirst+"this exporter has no sending_queue to batch in", mixed[0].Hint)
+}
+
+func TestMissingBatchStaysQuiet(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		// The processor is not deprecated, so a pipeline that uses it batches
+		// and this rule has nothing to say about it.
+		"a batch processor": `
+receivers: {otlp: }
+processors: {batch: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch], exporters: [otlphttp]}
+`,
+		// A named instance is the same processor.
+		"a batch processor under another name": `
+receivers: {otlp: }
+processors: {batch/large: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch/large], exporters: [otlphttp]}
+`,
+		// Every leg batches in its own queue, and a batch processor on top
+		// would be a second layer with a flush timing of its own.
+		"every exporter batching in its queue": `
+receivers: {otlp: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+    sending_queue: {batch: {}}
+  otlphttp/second:
+    endpoint: http://other:4318
+    sending_queue: {batch: {flush_timeout: 1s}}
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp, otlphttp/second]}
+`,
+		// An anchor is the same queue written once and used twice.
+		"a queue behind an anchor": `
+receivers: {otlp: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+    sending_queue: &queue
+      batch: {}
+  otlphttp/second:
+    endpoint: http://other:4318
+    sending_queue: *queue
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp, otlphttp/second]}
+`,
+		// A merge may be what supplies the batcher, and the document is read as
+		// written.
+		"settings built from a merge key": `
+receivers: {otlp: }
+exporters:
+  otlphttp:
+    <<: &base {sending_queue: {batch: {}}}
+    endpoint: http://backend:4318
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp]}
+`,
+		// The schema resolved no fields for this one, so there is nothing to
+		// say what it does before it sends. testSchema's logging exporter has
+		// the same shape as the datadog exporter's entry.
+		"an exporter the schema does not describe": `
+receivers: {otlp: }
+exporters: {logging: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [logging]}
+`,
+		// A connector is not a leg out of the collector: it feeds another
+		// pipeline, which has exporters of its own to batch on.
+		"a pipeline that only feeds a connector": `
+receivers: {otlp: }
+connectors: {spanmetrics: }
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+    sending_queue: {batch: {}}
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [spanmetrics]}
+    metrics: {receivers: [spanmetrics], exporters: [otlphttp]}
+`,
+		// Nothing declares it, so the collector does not start at all and
+		// undefined-reference is the finding worth having.
+		"an exporter nobody declared": `
+receivers: {otlp: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp]}
+`,
+		"a pipeline with no exporters": `
+receivers: {otlp: }
+service:
+  pipelines:
+    traces: {receivers: [otlp]}
+`,
+		"no service block": `
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+`,
+	}
+
+	for name, src := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Empty(t, checkRule(t, "missing-batch", src, rule.Environment{}))
+		})
+	}
+}
+
+// Without a schema there is nothing to say what an exporter does before it
+// sends, and the field rules' principle applies: partial coverage says nothing
+// rather than something wrong.
+func TestMissingBatchWithoutASchema(t *testing.T) {
+	t.Parallel()
+
+	f, err := config.Parse("test.yaml", []byte(exporting("")))
+	require.NoError(t, err, "parse")
+
+	r, ok := rule.Lookup("missing-batch")
+	require.True(t, ok, "rule is not registered")
+
+	found := rule.Run(r, rule.Context{File: f, Schema: &schema.Schema{}, Index: rule.NewIndex(f)}, r.Severity())
+	assert.Empty(t, found)
+}
+
 func TestNoPersistentQueue(t *testing.T) {
 	t.Parallel()
 

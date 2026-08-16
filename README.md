@@ -307,6 +307,41 @@ case-insensitively, so `tenant` and `Tenant` are one key. Both sizes are
 negative or over-large count is reported here too — it fails to load rather than
 to validate, and saying so beats hinting at a fix that still will not start.
 
+`missing-batch` reports a pipeline that batches nothing on its way out, and
+there are now two ways not to be one. `exporterhelper` batches inside the
+sending queue, under `sending_queue.batch`, which sits behind the queue and the
+retry logic rather than in front of them; the `batch` processor
+[drops the data in a batch that fails to send](https://github.com/open-telemetry/opentelemetry-collector/issues/12443),
+and the queue batcher does not. That is why the hint leads with the exporter
+setting and names the processor as what also works. The processor is not
+deprecated — upstream has explicitly not decided that — so a pipeline that uses
+it is a pipeline that batches, and nothing here says to take it out.
+
+```yaml
+exporters:
+  otlphttp:
+    endpoint: http://backend:4318
+    sending_queue:
+      batch:                   # off by default; writing the block turns it on
+        flush_timeout: 200ms
+```
+
+A pipeline whose exporters all do that gets no finding: it batches, and a
+`batch` processor added on top would be a second layer with a flush timing of
+its own. Where only some of them do, the pipeline is under-batched on the legs
+that do not, so the finding names the exporter and sits on the line that wires
+it in — that exporter's settings are where the fix is written. A connector in
+the exporter slot is not a leg out of the collector and is not counted; it feeds
+another pipeline, which has exporters of its own. An exporter whose settings
+come from a merge key or an expansion, and one whose type the field schema does
+not describe, count as unknown rather than as not batching, for the same reason
+the field rules leave what they cannot resolve alone.
+
+The hint follows the schema rather than the other way round: where the exporters
+have no `sending_queue` to hold a batcher — `nop`, and `debug` on a release
+before upstream gave it a queue — it names the processor instead, because a fix
+the component has no setting for is no fix.
+
 `no-persistent-queue` is the one opinionated rule, and it reports at `info` for
 that reason. The sending queue is on by default and lives in memory, so a
 deploy, an OOM kill or a node drain takes everything still in it — and nothing
