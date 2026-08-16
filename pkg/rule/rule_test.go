@@ -515,6 +515,20 @@ service:
 `,
 			path: "service.pipelines.traces.processors[1]",
 		},
+		// processor-order's other clause, which reports a different processor
+		// in the same slot and so is a second place the prefix could come back.
+		"a batch that runs before another processor": {
+			rule: "processor-order",
+			src: `
+receivers: {otlp: }
+processors: {batch: , batch/second: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch, batch/second], exporters: [debug]}
+`,
+			path: "service.pipelines.traces.processors[0]",
+		},
 	}
 
 	for name, tt := range tests {
