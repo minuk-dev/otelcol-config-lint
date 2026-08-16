@@ -427,9 +427,12 @@ say so; empty values and placeholders (`changeme`, `<your-token>`, `REPLACE_ME`,
 `none`) are a config with no credential in it yet, behind an auth scheme as much
 as on their own; a boolean is a switch rather than a credential, whatever the
 setting is called; and a key naming *where* a credential lives rather than
-holding one — `private_key_file`, `token_url`, `cert_pem` — is a correctly
-configured component, so keys ending in `_file`, `_path`, `_url`, `_uri` and
-`_name` are excluded before anything else. It reports at `warning`, because a
+holding one — `private_key_file`, `token_url` — is a correctly configured
+component, so keys ending in `_file`, `_path`, `_url`, `_uri` and `_name` are
+excluded before anything else. `cert_pem` and `ca_pem` are left out the other
+way, by not being named: the public half of a keypair is not a credential, while
+`key_pem` — a private key written inline — is the worst of these to miss and is
+named for that reason. It reports at `warning`, because a
 local config with a dummy credential is legitimate and this rule will meet
 plenty of them.
 
