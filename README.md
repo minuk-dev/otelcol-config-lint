@@ -245,7 +245,8 @@ alone.
 `missing-batch`, `memory-limiter-config`, `memory-limiter-sizing`,
 `batch-size-bounds`, `no-persistent-queue`, `debug-exporter-verbosity`.
 
-**Security** — `insecure-tls`, `debug-extension-exposed`, `hardcoded-secret`.
+**Security** — `insecure-tls`, `receiver-binds-all-interfaces`,
+`debug-extension-exposed`, `hardcoded-secret`.
 
 Every practice and security rule cites the upstream page it rests on — the
 `memorylimiterprocessor`, `batchprocessor`, `exporterhelper` and
@@ -345,12 +346,58 @@ report; the `logging` exporter that came before it is `deprecated-component`'s.
 legitimate and should not fail a CI job, and `--severity
 debug-exporter-verbosity=error` is there for anyone who wants it fatal.
 
+`receiver-binds-all-interfaces` is the one upstream's [config best
+practices](https://opentelemetry.io/docs/security/config-best-practices/) lead
+with, and the most common way a collector ends up reachable from more of the
+network than anyone meant:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317   # every interface, not just the one you meant
+```
+
+The collector changed its own default to `localhost` in `v0.110.0` for exactly
+this reason. The example configs the ecosystem copies from did not — the ones on
+opentelemetry.io say outright that they use the unspecified address "as a
+convenience" — and those get pasted into production. Every spelling of it is
+matched: `0.0.0.0`, `[::]`, a bare `:4317`, and `:::4317`, which is what netstat
+prints for an IPv6 listener and which Go refuses outright, so a collector handed
+one does not start at all.
+
+Only endpoints something *listens* on are read, and the split is by kind:
+receivers and extensions bind, while an exporter's or a connector's `endpoint`
+names somewhere to send to. `0.0.0.0` there is also wrong, but it is a different
+mistake with a different fix, and a bind-address hint on a line about a backend
+would be worse than silence. Within a component the walk is by key name rather
+than by a table of where each type keeps its address, since `otlp` writes one per
+protocol and most others write one at the top; each is reported separately,
+because each is its own line to edit. Two key names are read, not one: the
+stanza-based log receivers call it `listen_address` — `tcplog`, `udplog`, and
+`syslog` under each of its `tcp` and `udp` blocks — and reading only `endpoint`
+would leave every one of them unreported. A receiver no pipeline names and an
+extension `service.extensions` leaves out are both skipped — neither is ever
+instantiated, so neither binds anything — as is an endpoint nobody wrote, which
+takes the component's own default. `${env:MY_POD_IP}:4317` is the fix, so it is
+not a finding; `0.0.0.0:${env:PORT}` still is, since the address says plainly
+who can reach it and only the port is left open.
+
+The hint carries the fix rather than only the objection: bind `127.0.0.1` when
+every client is local, and in Kubernetes write `${env:MY_POD_IP}`, taking the pod
+IP from the downward API. It reports at `warning`, not `error` — a gateway behind
+a service mesh with its own network policy binds every interface deliberately.
+`health_check` and `healthcheckv2` are left out for the same reason
+`debug-extension-exposed` leaves them out, below, and `pprof` and `zpages` are
+that rule's to report.
+
 `debug-extension-exposed` rests on upstream's [security guidance](https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md),
 which is direct about avoiding "exposing health or telemetry data outside the
 Collector by default", and the debugging extensions are the ones that do it.
 `pprof` serves heap profiles, goroutine dumps and the collector's command line;
 `zpages` serves live traces and pipeline internals.
-This is narrower than a general bind-address check, and separate from it
+This is narrower than the general bind-address check above, and separate from it
 because the consequence differs in kind: a `0.0.0.0` OTLP receiver accepts data
 it should not, while a `0.0.0.0` pprof endpoint *hands out* process internals.
 

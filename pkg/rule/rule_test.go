@@ -104,7 +104,7 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
+        endpoint: localhost:4317
 processors:
   memory_limiter:
     check_interval: 1s
@@ -459,6 +459,21 @@ service:
     traces: {receivers: [otlp], exporters: [debug]}
 `,
 			want: "debug-extension-exposed",
+		},
+		{
+			name: "a receiver bound to every interface",
+			src: `
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`,
+			want: "receiver-binds-all-interfaces",
 		},
 	}
 
