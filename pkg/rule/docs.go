@@ -18,6 +18,11 @@ const (
 	// batchDocs states what batching is for and where it belongs.
 	batchDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/processor/batchprocessor/README.md"
+	// debugDocs states what each verbosity prints, that detailed writes
+	// multiple lines per record, that sampling_initial and sampling_thereafter
+	// bound the rate, and that the output format is not stable.
+	debugDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
+		"/blob/main/exporter/debugexporter/README.md"
 	// tlsDocs states what the TLS settings mean, insecure among them.
 	tlsDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/config/configtls/README.md"

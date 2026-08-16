@@ -432,6 +432,19 @@ service:
 `,
 			want: "no-persistent-queue",
 		},
+		{
+			name: "a debug exporter logging every record it is given",
+			src: `
+receivers: {otlp: }
+exporters:
+  debug:
+    verbosity: detailed
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`,
+			want: "debug-exporter-verbosity",
+		},
 	}
 
 	for _, tt := range tests {
