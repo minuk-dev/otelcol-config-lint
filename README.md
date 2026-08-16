@@ -242,13 +242,15 @@ coverage never produces false positives. `${env:...}` expansions are left
 alone.
 
 **Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
-`missing-batch`, `insecure-tls`, `memory-limiter-config`,
-`memory-limiter-sizing`, `batch-size-bounds`, `no-persistent-queue`.
+`missing-batch`, `memory-limiter-config`, `memory-limiter-sizing`,
+`batch-size-bounds`, `no-persistent-queue`.
 
-Every practice rule cites the upstream page it rests on — the
+**Security** — `insecure-tls`, `hardcoded-secret`.
+
+Every practice and security rule cites the upstream page it rests on — the
 `memorylimiterprocessor`, `batchprocessor` and `exporterhelper` READMEs,
-`configtls`, and the Kubernetes resource docs for the container's request and
-limit.
+`configtls`, the config security best practices, and the Kubernetes resource
+docs for the container's request and limit.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:
@@ -312,6 +314,39 @@ is deliberately no default-disabled rule concept for it: `info` is already below
 `--min-severity warning`, which is a normal way to run, and `disable:
 [no-persistent-queue]` in the settings file turns it off for good. A second
 mechanism that means roughly the same thing would only be another place to look.
+
+`hardcoded-secret` is the one rule about the file rather than the collector.
+Configs live in git, and exporter credentials are written in the same file as
+everything else:
+
+```yaml
+exporters:
+  otlp:
+    endpoint: backend:4317
+    headers:
+      authorization: Bearer ${env:OTLP_TOKEN}   # not the literal token
+```
+
+Upstream's guidance is to keep sensitive values in a secret store or on an
+encrypted filesystem and pull them in with an expansion, and CI is the last
+moment before the value reaches a remote. The rule walks every declared
+component — wired or not, since a credential in the repository has already been
+handed over — and reports a scalar whose key names a credential (`password`,
+`token`, `api_key`, `secret`, `private_key`, `access_key`, `passphrase`, matched
+as a case-insensitive substring, so `sasl_password` is covered) and whose value
+is written out in full. `authorization` and any header value opening with
+`Bearer` or `Basic` are covered too.
+
+**It never prints the value**, only the path: copying the secret into the CI log
+is the one thing this rule must not do. False positives are the risk it carries,
+so it gives up findings freely. `${env:...}` and `${file:...}` are the fix and
+say so; empty values and placeholders (`changeme`, `<your-token>`, `REPLACE_ME`,
+`none`) are a config with no credential in it yet; and a key naming *where* a
+credential lives rather than holding one — `private_key_file`, `token_url` — is
+a correctly configured component, so keys ending in `_file`, `_path`, `_url`,
+`_uri` and `_name` are excluded before anything else. It reports at `warning`,
+because a local config with a dummy credential is legitimate and this rule will
+meet plenty of them.
 
 ## Schemas
 

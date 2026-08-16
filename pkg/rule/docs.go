@@ -29,6 +29,9 @@ const (
 	// extensions implement the interface it needs.
 	authDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/config/configauth/README.md"
+	// configSecurityDocs states that sensitive settings belong in a secret
+	// store or on an encrypted filesystem, pulled into the config by expansion.
+	configSecurityDocs = "https://opentelemetry.io/docs/security/config-best-practices/"
 	// kubernetesResourceDocs states what requests and limits do, and the QoS
 	// class a pod lands in when they differ.
 	kubernetesResourceDocs = "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
