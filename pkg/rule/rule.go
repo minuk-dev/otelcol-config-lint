@@ -141,6 +141,7 @@ func All() []Rule {
 		fieldRules(),
 		settingsRules(),
 		practiceRules(),
+		securityRules(),
 	)
 	slices.SortFunc(rules, func(a, b Rule) int { return strings.Compare(a.Name(), b.Name()) })
 

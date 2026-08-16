@@ -313,6 +313,42 @@ is deliberately no default-disabled rule concept for it: `info` is already below
 [no-persistent-queue]` in the settings file turns it off for good. A second
 mechanism that means roughly the same thing would only be another place to look.
 
+**Security** — `debug-extension-exposed`.
+
+Upstream's [security guidance](https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/security-best-practices.md)
+is direct about avoiding "exposing health or telemetry data outside the
+Collector by default", and the debugging extensions are the ones that do it.
+`pprof` serves heap profiles, goroutine dumps and the collector's command line;
+`zpages` serves live traces and pipeline internals.
+This is narrower than a general bind-address check, and separate from it
+because the consequence differs in kind: a `0.0.0.0` OTLP receiver accepts data
+it should not, while a `0.0.0.0` pprof endpoint *hands out* process internals.
+
+```yaml
+extensions:
+  pprof:
+    endpoint: 0.0.0.0:1777     # warning: heap profiles, on every interface
+  zpages:
+    endpoint: 10.0.4.7:55679   # info: deliberate, but that network can read it
+```
+
+The two cases are reported apart because they have different fixes. An
+unspecified address — `0.0.0.0`, `[::]`, a bare `:1777` — is reachable from
+every interface the host has and reports at `warning`; a specific non-loopback
+address was chosen by someone and reports at `info`, saying only that the
+network it sits on can read the collector's internals. Both are matched on
+component type, so `zpages/internal` is covered.
+
+`health_check` and `healthcheckv2` are deliberately left out. A Kubernetes
+liveness probe comes from the kubelet, off the container's loopback interface,
+so a health check bound to `0.0.0.0` is what a correct deployment looks like —
+and a rule that fires on every correct config is a rule people disable, which
+would take `pprof` down with it. An endpoint nobody wrote is left alone too:
+it takes the extension's own default, which upstream already binds to
+localhost. So is one built from an `${env:...}` expansion, and a hostname other
+than `localhost`, since what a name resolves to is a property of the network
+rather than of the file.
+
 ## Schemas
 
 Schemas are published at

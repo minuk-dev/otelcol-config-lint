@@ -432,6 +432,21 @@ service:
 `,
 			want: "no-persistent-queue",
 		},
+		{
+			name: "zpages reachable from off the host",
+			src: `
+receivers: {otlp: }
+exporters: {debug: }
+extensions:
+  zpages:
+    endpoint: 0.0.0.0:55679
+service:
+  extensions: [zpages]
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`,
+			want: "debug-extension-exposed",
+		},
 	}
 
 	for _, tt := range tests {
