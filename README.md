@@ -265,9 +265,10 @@ processors: [memory_limiter, tail_sampling, k8sattributes, batch]
 #                            ^^^^^^^^^^^^^ decides before the pod and namespace are on the span
 ```
 
-`k8sattributes` — and `k8s_attributes`, the name upstream renamed it to —
-`resourcedetection` and `resource` add the attributes a sampling policy is
-written against, so a policy matching one of them from behind
+`k8sattributes`, `resourcedetection` and `resource` add the attributes a
+sampling policy is written against — as do `k8s_attributes` and
+`resource_detection`, the names upstream renamed the first two to, which both
+count — so a policy matching one of them from behind
 `tail_sampling` or `probabilistic_sampler` matches nothing at all — no error, no
 crash, just the spans it was meant to keep going missing. `tail_sampling`'s own
 README states the other half of it: the processor reassembles spans into new

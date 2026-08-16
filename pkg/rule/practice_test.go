@@ -79,10 +79,14 @@ func TestProcessorOrderEnrichmentAfterSampling(t *testing.T) {
 			processors: []string{"tail_sampling", "k8sattributes"},
 			want:       1,
 		},
-		// The same processor under the name upstream renamed it to, which is
-		// what a config written against a recent release carries.
+		// The same two processors under the names upstream renamed them to,
+		// which is what a config written against a recent release carries.
 		"the k8s attributes processor under its new name": {
 			processors: []string{"tail_sampling", "k8s_attributes"},
+			want:       1,
+		},
+		"the resource detection processor under its new name": {
+			processors: []string{"probabilistic_sampler", "resource_detection"},
 			want:       1,
 		},
 		"the same two the way round that works": {
