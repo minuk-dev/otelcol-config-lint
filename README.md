@@ -241,7 +241,8 @@ such as Prometheus's own — is left open rather than reported, so partial
 coverage never produces false positives. `${env:...}` expansions are left
 alone.
 
-**Practice** — `processor-order` (memory_limiter first), `missing-memory-limiter`,
+**Practice** — `processor-order` (`memory_limiter` first, enrichment before
+sampling, `batch` last), `missing-memory-limiter`,
 `missing-batch`, `memory-limiter-config`, `memory-limiter-sizing`,
 `batch-size-bounds`, `no-persistent-queue`, `debug-exporter-verbosity`.
 
@@ -249,9 +250,33 @@ alone.
 `debug-extension-exposed`, `hardcoded-secret`.
 
 Every practice and security rule cites the upstream page it rests on — the
-`memorylimiterprocessor`, `batchprocessor`, `exporterhelper` and
-`debugexporter` READMEs, `configtls`, upstream's security best practices, and
-the Kubernetes resource docs for the container's request and limit.
+`memorylimiterprocessor`, `batchprocessor`, `exporterhelper`, `debugexporter`,
+`tailsamplingprocessor` and `probabilisticsamplerprocessor` READMEs,
+`configtls`, upstream's security best practices, and the Kubernetes resource
+docs for the container's request and limit.
+
+`processor-order` is about where a processor stands rather than what it is set
+to. Two of its clauses are the ends of the chain: `memory_limiter` first, so
+backpressure is applied before any work is done, and `batch` last, so the
+processors ahead of it see individual items. The third is the middle, where the
+two orders are equally valid YAML and only one of them works.
+
+```yaml
+processors: [memory_limiter, tail_sampling, k8sattributes, batch]
+#                            ^^^^^^^^^^^^^ decides before the pod and namespace are on the span
+```
+
+`k8sattributes`, `resourcedetection` and `resource` add the attributes a
+sampling policy is written against — as do `k8s_attributes` and
+`resource_detection`, the names upstream renamed the first two to, which both
+count — so a policy matching one of them from behind
+`tail_sampling` or `probabilistic_sampler` matches nothing at all — no error, no
+crash, just the spans it was meant to keep going missing. `tail_sampling`'s own
+README states the other half of it: the processor reassembles spans into new
+batches, so anything reading the request context has to have run already.
+`attributes` is deliberately left out of the group, because it redacts as often
+as it enriches and stripping fields from what a sampler kept is the right order
+to do that in.
 
 `memory_limiter` is the one processor this linter tells people to add, and two
 of its constraints cannot be written as a field schema:

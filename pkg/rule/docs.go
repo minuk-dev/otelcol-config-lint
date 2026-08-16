@@ -18,6 +18,18 @@ const (
 	// batchDocs states what batching is for and where it belongs.
 	batchDocs = "https://github.com/open-telemetry/opentelemetry-collector" +
 		"/blob/main/processor/batchprocessor/README.md"
+	// tailSamplingDocs states that the processor must be placed after any
+	// processor that relies on request context, k8sattributes among them,
+	// because it reassembles spans into new batches and the original context
+	// is lost. It is also where the policies that read attributes are
+	// documented.
+	tailSamplingDocs = "https://github.com/open-telemetry/opentelemetry-collector-contrib" +
+		"/blob/main/processor/tailsamplingprocessor/README.md"
+	// probabilisticSamplerDocs states which attributes the sampler can decide
+	// on -- from_attribute, sampling_priority, and the resource attribute a
+	// hash seed is taken from.
+	probabilisticSamplerDocs = "https://github.com/open-telemetry/opentelemetry-collector-contrib" +
+		"/blob/main/processor/probabilisticsamplerprocessor/README.md"
 	// debugDocs states what each verbosity prints, that detailed writes
 	// multiple lines per record, that sampling_initial and sampling_thereafter
 	// bound the rate, and that the output format is not stable.
