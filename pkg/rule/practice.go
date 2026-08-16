@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -14,7 +15,8 @@ import (
 func practiceRules() []Rule {
 	return []Rule{
 		processorOrder{base{"processor-order",
-			"memory_limiter must run first so backpressure is applied before any work", diag.Warning}},
+			"processors run in the order they are listed, and some of them have one place they work",
+			diag.Warning}},
 		missingMemoryLimiter{base{"missing-memory-limiter",
 			"a pipeline without memory_limiter can be OOM-killed under load", diag.Info}},
 		missingBatch{base{"missing-batch",
@@ -34,6 +36,23 @@ const (
 	debugType         = "debug"
 )
 
+// The two groups processor-order has something to say about between the ends
+// of the chain: enrichment adds the attributes a sampling decision is written
+// against, and sampling decides what is kept. These are matched on type too,
+// so k8sattributes/pods and tail_sampling/errors are covered.
+//
+// k8s_attributes is the name upstream renamed k8sattributes to. Both resolve,
+// and which one a file writes is deprecated-component's to say, so the group
+// carries both.
+const (
+	k8sattributesType        = "k8sattributes"
+	k8sAttributesType        = "k8s_attributes"
+	resourcedetectionType    = "resourcedetection"
+	resourceType             = "resource"
+	tailSamplingType         = "tail_sampling"
+	probabilisticSamplerType = "probabilistic_sampler"
+)
+
 // verbosityKey is the debug exporter's setting for how much of every record it
 // writes, and detailedLevel the value that writes all of it.
 const (
@@ -48,6 +67,16 @@ const (
 	storageKey      = "storage"
 )
 
+// processorOrder reports a processor standing in the wrong place in a
+// pipeline. Its three clauses are the same finding in three positions: the
+// config loads, the collector runs, and what comes out the far end is not what
+// the author asked for.
+//
+// Two of them are about the ends of the chain -- memory_limiter first so
+// backpressure is applied before any work is done, batch last so the
+// processors ahead of it see individual items. The third is about the middle,
+// where enrichment and sampling can be written in either order and only one of
+// them is the order that works.
 type processorOrder struct{ base }
 
 func (r processorOrder) Check(ctx *Context) {
@@ -77,8 +106,76 @@ func (r processorOrder) Check(ctx *Context) {
 					Severity: diag.Info,
 				})
 			}
+
+			if sampler, decided := samplerBefore(p.Processors, i); decided {
+				ctx.Report(Finding{
+					Node: ref.Node, Path: ref.Path,
+					Message: quote(ref.ID.String()) + " runs after " + quote(sampler.ID.String()) +
+						" in pipeline " + quote(p.Key) +
+						", so sampling policies cannot match the attributes it adds",
+					Hint: "move " + quote(ref.ID.String()) + " ahead of " + quote(sampler.ID.String()) +
+						" in " + path + " so the decision is made against enriched telemetry",
+					Docs: samplerDocs(sampler.ID.Type),
+				})
+			}
 		}
 	}
+}
+
+// samplerBefore returns the first sampling processor standing ahead of the
+// processor at i, when that processor is one that enriches.
+//
+// A sampler decides what to keep from what it can see. k8sattributes,
+// resourcedetection and resource each add attributes -- the pod and namespace,
+// the cloud region and host, whatever the config writes -- and a policy
+// matching on one of them behind the sampler matches nothing at all. Nothing
+// errors: the policy is valid, the attribute is simply not there yet, and the
+// spans it was meant to keep are dropped. tail_sampling has a second reason,
+// which its README states outright: it reassembles spans into new batches, so
+// anything reading the request context has to have run already.
+//
+// attributes is deliberately not in the group. It enriches and it redacts, and
+// redaction after sampling is the sensible order -- sample first, then strip
+// what is kept -- so including it would report a correct config as often as a
+// wrong one.
+//
+// The first sampler is the one named because it is the one to move past;
+// getting ahead of it clears any that follow.
+func samplerBefore(refs []config.Ref, i int) (config.Ref, bool) {
+	if !enriches(refs[i].ID.Type) {
+		return config.Ref{}, false
+	}
+
+	for _, before := range refs[:i] {
+		if samples(before.ID.Type) {
+			return before, true
+		}
+	}
+
+	return config.Ref{}, false
+}
+
+// enriches reports whether the processor type adds attributes a sampling
+// decision could be written against.
+func enriches(typ string) bool {
+	return slices.Contains([]string{
+		k8sattributesType, k8sAttributesType, resourcedetectionType, resourceType,
+	}, typ)
+}
+
+// samples reports whether the processor type decides what is kept.
+func samples(typ string) bool {
+	return slices.Contains([]string{tailSamplingType, probabilisticSamplerType}, typ)
+}
+
+// samplerDocs returns the page stating what the sampler decides on, which is
+// what says why the enrichment has to come first.
+func samplerDocs(typ string) string {
+	if typ == probabilisticSamplerType {
+		return probabilisticSamplerDocs
+	}
+
+	return tailSamplingDocs
 }
 
 type missingMemoryLimiter struct{ base }

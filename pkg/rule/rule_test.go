@@ -557,6 +557,20 @@ service:
 `,
 			path: "service.pipelines.traces.processors[0]",
 		},
+		// The third clause, which reports the processor in the middle of the
+		// chain rather than at either end of it.
+		"an enrichment processor behind a sampler": {
+			rule: "processor-order",
+			src: `
+receivers: {otlp: }
+processors: {tail_sampling: , k8sattributes: }
+exporters: {debug: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], processors: [tail_sampling, k8sattributes], exporters: [debug]}
+`,
+			path: "service.pipelines.traces.processors[1]",
+		},
 	}
 
 	for name, tt := range tests {
