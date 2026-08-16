@@ -628,6 +628,48 @@ service:
 	}
 }
 
+// A YAML merge key is resolved by the parser before confmap sees the document,
+// so "<<" is never a setting a component was asked to accept. What it supplies
+// counts as written, so a required setting a merge provides is not missing
+// either.
+func TestMergeKeyIsNotASetting(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"a merge into a component": `
+receivers: {otlp: }
+exporters:
+  otlp:
+    <<: &backend {endpoint: backend:4317}
+    timeout: 10s
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlp]}
+`,
+		// The value of a merge may be a list of mappings, and the required
+		// endpoint is in the second of them.
+		"a merge from a list": `
+receivers: {otlp: }
+exporters:
+  otlp:
+    <<: [&timeouts {timeout: 10s}, &backend {endpoint: backend:4317}]
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlp]}
+`,
+	}
+
+	for name, src := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := check(t, src)
+			assert.False(t, fired(got, "unknown-field"), "<< is not a setting; fired: %v", got)
+			assert.False(t, fired(got, "required-field"), "a merge supplies the endpoint; fired: %v", got)
+		})
+	}
+}
+
 func TestStrictPromotesUnknownFieldToError(t *testing.T) {
 	t.Parallel()
 

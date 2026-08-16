@@ -38,6 +38,13 @@ const (
 // "false" is not mistaken for the value.
 const boolTag = "!!bool"
 
+// mergeKey is YAML's merge key. It is not a setting any component accepts: the
+// collector's yaml provider decodes into a map, which is where yaml.v3 resolves
+// the merge, so confmap only ever sees the keys it supplied. Reporting "<<" as
+// an unknown setting is therefore a finding about a key the collector never
+// reads.
+const mergeKey = "<<"
+
 // fieldWalker validates a component's settings against its schema schema.
 // Each rule supplies the callbacks it cares about and ignores the rest.
 type fieldWalker struct {
@@ -114,6 +121,12 @@ func (w fieldWalker) walkMap(schema *schema.Field, node *yaml.Node, path string)
 	present := map[string]bool{}
 
 	for _, e := range mapEntries(node, path) {
+		if e.key == mergeKey {
+			w.walkMerge(e.node, present)
+
+			continue
+		}
+
 		present[e.key] = true
 
 		child, known := schema.Children[e.key]
@@ -131,6 +144,39 @@ func (w fieldWalker) walkMap(schema *schema.Field, node *yaml.Node, path string)
 	}
 
 	w.checkRequired(schema, present, node, path)
+}
+
+// walkMerge records the keys a merge key supplies, so a setting the merge
+// provides does not read as missing. Its value is one mapping or a list of
+// them, which is the shape the collector ends up decoding.
+//
+// What the merged mapping holds is counted as present but not validated here.
+// An anchor is written once and merged into several components, so a finding
+// against it would land on one line for every use, and a block shared between
+// two component types would be judged against whichever schema reached it
+// first. The keys the merge supplies are still checked where they are written,
+// as part of whatever component the anchor is declared inside.
+func (w fieldWalker) walkMerge(node *yaml.Node, present map[string]bool) {
+	node = resolveAlias(node)
+	if node == nil {
+		return
+	}
+
+	targets := []*yaml.Node{node}
+	if node.Kind == yaml.SequenceNode {
+		targets = node.Content
+	}
+
+	for _, target := range targets {
+		target = resolveAlias(target)
+		if target == nil || target.Kind != yaml.MappingNode {
+			continue
+		}
+
+		for _, e := range mapEntries(target, "") {
+			present[e.key] = true
+		}
+	}
 }
 
 // walkList validates every element against the schema's "item" child, which is
