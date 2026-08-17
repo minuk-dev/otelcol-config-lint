@@ -1,0 +1,20 @@
+# The flat form the first release shipped. Still read, still checked, and every
+# key here reports where it moved to.
+collectorVersion: v0.157.0
+distribution: contrib
+schemaLocations:
+  - default
+strict: true
+ignoreMissingSchemas: false
+summary: true
+minSeverity: warning
+failOn: error
+disable:
+  - missing-batch
+severity:
+  missing-memory-limiter: warning
+exclude:
+  - "*.tmpl.yaml"
+kubernetes:
+  enabled: true
+  memoryLimit: 512Mi

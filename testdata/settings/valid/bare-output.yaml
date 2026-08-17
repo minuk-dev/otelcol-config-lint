@@ -1,0 +1,2 @@
+# A bare format name is the shorthand for the output block.
+output: json

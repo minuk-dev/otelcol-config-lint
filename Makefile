@@ -19,7 +19,7 @@ BUILDERS ?= \
 	k8s=$(RELEASES)/distributions/otelcol-k8s/manifest.yaml \
 	otlp=$(RELEASES)/distributions/otelcol-otlp/manifest.yaml
 
-.PHONY: all build build-snapshot test lint lint-fix fmt schemas release-pin clean
+.PHONY: all build build-snapshot test lint lint-fix fmt schemas config-schema release-pin clean
 
 all: lint test build
 
@@ -60,6 +60,12 @@ release-pin:
 	sed -i.bak -E 's|^(FROM ghcr\.io/minuk-dev/otelcol-config-lint):[^ ]*|\1:$(RELEASE:v%=%)|' Dockerfile
 	@rm -f Dockerfile.bak
 	@echo 'The action now runs $(RELEASE:v%=%); commit that and tag the commit $(RELEASE).'
+
+# Regenerate the JSON Schema an editor checks a settings file against. It lists
+# the rule names, so it moves whenever the rule set does; CI fails on a copy
+# that does not match, since a stale one underlines names that work.
+config-schema:
+	go run ./cmd/otelcol-config-lint config-schema > otelcol-config-lint.schema.json
 
 # Regenerate the component schemas from the distributions' builder manifests.
 schemas:

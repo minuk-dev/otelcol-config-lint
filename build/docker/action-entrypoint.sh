@@ -16,11 +16,14 @@ in_strict="false"
 in_ignore_missing_schemas="false"
 in_min_severity=""
 in_fail_on=""
+in_default=""
+in_enable=""
 in_disable=""
 in_severity=""
 in_exclude=""
 in_output="github"
 in_config=""
+in_no_config="false"
 in_summary="true"
 in_verbose="false"
 in_exit_on_error="false"
@@ -45,11 +48,14 @@ for arg in "$@"; do
     --ignore-missing-schemas) in_ignore_missing_schemas="${value}" ;;
     --min-severity) in_min_severity="${value}" ;;
     --fail-on) in_fail_on="${value}" ;;
+    --default) in_default="${value}" ;;
+    --enable) in_enable="${value}" ;;
     --disable) in_disable="${value}" ;;
     --severity) in_severity="${value}" ;;
     --exclude) in_exclude="${value}" ;;
     --output) in_output="${value:-github}" ;;
     --config) in_config="${value}" ;;
+    --no-config) in_no_config="${value}" ;;
     --summary) in_summary="${value}" ;;
     --verbose) in_verbose="${value}" ;;
     --exit-on-error) in_exit_on_error="${value}" ;;
@@ -81,10 +87,13 @@ value collector-version "${in_collector_version}"
 value distribution "${in_distribution}"
 value min-severity "${in_min_severity}"
 value fail-on "${in_fail_on}"
+value default "${in_default}"
+value enable "${in_enable}"
 value disable "${in_disable}"
 value severity "${in_severity}"
 value exclude "${in_exclude}"
 value config "${in_config}"
+toggle no-config "${in_no_config}"
 toggle strict "${in_strict}"
 toggle ignore-missing-schemas "${in_ignore_missing_schemas}"
 toggle verbose "${in_verbose}"

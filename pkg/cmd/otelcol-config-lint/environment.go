@@ -33,6 +33,12 @@ type kubernetesSettings struct {
 	Overrides []kubernetesOverride `yaml:"overrides"`
 }
 
+// written reports whether the block says anything at all, which is how the
+// flat first-release form knows it has nothing to fold in.
+func (k kubernetesSettings) written() bool {
+	return k.Enabled != nil || k.MemoryRequest != "" || k.MemoryLimit != "" || len(k.Overrides) > 0
+}
+
 // kubernetesOverride is one path-matched entry of the kubernetes block. It
 // replaces the defaults for the files it matches rather than merging with
 // them, so what a file resolves to is stated in one place.

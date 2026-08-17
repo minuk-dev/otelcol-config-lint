@@ -1,0 +1,63 @@
+name: config-schema
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  config-schema:
+    # otelcol-config-lint.schema.json is what an editor checks a settings file
+    # against, and it lists every rule the linter carries. Nothing else notices
+    # when it falls behind: the linter keeps accepting a rule the schema has
+    # never heard of, and the only symptom is an editor underlining a name that
+    # works. So it is generated, and this job is what makes that stick.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.25
+
+      - name: Check the committed schema matches the generator
+        run: |
+          make config-schema
+          git diff --exit-code -- otelcol-config-lint.schema.json ||
+            { echo 'otelcol-config-lint.schema.json is stale; run: make config-schema' >&2; exit 1; }
+
+      - name: Install check-jsonschema
+        run: pipx install check-jsonschema
+
+      # A schema that is not itself valid is worse than none: an editor drops it
+      # silently and checks nothing, which reads exactly like a file with no
+      # mistakes in it.
+      - name: Check the schema against the JSON Schema metaschema
+        run: check-jsonschema --check-metaschema otelcol-config-lint.schema.json
+
+      # The fixtures are the contract between the schema and the loader, and Go
+      # holds the loader to the same two directories -- see
+      # TestTheSettingsFixturesAreWhatTheySayTheyAre. A schema that drifted
+      # would show up as one of the two disagreeing about a file.
+      - name: Check the schema accepts every valid settings file
+        run: |
+          check-jsonschema --schemafile otelcol-config-lint.schema.json \
+            testdata/settings/valid/*.yaml
+
+      - name: Check the schema rejects every invalid settings file
+        run: |
+          rc=0
+
+          for file in testdata/settings/invalid/*.yaml; do
+            if check-jsonschema --schemafile otelcol-config-lint.schema.json "${file}" >/dev/null 2>&1; then
+              echo "${file} should not have validated against the schema" >&2
+              rc=1
+            fi
+          done
+
+          exit "${rc}"

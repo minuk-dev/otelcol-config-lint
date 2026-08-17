@@ -58,6 +58,10 @@ type Options struct {
 	Availability rule.Availability
 	// Distributions lets diagnostics mention other distributions. May be nil.
 	Distributions rule.Distributions
+	// Rules is the set to run. A nil Rules means every registered rule, which
+	// is what a caller with no per-rule settings to apply wants; a caller that
+	// has some passes what rule.Configure returned.
+	Rules []rule.Rule
 	// Severities overrides the level individual rules report at. A value of
 	// diag.Off disables the rule.
 	Severities map[string]diag.Severity
@@ -108,7 +112,11 @@ func New(opts Options) *Linter {
 		}
 	}
 
-	return &Linter{opts: opts, rules: ruleset.All()}
+	if opts.Rules == nil {
+		opts.Rules = ruleset.All()
+	}
+
+	return &Linter{opts: opts, rules: opts.Rules}
 }
 
 // Rules returns the rules the linter will run, in name order.

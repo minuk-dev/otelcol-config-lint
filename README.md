@@ -69,9 +69,10 @@ Every input is the `run` flag of the same name, so the flag table below is the
 whole reference: `files` (default `.`, whitespace-separated, globs allowed),
 `collector-version`, `distribution`, `schema-location` (one per line to search
 several in order), `strict`, `ignore-missing-schemas`, `min-severity`,
-`fail-on`, `disable`, `severity`, `exclude`, `output` (default `github`),
-`config`, `summary` (default `true`), `verbose` and `exit-on-error`. Only `-n`
-and `--no-color` are left out: a runner gains nothing from either.
+`fail-on`, `default`, `enable`, `disable`, `severity`, `exclude`, `output`
+(default `github`), `config`, `no-config`, `summary` (default `true`),
+`verbose` and `exit-on-error`. Only `--concurrency` and `--no-color` are left
+out: a runner gains nothing from either.
 
 The counts come back as outputs — `exit-code`, `valid`, `invalid`, `errors`,
 `skipped`, `warnings` and `infos` — so a later step can decide what to do with
@@ -101,35 +102,51 @@ for a run that cannot change underneath a workflow.
 otelcol-config-lint run [flags] <file|dir|->...
 otelcol-config-lint list rules
 otelcol-config-lint list versions
+otelcol-config-lint config-schema
 otelcol-config-lint version
 ```
 
 | Command | Meaning |
 | --- | --- |
 | `run` | lint the given files, directories, or `-` for stdin |
-| `list rules` | the rules and their default severities, `--disable`/`--severity` applied |
+| `list rules` | the rules and the severities they will run at, the rule flags and settings file applied |
 | `list versions` | the schema versions available, honouring `--schema-location` and `--distribution` |
+| `config-schema` | the JSON Schema for the settings file, for an editor to check one against |
 | `version` | print the linter version (also available as `--version`) |
 
 The flags below belong to `run`:
 
-| Flag | Meaning |
-| --- | --- |
-| `--collector-version` | release to validate against, e.g. `v0.157.0` (default `latest`) |
-| `--distribution` | collector binary to validate against: `core`, `contrib` (default), `k8s` or `otlp` |
-| `--schema-location` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
-| `--output` | `text`, `json`, `junit`, `tap` or `github` |
-| `--strict` | unknown component settings become errors instead of warnings |
-| `--ignore-missing-schemas` | do not fail on components absent from the schema (custom distributions) |
-| `--min-severity` | lowest severity to report: `error`, `warning`, `info` |
-| `--fail-on` | severity that makes a file invalid (default `error`) |
-| `--disable` | comma-separated rules to turn off |
-| `--severity` | comma-separated `rule=level` overrides |
-| `--exclude` | glob patterns to skip when walking directories |
-| `--kubernetes` | the config runs in a Kubernetes pod |
-| `--memory-request`, `--memory-limit` | the container's resources, e.g. `256Mi`, `1Gi`, `2G`. Either one implies `--kubernetes` |
-| `-n` | files checked in parallel |
-| `--summary`, `--verbose`, `--no-color`, `--exit-on-error` | output control |
+Every flag mirrors a key of the settings file, and each row below names the key
+it mirrors. The file is what a repository commits; a flag is how one run departs
+from it.
+
+| Flag | Settings key | Meaning |
+| --- | --- | --- |
+| `-c`, `--config` | — | settings file to read (default: `.otelcol-config-lint.yaml`, searched for here and in each parent) |
+| `--no-config` | — | ignore any settings file and use the flags alone |
+| `--collector-version` | `run.collectorVersion` | release to validate against, e.g. `v0.157.0` (default `latest`) |
+| `--distribution` | `run.distribution` | collector binary to validate against: `core`, `contrib` (default), `k8s` or `otlp` |
+| `--schema-location` | `run.schemaLocations` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
+| `--strict` | `run.strict` | unknown component settings become errors instead of warnings |
+| `--ignore-missing-schemas` | `run.ignoreMissingSchemas` | do not fail on components absent from the schema (custom distributions) |
+| `--exclude` | `run.exclude` | glob patterns to skip when walking directories |
+| `-n`, `--concurrency` | `run.concurrency` | files checked in parallel |
+| `--kubernetes` | `run.kubernetes.enabled` | the config runs in a Kubernetes pod |
+| `--memory-request`, `--memory-limit` | `run.kubernetes.memoryRequest`/`.memoryLimit` | the container's resources, e.g. `256Mi`, `1Gi`, `2G`. Either one implies `--kubernetes` |
+| `--default` | `rules.default` | rule set to start from: `all` (the default) or `none` |
+| `-E`, `--enable` | `rules.enable` | rules to turn on, on top of `--default` |
+| `-D`, `--disable` | `rules.disable` | rules to turn off |
+| `--severity` | `rules.severity` | `rule=level` overrides |
+| `--min-severity` | `issues.minSeverity` | lowest severity to report: `error`, `warning`, `info` |
+| `--fail-on` | `issues.failOn` | severity that makes a file invalid (default `error`) |
+| `--exit-on-error` | `issues.exitOnError` | stop at the first file that fails |
+| `--output` | `output.format` | `text`, `json`, `junit`, `tap` or `github` |
+| `--summary` | `output.summary` | append a count of the outcomes |
+| `--verbose` | `output.verbose` | also report the files that passed, and say which settings file was read |
+| `--no-color` | `output.color` (inverted) | disable coloured output |
+
+`--enable`, `--disable`, `--severity`, `--exclude` and `--schema-location` take
+a comma-separated list, and may also be repeated.
 
 Exit codes: `0` everything passed, `1` at least one file failed, `2` the command
 could not run.
@@ -142,53 +159,169 @@ otelcol-config-lint run --output json ./configs > report.json     # machine-read
 otelcol-config-lint run --output github ./configs                 # PR annotations
 otelcol-config-lint run --collector-version v0.110.0 config.yaml  # target an older release
 otelcol-config-lint run --distribution core config.yaml           # target plain otelcol
+otelcol-config-lint run --default none -E invalid-value ./configs # run one rule and nothing else
+otelcol-config-lint run -c ci.yaml ./configs                      # a settings file of its own
 ```
 
 ### Settings file
 
-Commit the policy instead of repeating flags. `.otelcol-config-lint.yaml` in the
-working directory is picked up automatically; `--config` names another file.
-Explicit flags win over the file.
+Commit the policy instead of repeating flags. The file is laid out the way
+golangci-lint's is: **what to check** under `run`, **which rules** under
+`rules`, **what counts as a failure** under `issues`, and **how it is printed**
+under `output`.
 
 ```yaml
-collectorVersion: v0.157.0
-distribution: contrib
-minSeverity: warning
-strict: true
-exclude:
-  - "*.tmpl.yaml"
-disable:
-  - missing-batch
-severity:
-  missing-memory-limiter: warning
-schemaLocations:
-  - ./schemas      # this project's own schemas first
-  - default         # then the published registry
+version: "1"
+
+run:
+  collectorVersion: v0.157.0
+  distribution: contrib
+  strict: true
+  concurrency: 8
+  exclude:
+    - "*.tmpl.yaml"
+  schemaLocations:
+    - ./schemas       # this project's own schemas first
+    - default         # then the published registry
+
+rules:
+  default: all        # or "none", to run only what enable names
+  enable: []
+  disable:
+    - missing-batch
+  severity:
+    missing-memory-limiter: warning
+  settings: {}        # each rule's own block, keyed by rule name
+
+issues:
+  minSeverity: warning
+  failOn: error
+  exitOnError: false
+
+output:
+  format: text
+  summary: true
+  verbose: false
+  color: true
 ```
+
+Every block is optional, as is every key in it: what a file does not state keeps
+its default. A key the linter does not know is an error rather than a line that
+quietly does nothing.
+
+#### Where the file is found
+
+`.otelcol-config-lint.yaml` — or `.otelcol-config-lint.yml` — is looked for in
+the working directory and then in each parent, stopping at the directory holding
+`.git`, so one file at the repository root governs a run started from any
+subdirectory. `--config` names another file, and an explicitly named file that
+does not exist is an error. `--no-config` runs on the flags alone. `--verbose`
+prints which file was read.
+
+Explicit flags win over the file, with one exception: the rule lists merge, so
+`-D` adds to `rules.disable` rather than replacing it.
+
+#### Choosing the rules
+
+`rules.default` is the set to start from — `all`, which is every rule and what a
+file that says nothing gets, or `none`, which runs only what `enable` names.
+`disable` then takes rules out, and `severity` sets the level a rule reports at.
+Naming a rule in both `enable` and `disable` is an error rather than a silent win
+for one of them.
+
+```yaml
+rules:
+  default: none
+  enable: [unknown-component, invalid-value, undefined-reference]
+```
+
+`otelcol-config-lint list rules` prints what the policy resolves to: a rule that
+will not run is listed at severity `off`.
+
+#### Per-rule settings
+
+`rules.settings` is where a rule's own knobs go, keyed by rule name, the way
+golangci-lint's `linters.settings` works:
+
+```yaml
+rules:
+  settings:
+    some-rule:
+      threshold: 10
+```
+
+No built-in rule reads a block yet — the schema is here so one can be added
+without every settings file having to change shape. Until a rule declares that
+it takes settings, writing a block for it is reported as an error: a knob nobody
+reads is worse than a knob that is missing.
+
+#### Checking the settings file in an editor
+
+`otelcol-config-lint.schema.json` is a JSON Schema for the file, so an editor
+underlines a misspelled key, a severity that is not a level, and a rule name
+that does not exist — the rule list in it is generated from the rules the linter
+carries, and CI fails on a copy that has fallen behind.
+
+Name it from the file itself, which every YAML language server reads:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json
+```
+
+Or map it once, in VS Code's `settings.json`:
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json": [
+      ".otelcol-config-lint.yaml",
+      ".otelcol-config-lint.yml"
+    ]
+  }
+}
+```
+
+`otelcol-config-lint config-schema` prints the same document, so a project that
+vendors it gets the list of rules the binary it pins actually runs:
+
+```sh
+otelcol-config-lint config-schema > otelcol-config-lint.schema.json
+```
+
+#### The flat form
+
+The keys the first release put at the top level — `collectorVersion`,
+`distribution`, `schemaLocations`, `strict`, `ignoreMissingSchemas`, `summary`,
+`minSeverity`, `failOn`, `disable`, `severity`, `exclude` and `kubernetes` — are
+still read, and folded into the blocks above. A run that finds one says which
+keys to move. `output: json` is not one of them: a bare format name is still the
+shorthand for `output: {format: json}`.
 
 #### The deployment environment
 
 `memory-limiter-sizing` compares a `memory_limiter` against the container it
-runs in, which the config file cannot state. The `kubernetes` block supplies it.
+runs in, which the config file cannot state. The `run.kubernetes` block
+supplies it.
 
 It is resolved **per file**, because a run is not one deployment: an agent
 DaemonSet at `256Mi` and a gateway Deployment at `4Gi` sit in the same directory
 and are checked in the same run.
 
 ```yaml
-kubernetes:
-  enabled: true
-  memoryRequest: 512Mi        # the defaults, for any file no override matches
-  memoryLimit: 512Mi
-  overrides:
-    - paths: ["configs/agent-*.yaml"]
-      memoryRequest: 256Mi
-      memoryLimit: 256Mi
-    - paths: ["configs/gateway/*.yaml"]
-      memoryRequest: 4Gi
-      memoryLimit: 4Gi
-    - paths: ["configs/legacy/*.yaml"]
-      enabled: false          # opt a subtree back out
+run:
+  kubernetes:
+    enabled: true
+    memoryRequest: 512Mi        # the defaults, for any file no override matches
+    memoryLimit: 512Mi
+    overrides:
+      - paths: ["configs/agent-*.yaml"]
+        memoryRequest: 256Mi
+        memoryLimit: 256Mi
+      - paths: ["configs/gateway/*.yaml"]
+        memoryRequest: 4Gi
+        memoryLimit: 4Gi
+      - paths: ["configs/legacy/*.yaml"]
+        enabled: false          # opt a subtree back out
 ```
 
 - Overrides are matched in list order and the **first match wins**. A matching

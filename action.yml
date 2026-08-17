@@ -8,9 +8,10 @@ branding:
   icon: check-square
   color: purple
 
-# Every input maps onto the "run" flag of the same name, so there is nothing new
-# to learn: the CLI documentation is the action documentation. Only -n and
-# --no-color are left out; a runner has nothing to gain from either.
+# Every input maps onto the "run" flag of the same name, which in turn mirrors a
+# key of the settings file, so there is nothing new to learn: the CLI
+# documentation is the action documentation. Only --concurrency and --no-color
+# are left out; a runner has nothing to gain from either.
 inputs:
   files:
     description: Files, directories or globs to check, separated by spaces or newlines.
@@ -47,6 +48,14 @@ inputs:
     description: "Severity that makes a file invalid: error, warning or info."
     required: false
     default: error
+  default:
+    description: "Rule set to start from: all (the default) or none."
+    required: false
+    default: ""
+  enable:
+    description: Comma-separated rules to turn on, on top of the set named by "default".
+    required: false
+    default: ""
   disable:
     description: Comma-separated rules to turn off.
     required: false
@@ -64,9 +73,16 @@ inputs:
     required: false
     default: github
   config:
-    description: Settings file to read (default .otelcol-config-lint.yaml if present).
+    description: >-
+      Settings file to read. The default is .otelcol-config-lint.yaml, looked
+      for in the working directory and then in each parent, up to the
+      repository root.
     required: false
     default: ""
+  no-config:
+    description: Ignore any settings file and use the inputs alone.
+    required: false
+    default: "false"
   summary:
     description: Append a count of the outcomes to the output.
     required: false
@@ -112,11 +128,14 @@ runs:
     - --ignore-missing-schemas=${{ inputs.ignore-missing-schemas }}
     - --min-severity=${{ inputs.min-severity }}
     - --fail-on=${{ inputs.fail-on }}
+    - --default=${{ inputs.default }}
+    - --enable=${{ inputs.enable }}
     - --disable=${{ inputs.disable }}
     - --severity=${{ inputs.severity }}
     - --exclude=${{ inputs.exclude }}
     - --output=${{ inputs.output }}
     - --config=${{ inputs.config }}
+    - --no-config=${{ inputs.no-config }}
     - --summary=${{ inputs.summary }}
     - --verbose=${{ inputs.verbose }}
     - --exit-on-error=${{ inputs.exit-on-error }}
