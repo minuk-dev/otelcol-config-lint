@@ -333,14 +333,34 @@ that do not, so the finding names the exporter and sits on the line that wires
 it in — that exporter's settings are where the fix is written. A connector in
 the exporter slot is not a leg out of the collector and is not counted; it feeds
 another pipeline, which has exporters of its own. An exporter whose settings
-come from a merge key or an expansion, and one whose type the field schema does
-not describe, count as unknown rather than as not batching, for the same reason
-the field rules leave what they cannot resolve alone.
+come from a merge key or an expansion counts as unknown rather than as not
+batching, for the same reason the field rules leave what they cannot resolve
+alone.
 
-The hint follows the schema rather than the other way round: where the exporters
-have no `sending_queue` to hold a batcher — `nop`, and `debug` on a release
-before upstream gave it a queue — it names the processor instead, because a fix
-the component has no setting for is no fix.
+What the document writes decides whether there is a finding; what the field
+schema describes decides only which fix the hint may name. The queue batcher is
+off until something turns it on, so a config that writes no
+`sending_queue.batch` is not batching there whatever the schema knows about the
+type — which is why an exporter it describes no settings for, `nop` and
+`datadog` among them, is reported like any other rather than passed over in
+silence.
+
+The hint is the half that follows the schema, and it asks for
+`sending_queue.batch` itself rather than for the queue holding it. The batcher
+is younger than the queue: on a release from before it moved in, every exporter
+has a `sending_queue` and none of them has a `batch` under it, and a hint naming
+one there would be advising a setting the collector rejects on startup —
+`unknown-field`, reading the same schema, would say so in the same run. So
+where the field is not there to write — an exporter with no `sending_queue` on
+the targeted release, `debug` on `v0.157` among them; any exporter on a release
+that predates the batcher; anything the schema does not describe, `nop` and
+`datadog` among them — the hint names the processor instead, because a fix the
+release has no setting for is no fix. Which exporters those are is the schema's
+answer and moves with the release, which is the point of asking it. Where one finding covers several exporters
+at once it names the queue batcher only if all of them accept it; where they
+disagree it names the processor and says that only some of them can take a
+`sending_queue.batch`, since the reason it gives otherwise would be false of
+half of them.
 
 `no-persistent-queue` is the one opinionated rule, and it reports at `info` for
 that reason. The sending queue is on by default and lives in memory, so a

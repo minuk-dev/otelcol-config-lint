@@ -237,6 +237,14 @@ func (r missingMemoryLimiter) Check(ctx *Context) {
 // with a flush timing of its own. A pipeline where only some of them do is
 // under-batched on the legs that do not, so the finding names the exporter
 // rather than the pipeline.
+//
+// What the document writes decides whether there is a finding; what the field
+// schema describes decides only which fix the hint may name. The two are read
+// apart on purpose. An exporter the schema says nothing about -- datadog and
+// nop are both in that bucket -- still has a queue batcher that is off until
+// something writes it, so the finding stands; it is the hint that has to fall
+// back to the processor, because nothing there says sending_queue.batch is a
+// setting the release would accept.
 type missingBatch struct{ base }
 
 func (r missingBatch) Check(ctx *Context) {
@@ -253,75 +261,125 @@ func (r missingBatch) Check(ctx *Context) {
 		// Only when every leg is one this rule can read, and none of them
 		// batches, is "the pipeline batches nothing" a claim the file supports.
 		if len(unbatched) == legs {
-			queued := anyQueued(unbatched)
+			fix := pipelineFix(unbatched)
 
 			ctx.Report(Finding{
 				Node: nodeOr(p.ProcessorsNode, p.KeyNode), Path: "service.pipelines." + p.Key + ".processors",
 				Message: "pipeline " + quote(p.Key) + " has no batch processor, and none of its exporters " +
 					"batches in " + sendingQueueKey,
-				Hint: batchHint("the exporters", "these exporters have", queued),
-				Docs: batchDocsFor(queued),
+				Hint: batchHint("the exporters", "these exporters have", fix),
+				Docs: batchDocsFor(fix),
 			})
 
 			continue
 		}
 
 		for _, leg := range unbatched {
+			fix := exporterFix(leg.queueBatch)
+
 			ctx.Report(Finding{
 				Node: leg.ref.Node, Path: leg.ref.Path,
 				Message: "exporter " + quote(leg.ref.ID.String()) + " sends unbatched in pipeline " +
 					quote(p.Key) + ", which has no batch processor",
-				Hint: batchHint("this exporter", "this exporter has", leg.queued),
-				Docs: batchDocsFor(leg.queued),
+				Hint: batchHint("this exporter", "this exporter has", fix),
+				Docs: batchDocsFor(fix),
 			})
 		}
 	}
 }
 
-// batchHint renders the fix. It leads with the queue batcher, which is where
-// upstream is steering and which sits behind the retry logic rather than in
-// front of it -- unless the exporters have no queue to put it in, and then the
-// processor is the only batching on offer. "target" names what to configure
-// and "subject" agrees with the verb after it.
-func batchHint(target, subject string, queued bool) string {
-	if !queued {
-		return "add batch before the exporters to reduce the number of outgoing requests; " +
-			subject + " no " + sendingQueueKey + " to batch in"
+// batchFix is the batching a finding can tell the reader to write.
+type batchFix int
+
+const (
+	// queueFix is sending_queue.batch, which every exporter the finding covers
+	// has in the targeted release.
+	queueFix batchFix = iota
+	// processorFix is the batch processor, named where none of them has a queue
+	// batcher, so the hint can say why it is the only batching on offer.
+	processorFix
+	// splitFix is the batch processor named where the exporters disagree: some
+	// have a queue batcher and some do not, so the reason processorFix gives
+	// would be wrong about half of them. It says that much instead, which is
+	// what tells the reader the other fix is still open to some of these legs.
+	splitFix
+)
+
+// exporterFix classifies a finding that names one exporter.
+func exporterFix(queueBatch bool) batchFix {
+	if queueBatch {
+		return queueFix
 	}
 
-	return "configure " + sendingQueueKey + "." + batchKey + " on " + target + ", which batches behind the " +
-		"retry queue; the batch processor also works but drops data that fails to send"
+	return processorFix
 }
 
-// batchDocsFor points at the page the hint rests on: the queue batcher's
-// settings, or the processor's where the exporters have no queue to hold one.
-func batchDocsFor(queued bool) string {
-	if !queued {
-		return batchDocs
-	}
+// pipelineFix classifies a finding that covers a pipeline's legs at once. It
+// takes the queue batcher only when every leg has one: a hint naming a setting
+// half the exporters do not accept is a hint half of them cannot follow.
+func pipelineFix(legs []unbatchedLeg) batchFix {
+	queue, processor := 0, 0
 
-	return exporterQueueDocs
-}
-
-// unbatchedLeg is an exporter reference whose exporter batches nothing, and
-// whether that exporter has a sending queue to batch in at all. One that does
-// not -- debug and nop among them -- can only be batched in front of, and a
-// hint naming a setting it does not have would be no fix.
-type unbatchedLeg struct {
-	ref    config.Ref
-	queued bool
-}
-
-// anyQueued reports whether any of the legs has a queue to batch in, which is
-// what decides the wording of a finding that covers all of them at once.
-func anyQueued(legs []unbatchedLeg) bool {
 	for _, leg := range legs {
-		if leg.queued {
-			return true
+		if leg.queueBatch {
+			queue++
+		} else {
+			processor++
 		}
 	}
 
-	return false
+	switch {
+	case processor == 0:
+		return queueFix
+	case queue == 0:
+		return processorFix
+	default:
+		return splitFix
+	}
+}
+
+// batchProcessorHint is the fix that works whatever the exporters accept.
+const batchProcessorHint = "add batch before the exporters to reduce the number of outgoing requests"
+
+// batchHint renders the fix. It leads with the queue batcher, which is where
+// upstream is steering and which sits behind the retry logic rather than in
+// front of it -- unless the exporters have nowhere to write it, and then the
+// processor is the only batching on offer. "target" names what to configure
+// and "subject" agrees with the verb after it.
+func batchHint(target, subject string, fix batchFix) string {
+	switch fix {
+	case queueFix:
+		return "configure " + sendingQueueKey + "." + batchKey + " on " + target + ", which batches behind the " +
+			"retry queue; the batch processor also works but drops data that fails to send"
+	case processorFix:
+		return batchProcessorHint + "; " + subject + " no " + sendingQueueKey + "." + batchKey + " to batch in"
+	default:
+		// splitFix, where the exporters disagree. The processor is still the one
+		// fix all of them can take, but saying none of them has a queue batcher
+		// would be false of half of them, so the clause says which half.
+		return batchProcessorHint + "; only some of them can take a " +
+			sendingQueueKey + "." + batchKey + " of their own"
+	}
+}
+
+// batchDocsFor points at the page the hint rests on: the queue batcher's
+// settings, or the processor's where the hint names the processor.
+func batchDocsFor(fix batchFix) string {
+	if fix == queueFix {
+		return exporterQueueDocs
+	}
+
+	return batchDocs
+}
+
+// unbatchedLeg is an exporter reference whose exporter batches nothing, and
+// whether the targeted release lets that exporter write sending_queue.batch.
+// One that cannot -- debug and nop among them, and every exporter on a release
+// before upstream put a batcher in the queue -- can only be batched in front
+// of, and a hint naming a setting it does not have would be no fix.
+type unbatchedLeg struct {
+	ref        config.Ref
+	queueBatch bool
 }
 
 // exportLegs reads what each of a pipeline's exporters does about batching. It
@@ -345,8 +403,8 @@ func exportLegs(ctx *Context, p config.Pipeline) (int, []unbatchedLeg) {
 			continue
 		}
 
-		if state, queued := queueBatching(ctx, c); state == batchNone {
-			unbatched = append(unbatched, unbatchedLeg{ref: ref, queued: queued})
+		if readQueueBatching(c) == batchNone {
+			unbatched = append(unbatched, unbatchedLeg{ref: ref, queueBatch: acceptsQueueBatch(ctx, c.ID.Type)})
 		}
 	}
 
@@ -357,10 +415,9 @@ func exportLegs(ctx *Context, p config.Pipeline) (int, []unbatchedLeg) {
 type batching int
 
 const (
-	// batchUnknown is an exporter this rule cannot read: one whose settings a
-	// merge key or an expansion supplies, or a type the field schema does not
-	// describe. Neither a finding against it nor one that counts it as batching
-	// would rest on anything.
+	// batchUnknown is an exporter whose settings this rule cannot read: one a
+	// merge key or an expansion supplies. Neither a finding against it nor one
+	// that counts it as batching would rest on anything.
 	batchUnknown batching = iota
 	// batchNone is an exporter that batches nothing before it sends.
 	batchNone
@@ -368,30 +425,15 @@ const (
 	batchQueue
 )
 
-// queueBatching reports whether an exporter batches what it sends, and whether
-// it has a sending queue to batch in at all.
+// readQueueBatching reads an exporter's queue as the document writes it. Only
+// the top level is read, which is where the queue sits, the same as
+// readSendingQueue reads it.
 //
-// The queue batcher is off by default, so an exporter that does not write it is
-// an exporter that does not batch -- but only where the field schema describes
-// the type at all. Where it does not, the same principle the field rules follow
-// applies: what cannot be resolved says nothing rather than something wrong,
-// and an exporter this linter knows nothing about is not one it can say sends a
-// span at a time.
-func queueBatching(ctx *Context, c config.Component) (batching, bool) {
-	state, written := readQueueBatching(c)
-	queued := acceptsQueue(ctx, c.ID.Type, written)
-
-	if state == batchNone && !describedExporter(ctx, c.ID.Type) {
-		return batchUnknown, queued
-	}
-
-	return state, queued
-}
-
-// readQueueBatching reads an exporter's queue as the document writes it, and
-// reports whether a queue is written at all. Only the top level is read, which
-// is where the queue sits, the same as readSendingQueue reads it.
-func readQueueBatching(c config.Component) (batching, bool) {
+// The queue batcher is off by default, so an exporter whose settings do not
+// write it is an exporter that does not batch there. That reading is the
+// document's alone: what the field schema knows about the type decides which
+// fix the hint can name, not whether a batcher nobody wrote is running.
+func readQueueBatching(c config.Component) batching {
 	var block *yaml.Node
 
 	merged := false
@@ -415,18 +457,18 @@ func readQueueBatching(c config.Component) (batching, bool) {
 	case block != nil && block.Kind == yaml.MappingNode:
 		// A merge outside the block cannot reach into one the exporter writes
 		// itself: a key present locally replaces the merged value outright.
-		return readBatchBlock(block), true
+		return readBatchBlock(block)
 	case block != nil && !isNull(block):
 		// A queue the collector builds from an expansion may well be one that
 		// batches, and nothing here can see what it holds.
-		return batchUnknown, true
+		return batchUnknown
 	case merged:
-		return batchUnknown, false
+		return batchUnknown
 	}
 
 	// An empty queue, or none written at all, takes the defaults, and the
 	// batcher is not one of them.
-	return batchNone, block != nil
+	return batchNone
 }
 
 // readBatchBlock reads the one queue setting that decides whether the exporter
@@ -458,18 +500,49 @@ func readBatchBlock(block *yaml.Node) batching {
 }
 
 // describedExporter reports whether the field schema describes the exporter
-// type's settings at all. Where it does, a queue batch nobody wrote is a queue
-// batch that does not run, and a queue the type has no field for is a queue it
-// does not have. Where it does not, neither claim holds, and that covers four
-// shapes: no schema was resolved at all, the type is not in it, the type is in
-// it with its settings left open, and the type is in it with no fields -- which
-// reads as "nothing could be resolved for this component" rather than "this
-// component has no settings", since the datadog exporter, which has a queue and
-// a great many other settings, sits in that bucket next to nop.
+// type's settings at all. Where it does, a queue the type has no field for is a
+// queue it does not have. Where it does not, that claim does not hold, and that
+// covers four shapes: no schema was resolved at all, the type is not in it, the
+// type is in it with its settings left open, and the type is in it with no
+// fields -- which reads as "nothing could be resolved for this component"
+// rather than "this component has no settings", since the datadog exporter,
+// which has a queue and a great many other settings, sits in that bucket next
+// to nop.
 func describedExporter(ctx *Context, typ string) bool {
 	fields := exporterFields(ctx, typ)
 
 	return fields != nil && !fields.Open && len(fields.Children) > 0
+}
+
+// acceptsQueueBatch reports whether the targeted release lets this exporter
+// write sending_queue.batch, which is what decides whether a hint may name it.
+//
+// The queue batcher is younger than the queue: a release before upstream added
+// it has a sending_queue with no batch under it, and telling a config targeting
+// that release to write one names a setting the collector rejects on startup --
+// which unknown-field, reading the same schema, would report in the same run.
+// So the schema is asked for the field itself rather than for the queue holding
+// it, and where it cannot answer -- an exporter it does not describe, or a queue
+// it leaves open, which may hold settings it does not list -- the answer is what
+// keeps the hint honest: no for the first, since nothing says the field is
+// there, and yes for the second, since nothing says it is not.
+func acceptsQueueBatch(ctx *Context, typ string) bool {
+	if !describedExporter(ctx, typ) {
+		return false
+	}
+
+	queue, held := exporterFields(ctx, typ).Children[sendingQueueKey]
+	if !held || queue == nil {
+		return false
+	}
+
+	if queue.Open {
+		return true
+	}
+
+	_, batches := queue.Children[batchKey]
+
+	return batches
 }
 
 func hasProcessorType(p config.Pipeline, typ string) bool {
