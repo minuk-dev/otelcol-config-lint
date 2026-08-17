@@ -298,9 +298,10 @@ const (
 	// processorFix is the batch processor, named where none of them has a queue
 	// batcher, so the hint can say why it is the only batching on offer.
 	processorFix
-	// splitFix is the batch processor named without that reason, because the
-	// exporters disagree: some have a queue batcher and some do not, and either
-	// clause about what they have would be wrong about half of them.
+	// splitFix is the batch processor named where the exporters disagree: some
+	// have a queue batcher and some do not, so the reason processorFix gives
+	// would be wrong about half of them. It says that much instead, which is
+	// what tells the reader the other fix is still open to some of these legs.
 	splitFix
 )
 
@@ -353,9 +354,11 @@ func batchHint(target, subject string, fix batchFix) string {
 	case processorFix:
 		return batchProcessorHint + "; " + subject + " no " + sendingQueueKey + "." + batchKey + " to batch in"
 	default:
-		// splitFix, where the exporters disagree: the processor is named on its
-		// own, since the clause explaining why would be false of half of them.
-		return batchProcessorHint
+		// splitFix, where the exporters disagree. The processor is still the one
+		// fix all of them can take, but saying none of them has a queue batcher
+		// would be false of half of them, so the clause says which half.
+		return batchProcessorHint + "; only some of them can take a " +
+			sendingQueueKey + "." + batchKey + " of their own"
 	}
 }
 

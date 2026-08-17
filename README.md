@@ -351,12 +351,16 @@ is younger than the queue: on a release from before it moved in, every exporter
 has a `sending_queue` and none of them has a `batch` under it, and a hint naming
 one there would be advising a setting the collector rejects on startup —
 `unknown-field`, reading the same schema, would say so in the same run. So
-where the field is not there to write — `nop` and `debug`, which have no queue
-at all; any exporter on a release that predates the batcher; anything the schema
-does not describe — the hint names the processor instead, because a fix the
-release has no setting for is no fix. Where one finding covers several exporters
-at once it names the queue batcher only if all of them accept it, and falls back
-to the processor alone when they disagree.
+where the field is not there to write — an exporter with no `sending_queue` on
+the targeted release, `debug` on `v0.157` among them; any exporter on a release
+that predates the batcher; anything the schema does not describe, `nop` and
+`datadog` among them — the hint names the processor instead, because a fix the
+release has no setting for is no fix. Which exporters those are is the schema's
+answer and moves with the release, which is the point of asking it. Where one finding covers several exporters
+at once it names the queue batcher only if all of them accept it; where they
+disagree it names the processor and says that only some of them can take a
+`sending_queue.batch`, since the reason it gives otherwise would be false of
+half of them.
 
 `no-persistent-queue` is the one opinionated rule, and it reports at `info` for
 that reason. The sending queue is on by default and lives in memory, so a

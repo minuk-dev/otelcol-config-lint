@@ -521,7 +521,7 @@ service:
 
 	assert.Equal(t, `pipeline "traces" has no batch processor, and none of its exporters batches in sending_queue`,
 		found[0].Message)
-	assert.Equal(t, "add batch before the exporters to reduce the number of outgoing requests", found[0].Hint)
+	assert.Equal(t, processorFirst+"only some of them can take a sending_queue.batch of their own", found[0].Hint)
 	assert.Contains(t, found[0].Docs, "processor/batchprocessor/README.md")
 }
 
