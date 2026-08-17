@@ -11,6 +11,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -107,7 +108,7 @@ func New(opts Options) *Linter {
 		}
 	}
 
-	return &Linter{opts: opts, rules: rule.All()}
+	return &Linter{opts: opts, rules: ruleset.All()}
 }
 
 // Rules returns the rules the linter will run, in name order.

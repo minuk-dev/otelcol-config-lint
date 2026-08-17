@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 )
 
 // newListCommand builds "list" and its subcommands. Each one carries only the
@@ -83,7 +83,7 @@ func (o *Options) runListRules(cmd *cobra.Command) error {
 
 	w := newColumns(cmd.OutOrStdout())
 
-	for _, r := range rule.All() {
+	for _, r := range ruleset.All() {
 		sev := r.Severity()
 
 		note := ""

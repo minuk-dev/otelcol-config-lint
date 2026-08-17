@@ -32,8 +32,11 @@ build:
 build-snapshot:
 	goreleaser build --snapshot --clean
 
+# -coverpkg spreads coverage over every package, not only the one a test sits
+# in. A rule is its own package now, and the tests that run the whole set live
+# in pkg/ruleset, so without it the rules they exercise report as untested.
 test:
-	go test -race ./... -coverprofile=coverage.txt
+	go test -race ./... -coverprofile=coverage.txt -coverpkg=./...
 
 lint:
 	golangci-lint run

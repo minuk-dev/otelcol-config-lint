@@ -1,10 +1,21 @@
-// Package rule defines the linter's checks and the registry that holds them.
+// Package rule defines what a check is and the vocabulary every check is
+// written in.
+//
+// One rule lives in one package under this one, so a contributor adding a
+// check writes a directory rather than a hunk in the middle of a shared file.
+// A rule package declares its type, embeds Base for the name, description and
+// default severity, and exports New. The registry that collects them all is
+// pkg/ruleset, which is separate so a rule can import this package without the
+// two importing each other.
+//
+// Everything a rule needs beyond the interface is here too: the YAML readers,
+// the phrasing helpers a finding is written with, and the shared readers for
+// the components more than one rule has something to say about.
 package rule
 
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -130,42 +141,29 @@ func Run(r Rule, ctx Context, severity diag.Severity) diag.Diagnostics {
 	return out
 }
 
-// All returns every built-in rule, sorted by name. The set is built on each
-// call rather than registered into package state, so nothing depends on
-// initialisation order and callers can safely keep or filter the result.
-func All() []Rule {
-	rules := slices.Concat(
-		structureRules(),
-		referenceRules(),
-		componentRules(),
-		fieldRules(),
-		settingsRules(),
-		practiceRules(),
-		securityRules(),
-	)
-	slices.SortFunc(rules, func(a, b Rule) int { return strings.Compare(a.Name(), b.Name()) })
-
-	return rules
-}
-
-// Lookup returns a built-in rule by name.
-func Lookup(name string) (Rule, bool) {
-	for _, r := range All() {
-		if r.Name() == name {
-			return r, true
-		}
-	}
-
-	return nil, false
-}
-
-// base is the common implementation detail of every built-in rule.
-type base struct {
+// Base carries the three answers every rule gives the same way. A rule embeds
+// it, so its own file holds the check and nothing else.
+type Base struct {
 	name string
 	desc string
 	sev  diag.Severity
 }
 
-func (b base) Name() string            { return b.name }
-func (b base) Description() string     { return b.desc }
-func (b base) Severity() diag.Severity { return b.sev }
+// NewBase builds the identity a rule reports under: the name it is enabled and
+// disabled by, the one-line description "otelcol-config-lint rules" prints, and
+// the severity it reports at unless the caller overrides it.
+func NewBase(name, desc string, sev diag.Severity) Base {
+	return Base{name: name, desc: desc, sev: sev}
+}
+
+// Name is the stable identifier the rule is enabled and disabled by.
+func (b Base) Name() string { return b.name }
+
+// Description is the one-line explanation the rules listing prints.
+func (b Base) Description() string { return b.desc }
+
+// Severity is the level the rule reports at unless overridden.
+func (b Base) Severity() diag.Severity { return b.sev }
+
+// IsSignal reports whether a pipeline key names a signal the collector knows.
+func IsSignal(s config.Signal) bool { return slices.Contains(config.Signals(), s) }

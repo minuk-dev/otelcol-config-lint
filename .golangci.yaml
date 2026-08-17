@@ -44,6 +44,7 @@ linters:
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(EnvironmentPolicy|EnvironmentOverride)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/schema\.(Store|Schema|Component|Field)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest\.Options'
         # An environment nobody described is the zero value, and saying so is
         # the point: the rules that need one then report nothing.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Environment'
