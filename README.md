@@ -306,15 +306,20 @@ its own. Where only some of them do, the pipeline is under-batched on the legs
 that do not, so the finding names the exporter and sits on the line that wires
 it in — that exporter's settings are where the fix is written. A connector in
 the exporter slot is not a leg out of the collector and is not counted; it feeds
-another pipeline, which has exporters of its own. An exporter whose settings
-come from a merge key or an expansion, and one whose type the field schema does
-not describe, count as unknown rather than as not batching, for the same reason
-the field rules leave what they cannot resolve alone.
+another pipeline, which has exporters of its own. An exporter whose settings, or
+whose queue, come from a merge key or an expansion counts as unknown rather than
+as not batching, for the same reason the field rules leave what they cannot
+resolve alone. The batcher is off by default, so everything else the document
+settles on its own: an exporter that does not write one does not have one,
+whatever the schema knows about the type.
 
-The hint follows the schema rather than the other way round: where the exporters
-have no `sending_queue` to hold a batcher — `nop`, and `debug` on a release
-before upstream gave it a queue — it names the processor instead, because a fix
-the component has no setting for is no fix.
+What the schema is asked is which fix to name. Where it describes the exporter's
+queue in full and there is no `batch` in it — upstream added the batcher in
+`v0.123`, and `debug` had no queue at all for longer than that — the hint names
+the processor instead and links its README, because writing a setting the
+release has no field for does not batch, it fails to load. Where the schema
+resolved nothing for the type, as it has not for `datadog`, the queue batcher is
+still the advice to give.
 
 `no-persistent-queue` is the one opinionated rule, and it reports at `info` for
 that reason. The sending queue is on by default and lives in memory, so a

@@ -346,7 +346,7 @@ func TestMissingBatchWithoutASendingQueue(t *testing.T) {
 
 	pipeline := checkRule(t, "missing-batch", debugging(""), rule.Environment{})
 	require.Len(t, pipeline, 1)
-	assert.Equal(t, processorFirst+"these exporters have no sending_queue to batch in", pipeline[0].Hint)
+	assert.Equal(t, processorFirst+"these exporters cannot take a sending_queue.batch", pipeline[0].Hint)
 	assert.Contains(t, pipeline[0].Docs, "processor/batchprocessor/README.md")
 
 	mixed := checkRule(t, "missing-batch", `
@@ -363,7 +363,7 @@ service:
 	require.Len(t, mixed, 1)
 	assert.Equal(t, `exporter "debug" sends unbatched in pipeline "traces", which has no batch processor`,
 		mixed[0].Message)
-	assert.Equal(t, processorFirst+"this exporter has no sending_queue to batch in", mixed[0].Hint)
+	assert.Equal(t, processorFirst+"this exporter cannot take a sending_queue.batch", mixed[0].Hint)
 }
 
 func TestMissingBatchStaysQuiet(t *testing.T) {
@@ -435,16 +435,6 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [otlphttp]}
 `,
-		// The schema resolved no fields for this one, so there is nothing to
-		// say what it does before it sends. testSchema's logging exporter has
-		// the same shape as the datadog exporter's entry.
-		"an exporter the schema does not describe": `
-receivers: {otlp: }
-exporters: {logging: }
-service:
-  pipelines:
-    traces: {receivers: [otlp], exporters: [logging]}
-`,
 		// A connector is not a leg out of the collector: it feeds another
 		// pipeline, which has exporters of its own to batch on.
 		"a pipeline that only feeds a connector": `
@@ -489,20 +479,110 @@ exporters:
 	}
 }
 
-// Without a schema there is nothing to say what an exporter does before it
-// sends, and the field rules' principle applies: partial coverage says nothing
-// rather than something wrong.
+// checkWithSchema runs one rule against a schema the test builds itself, for
+// the releases and component shapes testSchema does not stand in for.
+func checkWithSchema(t *testing.T, name, src string, s *schema.Schema) diag.Diagnostics {
+	t.Helper()
+
+	f, err := config.Parse("test.yaml", []byte(src))
+	require.NoError(t, err, "parse")
+
+	r, ok := rule.Lookup(name)
+	require.Truef(t, ok, "rule %q is not registered", name)
+
+	return rule.Run(r, rule.Context{File: f, Schema: s, Index: rule.NewIndex(f)}, r.Severity())
+}
+
+// The batcher is off by default, so an exporter that does not write one does
+// not have one, and the document settles that with no schema at all. What the
+// schema is asked is what to advise, and with nothing to go on the answer is
+// the setting upstream is steering towards.
 func TestMissingBatchWithoutASchema(t *testing.T) {
 	t.Parallel()
 
-	f, err := config.Parse("test.yaml", []byte(exporting("")))
-	require.NoError(t, err, "parse")
+	found := checkWithSchema(t, "missing-batch", exporting(""), &schema.Schema{})
+	require.Len(t, found, 1)
+	assert.Contains(t, found[0].Hint, "configure sending_queue.batch on the exporters")
+}
 
-	r, ok := rule.Lookup("missing-batch")
-	require.True(t, ok, "rule is not registered")
+// An exporter the schema resolved no fields for is still an exporter that
+// batches nothing when nothing writes a batcher under it. testSchema's logging
+// entry has the shape the datadog exporter's has, and datadog is a production
+// exporter that batching is exactly the advice for.
+func TestMissingBatchWithoutFields(t *testing.T) {
+	t.Parallel()
 
-	found := rule.Run(r, rule.Context{File: f, Schema: &schema.Schema{}, Index: rule.NewIndex(f)}, r.Severity())
-	assert.Empty(t, found)
+	const declared = `
+receivers: {otlp: }
+exporters:
+  logging:
+`
+
+	const wired = `
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [logging]}
+`
+
+	found := checkRule(t, "missing-batch", declared+wired, rule.Environment{})
+	require.Len(t, found, 1)
+	assert.Contains(t, found[0].Hint, "configure sending_queue.batch on the exporters")
+
+	batching := checkRule(t, "missing-batch",
+		declared+"    sending_queue:\n      batch: {}\n"+wired, rule.Environment{})
+	assert.Empty(t, batching, "a batcher the config writes is a batcher whatever the schema knows")
+}
+
+// The queue grew its batcher in v0.123. Advising it on a release whose queue
+// has no such field would be advising a config that fails to load, which is
+// what unknown-field would then report against the linter's own hint.
+func TestMissingBatchBeforeTheQueueBatched(t *testing.T) {
+	t.Parallel()
+
+	older := &schema.Schema{
+		CollectorVersion: "v0.110.0",
+		Components: map[config.Kind]map[string]*schema.Component{
+			config.KindReceiver: {"otlp": {Type: "otlp", Signals: []config.Signal{"traces"}}},
+			config.KindExporter: {"otlphttp": {Type: "otlphttp", Signals: []config.Signal{"traces"},
+				Fields: &schema.Field{Type: "map", Children: map[string]*schema.Field{
+					"endpoint": {Type: "string"},
+					"sending_queue": {Type: "map", Children: map[string]*schema.Field{
+						"enabled":    {Type: "bool"},
+						"queue_size": {Type: "int"},
+						"storage":    {Type: "string"},
+					}},
+				}}}},
+		},
+	}
+
+	found := checkWithSchema(t, "missing-batch", exporting(""), older)
+	require.Len(t, found, 1)
+	assert.Equal(t, "add batch before the exporters to reduce the number of outgoing requests; "+
+		"these exporters cannot take a sending_queue.batch", found[0].Hint)
+	assert.Contains(t, found[0].Docs, "processor/batchprocessor/README.md")
+}
+
+// A finding covering exporters that cannot all take the same fix says so
+// instead of naming a setting half of them have no field for.
+func TestMissingBatchWhereOnlySomeExportersHaveAQueue(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+exporters:
+  debug:
+  otlphttp:
+    endpoint: http://backend:4318
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug, otlphttp]}
+`
+
+	found := checkRule(t, "missing-batch", src, rule.Environment{})
+	require.Len(t, found, 1)
+	assert.Equal(t, "add batch before the exporters to reduce the number of outgoing requests; "+
+		"only some of them can take a sending_queue.batch of their own", found[0].Hint)
+	assert.Contains(t, found[0].Docs, "processor/batchprocessor/README.md")
 }
 
 func TestNoPersistentQueue(t *testing.T) {
