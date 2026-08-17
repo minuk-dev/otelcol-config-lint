@@ -6,8 +6,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 )
 
 // newListCommand builds "list" and its subcommands. Each one carries only the
@@ -32,8 +30,9 @@ func (o *Options) newListRulesCommand() *cobra.Command {
 		Use:   "rules",
 		Short: "Print the rules and their default severities",
 		Long: "Print the rules and their default severities.\n\n" +
-			"A severity changed by --disable, --severity or the settings file is\n" +
-			"marked as overridden.",
+			"A severity changed by --default, --enable, --disable, --severity or\n" +
+			"the settings file is marked as overridden; a rule that will not run\n" +
+			"is listed at severity \"off\".",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := o.Prepare(cmd)
@@ -45,7 +44,7 @@ func (o *Options) newListRulesCommand() *cobra.Command {
 		},
 	}
 
-	o.registerSettingsFlag(cmd)
+	o.registerSettingsFlags(cmd)
 	o.registerRuleFlags(cmd)
 
 	return cmd
@@ -68,7 +67,7 @@ func (o *Options) newListVersionsCommand() *cobra.Command {
 		},
 	}
 
-	o.registerSettingsFlag(cmd)
+	o.registerSettingsFlags(cmd)
 	o.registerSchemaLocationFlag(cmd)
 	o.registerDistributionFlag(cmd)
 
@@ -76,14 +75,19 @@ func (o *Options) newListVersionsCommand() *cobra.Command {
 }
 
 func (o *Options) runListRules(cmd *cobra.Command) error {
-	overrides, err := o.severityOverrides()
+	overrides, err := o.policy.resolve()
+	if err != nil {
+		return err
+	}
+
+	rules, err := o.policy.rules()
 	if err != nil {
 		return err
 	}
 
 	w := newColumns(cmd.OutOrStdout())
 
-	for _, r := range ruleset.All() {
+	for _, r := range rules {
 		sev := r.Severity()
 
 		note := ""

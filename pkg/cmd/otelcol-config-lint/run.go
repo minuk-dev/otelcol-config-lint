@@ -15,7 +15,12 @@ func newRunCommand(opts *Options) *cobra.Command {
 		Example: `  otelcol-config-lint run config.yaml
   otelcol-config-lint run --collector-version v0.157.0 --summary ./configs
   cat config.yaml | otelcol-config-lint run -
-  otelcol-config-lint run --output json --strict ./configs > report.json`,
+  otelcol-config-lint run --output json --strict ./configs > report.json
+  otelcol-config-lint run --default none -E invalid-value ./configs
+  otelcol-config-lint run -c ci.yaml ./configs
+
+The policy itself belongs in ` + DefaultSettingsFile + `, which is read from
+this directory or any parent above it; every flag here mirrors one of its keys.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := opts.Prepare(cmd)
