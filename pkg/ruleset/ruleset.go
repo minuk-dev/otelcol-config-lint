@@ -6,7 +6,9 @@
 // only place that knows about all of them.
 //
 // Adding a rule is therefore two edits: a new package under pkg/rule, and one
-// line in the list below.
+// line in the list below. A third is enforced by the tests: an invalid config
+// the rule reports on, under testdata/rules, which is where a rule is shown
+// working through the command line rather than against a stand-in schema.
 package ruleset
 
 import (

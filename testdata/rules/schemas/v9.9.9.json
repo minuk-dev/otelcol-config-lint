@@ -1,0 +1,87 @@
+{
+  "collectorVersion": "v9.9.9",
+  "distribution": "contrib",
+  "components": {
+    "receiver": {
+      "otlp": {
+        "type": "otlp",
+        "signals": ["traces"],
+        "stability": {"traces": "stable"},
+        "fields": {
+          "type": "map",
+          "required": ["protocols"],
+          "children": {
+            "protocols": {
+              "type": "map",
+              "children": {
+                "grpc": {
+                  "type": "map",
+                  "children": {"endpoint": {"type": "string"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "processor": {
+      "batch": {
+        "type": "batch",
+        "signals": ["traces"],
+        "stability": {"traces": "stable"},
+        "fields": {
+          "type": "map",
+          "children": {
+            "send_batch_max_size": {"type": "int"},
+            "send_batch_size": {"type": "int"},
+            "timeout": {"type": "duration"}
+          }
+        }
+      },
+      "memory_limiter": {
+        "type": "memory_limiter",
+        "signals": ["traces"],
+        "stability": {"traces": "stable"},
+        "fields": {
+          "type": "map",
+          "required": ["check_interval"],
+          "children": {
+            "check_interval": {"type": "duration"},
+            "limit_mib": {"type": "int"},
+            "limit_percentage": {"type": "int"},
+            "spike_limit_mib": {"type": "int"},
+            "spike_limit_percentage": {"type": "int"}
+          }
+        }
+      }
+    },
+    "exporter": {
+      "otlp_grpc": {
+        "type": "otlp_grpc",
+        "signals": ["traces"],
+        "stability": {"traces": "stable"},
+        "fields": {
+          "type": "map",
+          "children": {
+            "compression": {
+              "type": "string",
+              "enum": ["gzip", "snappy", "zstd", "none", ""],
+              "deprecated": "use \"compression_type\", which also names the compression level"
+            },
+            "compression_type": {"type": "string"},
+            "endpoint": {"type": "string"},
+            "sending_queue": {
+              "type": "map",
+              "children": {
+                "enabled": {"type": "bool"},
+                "queue_size": {"type": "int"},
+                "storage": {"type": "string"}
+              }
+            },
+            "timeout": {"type": "duration"}
+          }
+        }
+      }
+    }
+  }
+}

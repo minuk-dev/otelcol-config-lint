@@ -1,0 +1,27 @@
+# deprecated-field: a setting upstream has replaced.
+#
+# No released schema carries a deprecated setting yet, so this fixture is
+# checked against the small schema in ./schemas, which does.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+    compression: gzip # deprecated-field: replaced by "compression_type" in this schema
+    sending_queue:
+      enabled: false
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

@@ -1,0 +1,27 @@
+# unused-component: a declared component no pipeline reaches.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+  otlp/second: # unused-component: declared, referenced by no pipeline, so never instantiated
+    protocols:
+      http:
+        endpoint: localhost:4318
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+    sending_queue:
+      enabled: false
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

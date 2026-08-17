@@ -1,0 +1,22 @@
+# debug-exporter-verbosity: a debug exporter writing out everything it is given.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  debug:
+    verbosity: detailed # the verbosity that writes each record out in full
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      # debug-exporter-verbosity: everything this pipeline exports is written to the log
+      exporters: [debug]

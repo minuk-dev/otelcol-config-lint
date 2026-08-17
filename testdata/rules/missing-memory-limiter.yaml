@@ -1,0 +1,19 @@
+# missing-memory-limiter: nothing bounds what the collector holds.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  batch:
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+    sending_queue:
+      enabled: false
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch] # missing-memory-limiter: under load, the OOM killer is the limit
+      exporters: [otlp_grpc]
