@@ -1,0 +1,12 @@
+# What this fixture is for, in the shape golangci-lint uses: the rules that
+# are switched on, the ones switched off, and per-rule options.
+rules:
+  # Rules that must report on the fixture.
+  enable:
+    - unknown-top-level-key
+  # Nothing to switch off: the fixture reports what it is named after.
+  disable: []
+  # Per-rule options, keyed by rule name. No rule takes one yet.
+  settings: {}
+# No "run:" block: the defaults are enough -- the latest schema of the
+# contrib distribution, with every severity visible.

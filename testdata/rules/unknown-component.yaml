@@ -1,0 +1,20 @@
+# unknown-component: a component type this release does not ship.
+receivers:
+  nosuchreceiver: # unknown-component: no receiver of this type exists in the targeted release
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+    sending_queue:
+      enabled: false
+service:
+  pipelines:
+    traces:
+      receivers: [nosuchreceiver]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

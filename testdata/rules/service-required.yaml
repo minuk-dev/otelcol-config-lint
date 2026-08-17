@@ -1,0 +1,12 @@
+# service-required: components are declared, but nothing wires them up.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+    sending_queue:
+      enabled: false
+# service-required: no service block, so the collector starts nothing at all

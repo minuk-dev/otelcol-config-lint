@@ -1,0 +1,22 @@
+# missing-batch: telemetry leaves the collector one record at a time.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+    sending_queue:
+      enabled: false
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter] # missing-batch: nothing batches, so a record is an export
+      exporters: [otlp_grpc]

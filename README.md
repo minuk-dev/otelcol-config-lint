@@ -717,6 +717,7 @@ pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
 pkg/quantity/                 Kubernetes memory quantities, parsed and printed back
 pkg/version/                  the linter's own version, stamped at build time
+testdata/rules/               one invalid config per rule, with the run that shows it
 action.yml                    the GitHub Action; Dockerfile wraps the released image it runs
 build/docker/Dockerfile       the distroless linter image releases publish
 ```
@@ -765,6 +766,24 @@ found, err := ruletest.Run(mynewrule.New(), src)
 A test that is about two rules meeting -- one reporting where the other stays
 quiet -- belongs in `pkg/ruleset` instead, which is where the whole set is run
 at once.
+
+Last, the rule needs a config in `testdata/rules`: `my-new-rule.yaml`, which
+breaks it, with a comment naming the rule on the line that breaks it, and
+`my-new-rule.settings.yaml`, which says which rules the run has on in the shape
+golangci-lint uses:
+
+```yaml
+rules:
+  enable: [my-new-rule]  # must report on my-new-rule.yaml
+  disable: []            # switched off for this run, and must stay quiet
+  settings: {}           # per-rule options, keyed by rule name
+```
+
+The tests refuse a rule with no fixture, so this is where a rule is shown
+working through the real command line, the published schemas and the severity
+gate rather than against the stand-in schema. `testdata/rules/README.md` has the
+rest of the schema, including how a fixture selects its own collector release or
+states the container it runs in.
 
 ## Development
 

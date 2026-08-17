@@ -1,0 +1,23 @@
+# deprecated-component: a component upstream has replaced.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  otlp: # deprecated-component: renamed to "otlp_grpc" upstream; the old name still resolves for now
+    endpoint: backend:4317
+    sending_queue:
+      enabled: false
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]

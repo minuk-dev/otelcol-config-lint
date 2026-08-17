@@ -1,0 +1,22 @@
+# no-persistent-queue: a sending queue a restart empties.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  # no-persistent-queue: the default sending_queue is in memory, with no storage behind it
+  otlp_grpc:
+    endpoint: backend:4317
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]
