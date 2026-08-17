@@ -709,7 +709,10 @@ pkg/scanner/                  expands the given paths into the files to lint
 pkg/sets/                     a set built on a map, in the shape of k8s.io/apimachinery
 pkg/config/                   YAML parsing that keeps positions, so findings have line numbers
 pkg/schema/                   schema types, version resolution and location lookup
-pkg/rule/                     the rules and the registry
+pkg/rule/                     what a rule is: the interface, the context and the shared readers
+pkg/rule/<rule-name>/         one rule and its tests, one package each
+pkg/rule/ruletest/            the fixtures a rule's tests are written against
+pkg/ruleset/                  the registry: every rule collected into one set
 pkg/lint/                     the engine and the output formatters
 pkg/diag/                     diagnostics, severities and positions
 pkg/quantity/                 Kubernetes memory quantities, parsed and printed back
@@ -717,6 +720,51 @@ pkg/version/                  the linter's own version, stamped at build time
 action.yml                    the GitHub Action; Dockerfile wraps the released image it runs
 build/docker/Dockerfile       the distroless linter image releases publish
 ```
+
+## Adding a rule
+
+A rule is a package. `pkg/rule` defines what one is -- the `Rule` interface, the
+`Context` a check reads, the `Finding` it reports -- along with the YAML readers
+and phrasing helpers every rule shares. `pkg/ruleset` is the only place that
+knows about all of them, which is what keeps a rule free to import the
+vocabulary it is written in.
+
+So a new rule is one directory and one line:
+
+```go
+// pkg/rule/mynewrule/rule.go
+package mynewrule
+
+// New builds the rule.
+func New() rule.Rule {
+	return myNewRule{rule.NewBase("my-new-rule",
+		"one line saying what this reports", diag.Warning)}
+}
+
+type myNewRule struct{ rule.Base }
+
+func (r myNewRule) Check(ctx *rule.Context) {
+	for _, p := range ctx.File.Service.Pipelines {
+		ctx.Report(rule.Finding{
+			Node: p.KeyNode, Path: "service.pipelines." + p.Key,
+			Message: "pipeline " + rule.Quote(p.Key) + " is doing the thing",
+			Hint:    "stop doing the thing",
+		})
+	}
+}
+```
+
+Then add `mynewrule.New()` to the list in `pkg/ruleset/ruleset.go`, and write
+`pkg/rule/mynewrule/rule_test.go` against `pkg/rule/ruletest`, which carries the
+stand-in schema and the clean config every rule's tests start from:
+
+```go
+found, err := ruletest.Run(mynewrule.New(), src)
+```
+
+A test that is about two rules meeting -- one reporting where the other stays
+quiet -- belongs in `pkg/ruleset` instead, which is where the whole set is run
+at once.
 
 ## Development
 

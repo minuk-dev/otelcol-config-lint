@@ -2,7 +2,6 @@ package rule
 
 import (
 	"github.com/samber/lo"
-	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -149,6 +148,14 @@ func (idx *Index) KindOf(id config.ID) (config.Kind, bool) {
 	return "", false
 }
 
+func (idx *Index) markUsed(k config.Kind, id config.ID) {
+	if idx.used[k] == nil {
+		idx.used[k] = map[config.ID]bool{}
+	}
+
+	idx.used[k][id] = true
+}
+
 // ExtensionRef is a reference to an extension written inside a component's
 // own settings rather than in the service block, such as an exporter's
 // sending_queue.storage.
@@ -188,14 +195,10 @@ type extensionField struct {
 // It returns a fresh slice so callers cannot alter what everyone else sees.
 func extensionFields() []extensionField {
 	return []extensionField{
-		{parent: "sending_queue", key: "storage", role: "storage", docs: exporterQueueDocs},
-		{parent: "auth", key: "authenticator", role: "auth", docs: authDocs},
+		{parent: SendingQueueKey, key: StorageKey, role: "storage", docs: ExporterQueueDocs},
+		{parent: "auth", key: "authenticator", role: "auth", docs: AuthDocs},
 	}
 }
-
-// maxSettingsDepth bounds the settings walk. It is past the deepest real
-// component config, and stops an anchor that resolves into itself.
-const maxSettingsDepth = 16
 
 // extensionRefs collects every extension reference in the file's component
 // settings, in declaration order.
@@ -217,101 +220,25 @@ func componentExtensionRefs(c config.Component) []ExtensionRef {
 
 	fields := extensionFields()
 
-	walkSettings(c.ValueNode, c.Kind.Section()+"."+c.ID.String(), 0, func(n *yaml.Node, path string) {
-		for _, e := range mapEntries(n, path) {
-			field, held := lo.Find(fields, func(f extensionField) bool { return f.parent == e.key })
+	WalkSettings(c.ValueNode, c.Kind.Section()+"."+c.ID.String(), 0, func(n *yaml.Node, path string) {
+		for _, e := range MapEntries(n, path) {
+			field, held := lo.Find(fields, func(f extensionField) bool { return f.parent == e.Key })
 			if !held {
 				continue
 			}
 
-			name, named := scalarChild(e.node, field.key).Get()
+			name, named := ScalarChild(e.Node, field.key).Get()
 			if !named {
 				continue
 			}
 
 			out = append(out, ExtensionRef{
 				ID: config.ParseID(name.Value), Node: name,
-				Path: joinPath(e.path, field.key), Component: c,
+				Path: JoinPath(e.Path, field.key), Component: c,
 				Role: field.role, Docs: field.docs,
 			})
 		}
 	})
 
 	return out
-}
-
-// scalarChild returns the named scalar of a mapping, when it holds a name
-// worth resolving. An empty value is not a reference, and one built from a
-// confmap expansion is only known once the collector starts.
-func scalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
-	val, written := childNode(n, key).Get()
-	if !written {
-		return mo.None[*yaml.Node]()
-	}
-
-	val = resolveAlias(val)
-	if val == nil || val.Kind != yaml.ScalarNode || val.Value == "" || hasExpansion(val.Value) {
-		return mo.None[*yaml.Node]()
-	}
-
-	return mo.Some(val)
-}
-
-// childNode returns the value a mapping writes under a key, whatever shape it
-// has. What counts as a usable value is the caller's business: an expansion is
-// nothing to a rule resolving a name, and still worth reading to one asking
-// which address a component listens on.
-func childNode(n *yaml.Node, key string) mo.Option[*yaml.Node] {
-	n = resolveAlias(n)
-	if n == nil || n.Kind != yaml.MappingNode {
-		return mo.None[*yaml.Node]()
-	}
-
-	e, found := lo.Find(mapEntries(n, ""), func(e mapEntry) bool { return e.key == key })
-	if !found {
-		return mo.None[*yaml.Node]()
-	}
-
-	return mo.Some(e.node)
-}
-
-// walkSettings visits every mapping inside a component's settings, together
-// with its dotted path.
-func walkSettings(n *yaml.Node, path string, depth int, visit func(*yaml.Node, string)) {
-	n = resolveAlias(n)
-	if n == nil || depth > maxSettingsDepth {
-		return
-	}
-
-	switch n.Kind {
-	case yaml.MappingNode:
-		visit(n, path)
-
-		for _, e := range mapEntries(n, path) {
-			walkSettings(e.node, e.path, depth+1, visit)
-		}
-	case yaml.SequenceNode:
-		for i, item := range n.Content {
-			walkSettings(item, indexPath(path, i), depth+1, visit)
-		}
-	default:
-		// A scalar carries no further settings.
-	}
-}
-
-// resolveAlias follows an anchor reference to the node it stands for.
-func resolveAlias(n *yaml.Node) *yaml.Node {
-	for i := 0; n != nil && n.Kind == yaml.AliasNode && i < maxSettingsDepth; i++ {
-		n = n.Alias
-	}
-
-	return n
-}
-
-func (idx *Index) markUsed(k config.Kind, id config.ID) {
-	if idx.used[k] == nil {
-		idx.used[k] = map[config.ID]bool{}
-	}
-
-	idx.used[k][id] = true
 }

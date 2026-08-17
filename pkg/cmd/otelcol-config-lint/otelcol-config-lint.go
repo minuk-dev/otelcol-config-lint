@@ -18,7 +18,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
@@ -425,7 +425,7 @@ func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
 	out := map[string]diag.Severity{}
 
 	for _, name := range splitList(o.disable) {
-		if _, ok := rule.Lookup(name); !ok {
+		if _, ok := ruleset.Lookup(name); !ok {
 			return nil, fmt.Errorf("--disable: %w %q", ErrUnknownRule, name)
 		}
 
@@ -438,7 +438,7 @@ func (o *Options) severityOverrides() (map[string]diag.Severity, error) {
 			return nil, fmt.Errorf("--severity: %q is %w", pair, ErrBadSeverityPair)
 		}
 
-		if _, ok := rule.Lookup(name); !ok {
+		if _, ok := ruleset.Lookup(name); !ok {
 			return nil, fmt.Errorf("--severity: %w %q", ErrUnknownRule, name)
 		}
 
