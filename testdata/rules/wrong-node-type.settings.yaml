@@ -1,0 +1,17 @@
+# What this fixture is for, in the shape golangci-lint uses: the rules that
+# are switched on, the ones switched off, and per-rule options.
+rules:
+  # Rules that must report on the fixture.
+  enable:
+    - wrong-node-type
+  # Rules switched off for this run, so the fixture stays about one mistake.
+  # A slot the linter cannot read reaches no component: otlp then looks
+  # declared and unused, and the pipeline it belongs to looks like it has no
+  # receivers.
+  disable:
+    - unused-component
+    - empty-pipeline
+  # Per-rule options, keyed by rule name. No rule takes one yet.
+  settings: {}
+# No "run:" block: the defaults are enough -- the latest schema of the
+# contrib distribution, with every severity visible.

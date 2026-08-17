@@ -1,0 +1,10 @@
+# empty-pipeline: a pipeline that receives telemetry and never sends it anywhere.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+service:
+  pipelines:
+    traces: # empty-pipeline: no exporters, so the telemetry this pipeline receives goes nowhere
+      receivers: [otlp]

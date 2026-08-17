@@ -1,0 +1,16 @@
+# What this fixture is for, in the shape golangci-lint uses: the rules that
+# are switched on, the ones switched off, and per-rule options.
+rules:
+  # Rules that must report on the fixture.
+  enable:
+    - undefined-extension-reference
+  # Rules switched off for this run, so the fixture stays about one mistake.
+  # The exporter is spelt "otlp" because that release types the newer name's
+  # storage setting as a mapping; the old name is deprecated, which is not
+  # what this fixture is about.
+  disable:
+    - deprecated-component
+  # Per-rule options, keyed by rule name. No rule takes one yet.
+  settings: {}
+# No "run:" block: the defaults are enough -- the latest schema of the
+# contrib distribution, with every severity visible.
