@@ -6,9 +6,11 @@
 // only place that knows about all of them.
 //
 // Adding a rule is therefore two edits: a new package under pkg/rule, and one
-// line in the list below. A third is enforced by the tests: an invalid config
+// line in the list below. Two more are enforced by the tests: an invalid config
 // the rule reports on, under testdata/rules, which is where a rule is shown
-// working through the command line rather than against a stand-in schema.
+// working through the command line rather than against a stand-in schema; and
+// "make config-schema", because the JSON Schema an editor checks a settings
+// file against lists every name in this set.
 package ruleset
 
 import (

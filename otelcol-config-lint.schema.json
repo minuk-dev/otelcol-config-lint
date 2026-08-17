@@ -1,0 +1,425 @@
+{
+  "$defs": {
+    "quantity": {
+      "description": "A Kubernetes quantity such as 512Mi, 1Gi or 2G, or a bare byte count.",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(([KMGTPE]i)|[kMGTPE])?$",
+      "type": "string"
+    },
+    "rule": {
+      "description": "A rule the linter carries.",
+      "enum": [
+        "batch-size-bounds",
+        "component-stability",
+        "connector-wiring",
+        "debug-exporter-verbosity",
+        "debug-extension-exposed",
+        "deprecated-component",
+        "deprecated-field",
+        "duplicate-key",
+        "duplicate-reference",
+        "empty-pipeline",
+        "hardcoded-secret",
+        "insecure-tls",
+        "invalid-pipeline-key",
+        "invalid-value",
+        "memory-limiter-config",
+        "memory-limiter-sizing",
+        "missing-batch",
+        "missing-memory-limiter",
+        "no-persistent-queue",
+        "processor-order",
+        "receiver-binds-all-interfaces",
+        "required-field",
+        "service-required",
+        "signal-support",
+        "undefined-extension-reference",
+        "undefined-reference",
+        "unknown-component",
+        "unknown-field",
+        "unknown-pipeline-key",
+        "unknown-service-key",
+        "unknown-top-level-key",
+        "unused-component",
+        "wrong-node-type"
+      ],
+      "type": "string"
+    },
+    "severity": {
+      "description": "A severity level.",
+      "enum": [
+        "error",
+        "warning",
+        "info",
+        "off"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Settings for otelcol-config-lint, read from .otelcol-config-lint.yaml or --config.",
+  "properties": {
+    "collectorVersion": {
+      "deprecated": true,
+      "description": "Deprecated: moved to run.collectorVersion.",
+      "examples": [
+        "latest",
+        "v0.157.0"
+      ],
+      "type": "string"
+    },
+    "disable": {
+      "deprecated": true,
+      "description": "Deprecated: moved to rules.disable.",
+      "items": {
+        "$ref": "#/$defs/rule"
+      },
+      "type": "array"
+    },
+    "distribution": {
+      "deprecated": true,
+      "description": "Deprecated: moved to run.distribution.",
+      "examples": [
+        "core",
+        "contrib",
+        "k8s",
+        "otlp"
+      ],
+      "type": "string"
+    },
+    "exclude": {
+      "deprecated": true,
+      "description": "Deprecated: moved to run.exclude.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "failOn": {
+      "$ref": "#/$defs/severity",
+      "deprecated": true,
+      "description": "Deprecated: moved to issues.failOn."
+    },
+    "ignoreMissingSchemas": {
+      "deprecated": true,
+      "description": "Deprecated: moved to run.ignoreMissingSchemas.",
+      "type": "boolean"
+    },
+    "issues": {
+      "additionalProperties": false,
+      "description": "Which findings are reported, and which of them fail a file.",
+      "properties": {
+        "exitOnError": {
+          "description": "Stop the run at the first file that fails.",
+          "type": "boolean"
+        },
+        "failOn": {
+          "$ref": "#/$defs/severity",
+          "description": "The severity that makes a file invalid."
+        },
+        "minSeverity": {
+          "$ref": "#/$defs/severity",
+          "description": "The lowest severity worth printing."
+        }
+      },
+      "type": "object"
+    },
+    "kubernetes": {
+      "additionalProperties": false,
+      "deprecated": true,
+      "description": "Deprecated: moved to run.kubernetes.",
+      "properties": {
+        "enabled": {
+          "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+          "type": "boolean"
+        },
+        "memoryLimit": {
+          "$ref": "#/$defs/quantity",
+          "description": "The container's memory limit, e.g. 512Mi."
+        },
+        "memoryRequest": {
+          "$ref": "#/$defs/quantity",
+          "description": "The container's memory request, e.g. 256Mi."
+        },
+        "overrides": {
+          "description": "Per-path environments, matched in list order; the first match wins.",
+          "items": {
+            "additionalProperties": false,
+            "description": "One path-matched environment. It replaces the defaults for the files it matches rather than merging with them.",
+            "properties": {
+              "enabled": {
+                "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+                "type": "boolean"
+              },
+              "memoryLimit": {
+                "$ref": "#/$defs/quantity",
+                "description": "The container's memory limit, e.g. 512Mi."
+              },
+              "memoryRequest": {
+                "$ref": "#/$defs/quantity",
+                "description": "The container's memory request, e.g. 256Mi."
+              },
+              "paths": {
+                "description": "Glob patterns, matched exactly as run.exclude is.",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "paths"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "minSeverity": {
+      "$ref": "#/$defs/severity",
+      "deprecated": true,
+      "description": "Deprecated: moved to issues.minSeverity."
+    },
+    "output": {
+      "description": "How the findings are printed. A bare format name is shorthand for the block.",
+      "oneOf": [
+        {
+          "description": "Output format.",
+          "enum": [
+            "text",
+            "json",
+            "junit",
+            "tap",
+            "github"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "color": {
+              "description": "Print in colour when the destination is a terminal.",
+              "type": "boolean"
+            },
+            "format": {
+              "description": "Output format.",
+              "enum": [
+                "text",
+                "json",
+                "junit",
+                "tap",
+                "github"
+              ],
+              "type": "string"
+            },
+            "summary": {
+              "description": "Append a count of the outcomes.",
+              "type": "boolean"
+            },
+            "verbose": {
+              "description": "Also report the files that passed, and say which settings file was read.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "rules": {
+      "additionalProperties": false,
+      "description": "Which rules run and at what level.",
+      "properties": {
+        "default": {
+          "description": "The set to start from: every rule, or only what enable names.",
+          "enum": [
+            "all",
+            "none"
+          ],
+          "type": "string"
+        },
+        "disable": {
+          "description": "Rules to turn off. Naming a rule here and under enable is an error.",
+          "items": {
+            "$ref": "#/$defs/rule"
+          },
+          "type": "array"
+        },
+        "enable": {
+          "description": "Rules to turn on, on top of the set named by default.",
+          "items": {
+            "$ref": "#/$defs/rule"
+          },
+          "type": "array"
+        },
+        "settings": {
+          "additionalProperties": {
+            "type": "object"
+          },
+          "description": "Each rule's own settings, keyed by rule name. No built-in rule reads a block yet, so writing one is currently reported as an error.",
+          "propertyNames": {
+            "$ref": "#/$defs/rule"
+          },
+          "type": "object"
+        },
+        "severity": {
+          "additionalProperties": {
+            "$ref": "#/$defs/severity"
+          },
+          "description": "The level a rule reports at. Writing \"off\" disables it, exactly as listing it under disable does.",
+          "propertyNames": {
+            "$ref": "#/$defs/rule"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "run": {
+      "additionalProperties": false,
+      "description": "What to check, and against which collector.",
+      "properties": {
+        "collectorVersion": {
+          "description": "Collector release to validate against. \"latest\" uses the newest schema available.",
+          "examples": [
+            "latest",
+            "v0.157.0"
+          ],
+          "type": "string"
+        },
+        "concurrency": {
+          "description": "How many files to check in parallel.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "distribution": {
+          "description": "Collector binary the config will run on. Any distribution the schema registry carries is accepted, so this is not a closed set.",
+          "examples": [
+            "core",
+            "contrib",
+            "k8s",
+            "otlp"
+          ],
+          "type": "string"
+        },
+        "exclude": {
+          "description": "Glob patterns to skip when walking a directory. Matched against both the whole path and the base name; there is no \"**\".",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ignoreMissingSchemas": {
+          "description": "Do not fail on components the schema does not describe, for a custom distribution.",
+          "type": "boolean"
+        },
+        "kubernetes": {
+          "additionalProperties": false,
+          "description": "The pods the configs run in, for the rules that cannot judge a config without knowing what it runs in.",
+          "properties": {
+            "enabled": {
+              "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+              "type": "boolean"
+            },
+            "memoryLimit": {
+              "$ref": "#/$defs/quantity",
+              "description": "The container's memory limit, e.g. 512Mi."
+            },
+            "memoryRequest": {
+              "$ref": "#/$defs/quantity",
+              "description": "The container's memory request, e.g. 256Mi."
+            },
+            "overrides": {
+              "description": "Per-path environments, matched in list order; the first match wins.",
+              "items": {
+                "additionalProperties": false,
+                "description": "One path-matched environment. It replaces the defaults for the files it matches rather than merging with them.",
+                "properties": {
+                  "enabled": {
+                    "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+                    "type": "boolean"
+                  },
+                  "memoryLimit": {
+                    "$ref": "#/$defs/quantity",
+                    "description": "The container's memory limit, e.g. 512Mi."
+                  },
+                  "memoryRequest": {
+                    "$ref": "#/$defs/quantity",
+                    "description": "The container's memory request, e.g. 256Mi."
+                  },
+                  "paths": {
+                    "description": "Glob patterns, matched exactly as run.exclude is.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "paths"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "schemaLocations": {
+          "description": "Where to find schemas, searched in order: a directory, a URL, a {{.Version}}/{{.Distribution}} template, or \"default\" for the published registry.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "strict": {
+          "description": "Report unknown component settings as errors instead of warnings.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "schemaLocations": {
+      "deprecated": true,
+      "description": "Deprecated: moved to run.schemaLocations.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "severity": {
+      "additionalProperties": {
+        "$ref": "#/$defs/severity"
+      },
+      "deprecated": true,
+      "description": "Deprecated: moved to rules.severity.",
+      "propertyNames": {
+        "$ref": "#/$defs/rule"
+      },
+      "type": "object"
+    },
+    "strict": {
+      "deprecated": true,
+      "description": "Deprecated: moved to run.strict.",
+      "type": "boolean"
+    },
+    "summary": {
+      "deprecated": true,
+      "description": "Deprecated: moved to output.summary.",
+      "type": "boolean"
+    },
+    "version": {
+      "description": "The schema this file is written against. A file that omits it is read as 1.",
+      "enum": [
+        "1"
+      ],
+      "type": "string"
+    }
+  },
+  "title": "otelcol-config-lint settings",
+  "type": "object"
+}

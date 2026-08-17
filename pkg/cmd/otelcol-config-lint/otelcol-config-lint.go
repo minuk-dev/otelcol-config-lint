@@ -137,7 +137,7 @@ func NewCommand(opts *Options) *cobra.Command {
 	// this keeps it printing what the "version" subcommand prints.
 	cmd.SetVersionTemplate(versionTemplate)
 
-	cmd.AddCommand(newRunCommand(opts), newListCommand(opts), newVersionCommand())
+	cmd.AddCommand(newRunCommand(opts), newListCommand(opts), newConfigSchemaCommand(), newVersionCommand())
 
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		cmd.PrintErr(cmd.UsageString())

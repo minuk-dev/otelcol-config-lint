@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../../otelcol-config-lint.schema.json
+#
+# Every key the settings file takes, so the JSON Schema and the loader are held
+# to the same document.
+version: "1"
+
+run:
+  collectorVersion: v0.157.0
+  distribution: contrib
+  schemaLocations:
+    - ./schemas
+    - default
+  strict: true
+  ignoreMissingSchemas: false
+  concurrency: 4
+  exclude:
+    - "*.tmpl.yaml"
+  kubernetes:
+    enabled: true
+    memoryRequest: 512Mi
+    memoryLimit: 512Mi
+    overrides:
+      - paths: ["configs/agent-*.yaml"]
+        memoryRequest: 256Mi
+        memoryLimit: 256Mi
+      - paths: ["configs/legacy/*.yaml"]
+        enabled: false
+
+rules:
+  default: all
+  enable:
+    - no-persistent-queue
+  disable:
+    - missing-batch
+  severity:
+    missing-memory-limiter: warning
+    hardcoded-secret: error
+  settings: {}
+
+issues:
+  minSeverity: info
+  failOn: error
+  exitOnError: false
+
+output:
+  format: text
+  summary: true
+  verbose: false
+  color: true

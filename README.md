@@ -102,14 +102,16 @@ for a run that cannot change underneath a workflow.
 otelcol-config-lint run [flags] <file|dir|->...
 otelcol-config-lint list rules
 otelcol-config-lint list versions
+otelcol-config-lint config-schema
 otelcol-config-lint version
 ```
 
 | Command | Meaning |
 | --- | --- |
 | `run` | lint the given files, directories, or `-` for stdin |
-| `list rules` | the rules and their default severities, `--disable`/`--severity` applied |
+| `list rules` | the rules and the severities they will run at, the rule flags and settings file applied |
 | `list versions` | the schema versions available, honouring `--schema-location` and `--distribution` |
+| `config-schema` | the JSON Schema for the settings file, for an editor to check one against |
 | `version` | print the linter version (also available as `--version`) |
 
 The flags below belong to `run`:
@@ -252,6 +254,39 @@ No built-in rule reads a block yet — the schema is here so one can be added
 without every settings file having to change shape. Until a rule declares that
 it takes settings, writing a block for it is reported as an error: a knob nobody
 reads is worse than a knob that is missing.
+
+#### Checking the settings file in an editor
+
+`otelcol-config-lint.schema.json` is a JSON Schema for the file, so an editor
+underlines a misspelled key, a severity that is not a level, and a rule name
+that does not exist — the rule list in it is generated from the rules the linter
+carries, and CI fails on a copy that has fallen behind.
+
+Name it from the file itself, which every YAML language server reads:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json
+```
+
+Or map it once, in VS Code's `settings.json`:
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json": [
+      ".otelcol-config-lint.yaml",
+      ".otelcol-config-lint.yml"
+    ]
+  }
+}
+```
+
+`otelcol-config-lint config-schema` prints the same document, so a project that
+vendors it gets the list of rules the binary it pins actually runs:
+
+```sh
+otelcol-config-lint config-schema > otelcol-config-lint.schema.json
+```
 
 #### The flat form
 

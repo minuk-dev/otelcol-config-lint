@@ -1,0 +1,4 @@
+# The common case: a release to target and one rule the project does not want.
+rules:
+  disable:
+    - missing-batch
