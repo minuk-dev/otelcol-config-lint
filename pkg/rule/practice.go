@@ -413,6 +413,10 @@ func takesQueueBatch(ctx *Context, typ string) bool {
 		return false
 	}
 
+	if queue == nil {
+		return true
+	}
+
 	if queue.Open || len(queue.Children) == 0 {
 		return true
 	}
