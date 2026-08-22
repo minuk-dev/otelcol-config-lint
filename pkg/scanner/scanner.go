@@ -38,9 +38,9 @@ type Scanner struct {
 
 // New builds a Scanner that picks up YAML files, does not descend into the
 // usual vendored directories, and skips anything matching exclude.
-func New(exclude []string) *Scanner {
+func New(fs afero.Fs, exclude []string) *Scanner {
 	return &Scanner{
-		Fs:         nil,
+		Fs:         fs,
 		Exclude:    exclude,
 		Extensions: []string{".yaml", ".yml"},
 		SkipDirs:   []string{"vendor", "node_modules"},

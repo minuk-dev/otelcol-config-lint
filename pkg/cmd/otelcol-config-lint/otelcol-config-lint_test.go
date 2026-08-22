@@ -457,7 +457,7 @@ func TestOptionsFsRunsEntirelyInMemory(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	cmd := otelcolconfiglint.NewCommand(&otelcolconfiglint.Options{Fs: fsys})
+	cmd := otelcolconfiglint.NewCommand(&otelcolconfiglint.GlobalCmdOptions{Fs: fsys})
 	cmd.SetArgs([]string{"run", "--config", "/etc/settings.yaml", "/configs"})
 	cmd.SetIn(strings.NewReader(""))
 	cmd.SetOut(&stdout)

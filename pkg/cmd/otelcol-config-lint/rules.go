@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -131,27 +132,49 @@ func (p rulePolicy) rules() ([]rule.Rule, error) {
 	return configured, nil
 }
 
-// rulePolicy builds the policy from the flags and the settings file. The rule
+// ruleFlags select the rules: --default, --enable, --disable and --severity.
+// "run" and "list rules" both take them, because what the listing prints is
+// the policy a run would use; no other command has any business changing it.
+type ruleFlags struct {
+	ruleDefault string
+	enable      []string
+	disable     []string
+	severity    []string
+}
+
+// registerRuleFlags declares the rule selection on cmd.
+func (f *ruleFlags) registerRuleFlags(cmd *cobra.Command) {
+	flags := cmd.Flags()
+
+	flags.StringVar(&f.ruleDefault, "default", "",
+		"rule set to start from: "+defaultAll+" (the default) or "+defaultNone)
+	flags.StringSliceVarP(&f.enable, "enable", "E", nil, "rules to turn on, on top of --default")
+	flags.StringSliceVarP(&f.disable, "disable", "D", nil, "rules to turn off")
+	flags.StringSliceVar(&f.severity, "severity", nil,
+		"rule=level overrides, e.g. missing-batch=warning")
+}
+
+// rulePolicy builds the policy from the flags and the rules block. The rule
 // lists merge rather than replace: the file states the project policy and a
 // flag adds to it for a single run, which is how -E and -D read next to a
 // committed config.
-func (o *Options) rulePolicy(s *settings) rulePolicy {
+func (f *ruleFlags) rulePolicy(s *settings) rulePolicy {
 	// File pairs are listed first so a flag that names the same rule wins.
-	severity := make([]string, 0, len(s.Rules.Severity)+len(o.severity))
+	severity := make([]string, 0, len(s.Rules.Severity)+len(f.severity))
 	for _, name := range sets.List(sets.KeySet(s.Rules.Severity)) {
 		severity = append(severity, name+"="+s.Rules.Severity[name])
 	}
 
-	set := o.ruleDefault
+	set := f.ruleDefault
 	if set == "" {
 		set = s.Rules.Default
 	}
 
 	return rulePolicy{
 		set:      set,
-		enable:   append(trimAll(s.Rules.Enable), trimAll(o.enable)...),
-		disable:  append(trimAll(s.Rules.Disable), trimAll(o.disable)...),
-		severity: append(severity, trimAll(o.severity)...),
+		enable:   append(trimAll(s.Rules.Enable), trimAll(f.enable)...),
+		disable:  append(trimAll(s.Rules.Disable), trimAll(f.disable)...),
+		severity: append(severity, trimAll(f.severity)...),
 		settings: s.Rules.Settings,
 	}
 }

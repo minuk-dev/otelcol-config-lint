@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/samber/mo"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 )
@@ -260,7 +261,7 @@ func (s *settings) foldLists() []string {
 // loadSettings reads the settings file and reports where it was read from. When
 // no path was given the default file is looked for, and not finding one is not
 // an error; an explicitly named file that is missing is.
-func (o *Options) loadSettings() (*settings, string, error) {
+func (o *GlobalCmdOptions) loadSettings() (*settings, string, error) {
 	//nolint:exhaustruct // an absent file means every option keeps its default
 	empty := &settings{}
 
@@ -372,4 +373,40 @@ func decodeStrict(node *yaml.Node, target any) error {
 	}
 
 	return nil
+}
+
+// settingsFold folds a settings file into flags that have already been parsed.
+// Each helper leaves the destination alone when the command line stated it,
+// which is the whole rule: the file is what the repository commits, and a flag
+// is how one run departs from it.
+//
+// Every command that reads the file folds only the blocks it is about, so what
+// a flag of one command means is never decided by another command's key.
+type settingsFold struct {
+	// changed reports whether a flag was given on the command line, which is
+	// cobra's Flags().Changed for the command being run.
+	changed func(name string) bool
+}
+
+// str takes a written value, an empty one meaning the file said nothing.
+func (f settingsFold) str(name string, dst *string, v string) {
+	if !f.changed(name) {
+		*dst = mo.EmptyableToOption(v).OrElse(*dst)
+	}
+}
+
+// boolean takes a set value, a nil one meaning the file said nothing: false is
+// a thing to say about a flag whose default is true.
+func (f settingsFold) boolean(name string, dst *bool, v *bool) {
+	if !f.changed(name) {
+		*dst = mo.PointerToOption(v).OrElse(*dst)
+	}
+}
+
+// list appends rather than replaces: a repository's excludes and schema
+// locations are added to by a run, not thrown away by one.
+func (f settingsFold) list(name string, dst *[]string, v []string) {
+	if !f.changed(name) && len(v) > 0 {
+		*dst = append(*dst, v...)
+	}
 }
