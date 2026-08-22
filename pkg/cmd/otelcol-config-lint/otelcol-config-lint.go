@@ -33,7 +33,7 @@ func NewCommand(opts *GlobalCmdOptions) *cobra.Command {
 		Short:   "Validate OpenTelemetry Collector config files against a specific collector release",
 		Version: version.Current(),
 		// The subcommands print command-level errors themselves, with the tool
-		// prefix, and stay quiet about exit.ErrFilesInvalid.
+		// prefix, and stay quiet about cmdutil.ErrFilesInvalid.
 		SilenceErrors: true,
 		// Findings are not usage errors, so the usage text is printed only
 		// where it helps: bad flags and a missing argument.

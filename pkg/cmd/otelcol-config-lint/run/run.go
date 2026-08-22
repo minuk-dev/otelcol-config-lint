@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/exit"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/rulepolicy"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/schemaflags"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
@@ -117,7 +117,7 @@ Exit codes:
   %d  every file passed
   %d  at least one file failed
   %d  the command could not run
-`, exit.OK, exit.Invalid, exit.Usage))
+`, cmdutil.ExitOK, cmdutil.ExitInvalid, cmdutil.ExitUsage))
 
 	opts.declareFlags(cmd)
 
@@ -261,7 +261,7 @@ func (o *options) runLint(cmd *cobra.Command, paths []string) error {
 }
 
 // lintAll checks every file and reports the results in path order, returning
-// exit.ErrFilesInvalid when the gate was not met.
+// cmdutil.ErrFilesInvalid when the gate was not met.
 func (o *options) lintAll(
 	cmd *cobra.Command,
 	linter *lint.Linter,
@@ -312,7 +312,7 @@ func (o *options) lintAll(
 	}
 
 	if summary.Failed() {
-		return exit.ErrFilesInvalid
+		return cmdutil.ErrFilesInvalid
 	}
 
 	return nil

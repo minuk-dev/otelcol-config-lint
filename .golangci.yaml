@@ -101,7 +101,6 @@ linters:
         - w # writer, walker
         - id
         - in # table-driven test input
-        - OK # exit.OK, an exit code that is always read package-qualified
         - tt # table-driven test case
         # The Kubernetes memory units, whose names are what a manifest writes.
         - Ki

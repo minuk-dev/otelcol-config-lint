@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/exit"
 	runcmd "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/run"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 )
 
 // repoSchemas is the committed schema fixture. The binary reads the published
@@ -47,11 +47,11 @@ func run(t *testing.T, stdin string, args ...string) (int, string, string) {
 	cmd.SetErr(&stderr)
 
 	err := cmd.Execute()
-	if err != nil && !errors.Is(err, exit.ErrFilesInvalid) {
+	if err != nil && !errors.Is(err, cmdutil.ErrFilesInvalid) {
 		cmd.PrintErrf("otelcol-config-lint: %v\n", err)
 	}
 
-	return exit.Code(err), stdout.String(), stderr.String()
+	return cmdutil.ExitCode(err), stdout.String(), stderr.String()
 }
 
 // lint invokes the "run" subcommand, which is where every lint flag lives. The
@@ -71,20 +71,20 @@ func TestExitCode(t *testing.T) {
 		in   error
 		want int
 	}{
-		"a clean run": {in: nil, want: exit.OK},
-		"findings":    {in: exit.ErrFilesInvalid, want: exit.Invalid},
+		"a clean run": {in: nil, want: cmdutil.ExitOK},
+		"findings":    {in: cmdutil.ErrFilesInvalid, want: cmdutil.ExitInvalid},
 		"wrapped findings": {
-			in:   fmt.Errorf("lint: %w", exit.ErrFilesInvalid),
-			want: exit.Invalid,
+			in:   fmt.Errorf("lint: %w", cmdutil.ErrFilesInvalid),
+			want: cmdutil.ExitInvalid,
 		},
-		"a command failure": {in: runcmd.ErrNoInput, want: exit.Usage},
+		"a command failure": {in: runcmd.ErrNoInput, want: cmdutil.ExitUsage},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := exit.Code(tt.in); got != tt.want {
+			if got := cmdutil.ExitCode(tt.in); got != tt.want {
 				t.Errorf("ExitCode(%v) = %d, want %d", tt.in, got, tt.want)
 			}
 		})
@@ -465,7 +465,7 @@ func TestOptionsFsRunsEntirelyInMemory(t *testing.T) {
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 
-	code := exit.Code(cmd.Execute())
+	code := cmdutil.ExitCode(cmd.Execute())
 	if code != 0 {
 		t.Fatalf("exit %d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
