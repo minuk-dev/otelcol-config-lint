@@ -1,12 +1,12 @@
 package run
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/quantity"
@@ -18,7 +18,7 @@ import (
 const kubernetesFlag = "kubernetes"
 
 // ErrNoOverridePaths reports an environment override that matches nothing.
-var ErrNoOverridePaths = errors.New("an override needs at least one path pattern")
+var ErrNoOverridePaths = cmdutil.NewUsageError("an override needs at least one path pattern")
 
 // environmentFlags describe the pod the configs run in: --kubernetes and the
 // two memory numbers. Only "run" takes them, because only a lint run judges a

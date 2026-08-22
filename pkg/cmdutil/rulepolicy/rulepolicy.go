@@ -4,13 +4,13 @@
 package rulepolicy
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
@@ -21,13 +21,13 @@ import (
 // Errors reported for a rule selection that cannot be resolved.
 var (
 	// ErrUnknownRule names a rule that does not exist.
-	ErrUnknownRule = errors.New("unknown rule")
+	ErrUnknownRule = cmdutil.NewUsageError("unknown rule")
 	// ErrBadSeverityPair reports a --severity argument that is not rule=level.
-	ErrBadSeverityPair = errors.New("not in rule=level form")
+	ErrBadSeverityPair = cmdutil.NewUsageError("not in rule=level form")
 	// ErrUnknownDefault reports a rules.default outside the sets on offer.
-	ErrUnknownDefault = errors.New("unknown rule set")
+	ErrUnknownDefault = cmdutil.NewUsageError("unknown rule set")
 	// ErrEnabledAndDisabled reports a rule named on both sides at once.
-	ErrEnabledAndDisabled = errors.New("is both enabled and disabled")
+	ErrEnabledAndDisabled = cmdutil.NewUsageError("is both enabled and disabled")
 )
 
 // Policy is which rules run and at what level. It is resolved in the order

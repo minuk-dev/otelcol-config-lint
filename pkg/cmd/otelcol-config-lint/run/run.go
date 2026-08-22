@@ -25,9 +25,9 @@ import (
 // Errors reported for input this command cannot lint.
 var (
 	// ErrNoInput reports that no file, directory or "-" was given.
-	ErrNoInput = errors.New("no files or directories specified")
+	ErrNoInput = cmdutil.NewUsageError("no files or directories specified")
 	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
-	ErrNoYAMLFiles = errors.New("no YAML files found")
+	ErrNoYAMLFiles = cmdutil.NewUsageError("no YAML files found")
 )
 
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
@@ -336,12 +336,12 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 
 	minSeverity, err := diag.ParseSeverity(o.minSeverity)
 	if err != nil {
-		return nil, fmt.Errorf("--min-severity: %w", err)
+		return nil, cmdutil.AsUsageError(fmt.Errorf("--min-severity: %w", err))
 	}
 
 	failOn, err := diag.ParseSeverity(o.failOn)
 	if err != nil {
-		return nil, fmt.Errorf("--fail-on: %w", err)
+		return nil, cmdutil.AsUsageError(fmt.Errorf("--fail-on: %w", err))
 	}
 
 	return lint.New(lint.Options{

@@ -4,7 +4,6 @@
 package list
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -18,7 +17,7 @@ import (
 )
 
 // ErrNoSchemas reports that no schema version could be found.
-var ErrNoSchemas = errors.New("no schemas available")
+var ErrNoSchemas = cmdutil.NewUsageError("no schemas available")
 
 // NewCommand builds "list" and its subcommands. Each one carries only the
 // flags that change what it prints, so their help stays short.
