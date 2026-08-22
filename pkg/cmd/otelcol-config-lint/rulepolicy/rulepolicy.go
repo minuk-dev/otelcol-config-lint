@@ -1,4 +1,7 @@
-package otelcolconfiglint
+// Package rulepolicy is which rules run, at what level, and with what settings
+// of their own. "run" and "list rules" both take it: what the listing prints is
+// the policy a run would use.
+package rulepolicy
 
 import (
 	"errors"
@@ -8,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
@@ -26,23 +30,12 @@ var (
 	ErrEnabledAndDisabled = errors.New("is both enabled and disabled")
 )
 
-// The sets rules.default can name. They mirror golangci-lint's, minus the
-// curated middle: every rule here is one a collector config should pass, so
-// there is no subset to start from that is not simply all of them.
-const (
-	// defaultAll runs every registered rule, which is what a run that says
-	// nothing does.
-	defaultAll = "all"
-	// defaultNone runs only what enable names.
-	defaultNone = "none"
-)
-
-// rulePolicy is which rules run and at what level. It is resolved in the order
+// Policy is which rules run and at what level. It is resolved in the order
 // the fields are written: the default set, then enable, then disable, then the
 // explicit levels -- so a rule given a severity runs at it whatever came
 // before, which is the only reading under which writing one is never a no-op.
-type rulePolicy struct {
-	// set is the set to start from: defaultAll, defaultNone, or "" for the
+type Policy struct {
+	// set is the set to start from: settings.DefaultAll, settings.DefaultNone, or "" for the
 	// former.
 	set string
 	// enable and disable name rules. A rule in both is an error rather than a
@@ -55,20 +48,20 @@ type rulePolicy struct {
 	settings map[string]yaml.Node
 }
 
-// resolve turns the policy into the severity map the linter takes, where a
+// Severities turns the policy into the severity map the linter takes, where a
 // level of diag.Off is a rule that does not run.
-func (p rulePolicy) resolve() (map[string]diag.Severity, error) {
+func (p Policy) Severities() (map[string]diag.Severity, error) {
 	out := map[string]diag.Severity{}
 
 	switch p.set {
-	case "", defaultAll:
-	case defaultNone:
+	case "", settings.DefaultAll:
+	case settings.DefaultNone:
 		for _, r := range ruleset.All() {
 			out[r.Name()] = diag.Off
 		}
 	default:
 		return nil, fmt.Errorf("rules.default: %w %q (want %s or %s)",
-			ErrUnknownDefault, p.set, defaultAll, defaultNone)
+			ErrUnknownDefault, p.set, settings.DefaultAll, settings.DefaultNone)
 	}
 
 	both := sets.New(p.enable...).Intersection(sets.New(p.disable...))
@@ -114,10 +107,10 @@ func (p rulePolicy) resolve() (map[string]diag.Severity, error) {
 	return out, nil
 }
 
-// rules returns the rule set with each rule's own settings block applied. A
+// Rules returns the rule set with each rule's own settings block applied. A
 // block written for a rule that does not exist is reported here, because
 // rule.Configure cannot tell a missing rule from a misspelled one.
-func (p rulePolicy) rules() ([]rule.Rule, error) {
+func (p Policy) Rules() ([]rule.Rule, error) {
 	for _, name := range sets.List(sets.KeySet(p.settings)) {
 		if _, ok := ruleset.Lookup(name); !ok {
 			return nil, fmt.Errorf("rules.settings: %w %q", ErrUnknownRule, name)
@@ -132,33 +125,33 @@ func (p rulePolicy) rules() ([]rule.Rule, error) {
 	return configured, nil
 }
 
-// ruleFlags select the rules: --default, --enable, --disable and --severity.
-// "run" and "list rules" both take them, because what the listing prints is
-// the policy a run would use; no other command has any business changing it.
-type ruleFlags struct {
+// Flags select the rules: --default, --enable, --disable and --severity. "run"
+// and "list rules" both take them; no other command has any business changing
+// the policy.
+type Flags struct {
 	ruleDefault string
 	enable      []string
 	disable     []string
 	severity    []string
 }
 
-// registerRuleFlags declares the rule selection on cmd.
-func (f *ruleFlags) registerRuleFlags(cmd *cobra.Command) {
+// Register declares the rule selection on cmd.
+func (f *Flags) Register(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
 	flags.StringVar(&f.ruleDefault, "default", "",
-		"rule set to start from: "+defaultAll+" (the default) or "+defaultNone)
+		"rule set to start from: "+settings.DefaultAll+" (the default) or "+settings.DefaultNone)
 	flags.StringSliceVarP(&f.enable, "enable", "E", nil, "rules to turn on, on top of --default")
 	flags.StringSliceVarP(&f.disable, "disable", "D", nil, "rules to turn off")
 	flags.StringSliceVar(&f.severity, "severity", nil,
 		"rule=level overrides, e.g. missing-batch=warning")
 }
 
-// rulePolicy builds the policy from the flags and the rules block. The rule
-// lists merge rather than replace: the file states the project policy and a
+// Policy builds the policy from the flags and the rules block. The rule lists
+// merge rather than replace: the file states the project policy and a
 // flag adds to it for a single run, which is how -E and -D read next to a
 // committed config.
-func (f *ruleFlags) rulePolicy(s *settings) rulePolicy {
+func (f *Flags) Policy(s *settings.File) Policy {
 	// File pairs are listed first so a flag that names the same rule wins.
 	severity := make([]string, 0, len(s.Rules.Severity)+len(f.severity))
 	for _, name := range sets.List(sets.KeySet(s.Rules.Severity)) {
@@ -170,7 +163,7 @@ func (f *ruleFlags) rulePolicy(s *settings) rulePolicy {
 		set = s.Rules.Default
 	}
 
-	return rulePolicy{
+	return Policy{
 		set:      set,
 		enable:   append(trimAll(s.Rules.Enable), trimAll(f.enable)...),
 		disable:  append(trimAll(s.Rules.Disable), trimAll(f.disable)...),

@@ -1,4 +1,6 @@
-package otelcolconfiglint
+// Package run is the command that lints: every lint flag lives here, and it is
+// the only command whose exit code carries findings.
+package run
 
 import (
 	"errors"
@@ -8,6 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/exit"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/rulepolicy"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/schemaflags"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
@@ -16,25 +22,35 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/termutil"
 )
 
+// Errors reported for input this command cannot lint.
+var (
+	// ErrNoInput reports that no file, directory or "-" was given.
+	ErrNoInput = errors.New("no files or directories specified")
+	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
+	ErrNoYAMLFiles = errors.New("no YAML files found")
+)
+
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
 // by reading files, not by checking them.
 const maxDefaultWorkers = 8
 
-// RunCmdOptions is everything "run" was asked to do: the lint flags, the
-// groups of them it shares with the listings, and the state resolved once the
-// flags and the settings file have both had their say.
+// options is everything "run" was asked to do: the lint flags, the groups of
+// them it shares with the listings, and the state resolved once the flags and
+// the settings file have both had their say.
 //
-// No other command sees these: a flag that only shapes a lint run lives here,
-// which is why "list rules --strict" is a usage error rather than a flag that
-// quietly does nothing.
-type RunCmdOptions struct {
-	*GlobalCmdOptions
+// No other command can see these, because no other command imports them: a
+// flag that only shapes a lint run lives in this package, which is why
+// "list rules --strict" is a usage error rather than a flag that quietly does
+// nothing.
+type options struct {
+	*settings.Options
 
 	// Flag groups shared with the listings, which take the ones that change
-	// what they print.
-	schemaFlags
-	ruleFlags
-	environmentFlags
+	// what they print. The environment is this command's alone: only a lint
+	// run judges a config against what it runs in.
+	schemaFlags schemaflags.Flags
+	ruleFlags   rulepolicy.Flags
+	envFlags    environmentFlags
 
 	// flags
 	collectorVersion string
@@ -55,21 +71,17 @@ type RunCmdOptions struct {
 	store schema.Store
 	// policy is which rules run, at what level, and with what settings, once
 	// the flags and the file have both had their say.
-	policy rulePolicy
+	policy rulepolicy.Policy
 	// envPolicy resolves the environment of each file linted.
 	envPolicy lint.EnvironmentPolicy
 }
 
-// newRunCmdOptions builds the options "run" starts from. Every flag is filled
-// in by RegisterFlags and then by the settings file, in that order.
-func newRunCmdOptions(global *GlobalCmdOptions) *RunCmdOptions {
-	//nolint:exhaustruct // the flags fill themselves in, and the state is resolved by Prepare
-	return &RunCmdOptions{GlobalCmdOptions: global}
-}
+// NewCommand builds "run". Its options are filled in by declareFlags and then
+// by the settings file, in that order.
+func NewCommand(global *settings.Options) *cobra.Command {
+	//nolint:exhaustruct // the flags fill themselves in, and the state is resolved by prepare
+	opts := &options{Options: global}
 
-// newRunCommand builds "run", the command that actually lints. It is where
-// every lint flag lives, and the only one whose exit code carries findings.
-func newRunCommand(opts *RunCmdOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run [flags] <file|dir|->...",
 		Short: "Lint the given config files",
@@ -80,16 +92,16 @@ func newRunCommand(opts *RunCmdOptions) *cobra.Command {
   otelcol-config-lint run --default none -E invalid-value ./configs
   otelcol-config-lint run -c ci.yaml ./configs
 
-The policy itself belongs in ` + DefaultSettingsFile + `, which is read from
+The policy itself belongs in ` + settings.DefaultName + `, which is read from
 this directory or any parent above it; every flag here mirrors one of its keys.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := opts.Prepare(cmd)
+			err := opts.prepare(cmd)
 			if err != nil {
 				return err
 			}
 
-			err = opts.Run(cmd, args)
+			err = opts.run(cmd, args)
 			if err != nil {
 				return err
 			}
@@ -105,21 +117,21 @@ Exit codes:
   %d  every file passed
   %d  at least one file failed
   %d  the command could not run
-`, ExitOK, ExitInvalid, ExitUsage))
+`, exit.OK, exit.Invalid, exit.Usage))
 
-	opts.RegisterFlags(cmd)
+	opts.declareFlags(cmd)
 
 	return cmd
 }
 
-// RegisterFlags declares every flag the lint run takes. Each one mirrors a key
+// declareFlags declares every flag the lint run takes. Each one mirrors a key
 // of the settings file: the file is what a repository commits, and the flag is
 // how a single run departs from it.
-func (o *RunCmdOptions) RegisterFlags(cmd *cobra.Command) {
-	o.registerSettingsFlags(cmd)
-	o.registerSchemaFlags(cmd)
-	o.registerRuleFlags(cmd)
-	o.registerEnvironmentFlags(cmd)
+func (o *options) declareFlags(cmd *cobra.Command) {
+	o.RegisterFlags(cmd)
+	o.schemaFlags.Register(cmd)
+	o.ruleFlags.Register(cmd)
+	o.envFlags.register(cmd)
 
 	flags := cmd.Flags()
 
@@ -141,38 +153,38 @@ func (o *RunCmdOptions) RegisterFlags(cmd *cobra.Command) {
 	flags.BoolVar(&o.exitOnError, "exit-on-error", false, "stop at the first file that fails")
 }
 
-// Prepare folds the settings file into the parsed flags and resolves what the
+// prepare folds the settings file into the parsed flags and resolves what the
 // run will use: the schemas, the rules and the environment. Flags given on the
 // command line win over the file.
-func (o *RunCmdOptions) Prepare(cmd *cobra.Command) error {
-	err := o.GlobalCmdOptions.Prepare(cmd)
+func (o *options) prepare(cmd *cobra.Command) error {
+	err := o.Prepare(cmd)
 	if err != nil {
 		return err
 	}
 
-	s, fold := o.settings, o.fold(cmd)
+	file, fold := o.File(), o.Fold(cmd)
 
-	o.applySettings(s, fold)
-	o.applySchemaSettings(s, fold)
-	o.applyEnvironmentSettings(s, fold)
+	o.applySettings(file, fold)
+	o.schemaFlags.ApplySettings(file, fold)
+	o.envFlags.applySettings(file, fold)
 
-	o.policy = o.rulePolicy(s)
-	o.store = o.schemaStore(o.fs())
+	o.policy = o.ruleFlags.Policy(file)
+	o.store = o.schemaFlags.Store(o.FS())
 
-	o.envPolicy, err = o.environmentPolicy()
+	o.envPolicy, err = o.envFlags.policy()
 	if err != nil {
 		return err
 	}
 
-	if o.verbose && o.settingsPath != "" {
-		cmd.PrintErrf("otelcol-config-lint: settings read from %s\n", o.settingsPath)
+	if o.verbose && o.Path() != "" {
+		cmd.PrintErrf("otelcol-config-lint: settings read from %s\n", o.Path())
 	}
 
 	return nil
 }
 
-// Run lints the given paths.
-func (o *RunCmdOptions) Run(cmd *cobra.Command, args []string) error {
+// run lints the given paths.
+func (o *options) run(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		cmd.PrintErr(cmd.UsageString())
 
@@ -187,35 +199,35 @@ func (o *RunCmdOptions) Run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// applySettings folds the keys only a lint run has a flag for. The schema, rule
-// and environment groups fold their own, and the rule lists merge rather than
-// replace, which rulePolicy does.
-func (o *RunCmdOptions) applySettings(s *settings, fold settingsFold) {
-	fold.str("collector-version", &o.collectorVersion, s.Run.CollectorVersion)
-	fold.str("output", &o.output, s.Output.Format)
-	fold.str("min-severity", &o.minSeverity, s.Issues.MinSeverity)
-	fold.str("fail-on", &o.failOn, s.Issues.FailOn)
-	fold.boolean("strict", &o.strict, s.Run.Strict)
-	fold.boolean("ignore-missing-schemas", &o.ignoreMissing, s.Run.IgnoreMissingSchemas)
-	fold.boolean("summary", &o.summary, s.Output.Summary)
-	fold.boolean("verbose", &o.verbose, s.Output.Verbose)
-	fold.boolean("exit-on-error", &o.exitOnError, s.Issues.ExitOnError)
-	fold.list("exclude", &o.exclude, s.Run.Exclude)
+// applySettings folds the keys only a lint run has a flag for. The schema and
+// environment groups fold their own, and the rule lists merge rather than
+// replace, which rulepolicy does.
+func (o *options) applySettings(s *settings.File, fold settings.Fold) {
+	fold.Str("collector-version", &o.collectorVersion, s.Run.CollectorVersion)
+	fold.Str("output", &o.output, s.Output.Format)
+	fold.Str("min-severity", &o.minSeverity, s.Issues.MinSeverity)
+	fold.Str("fail-on", &o.failOn, s.Issues.FailOn)
+	fold.Bool("strict", &o.strict, s.Run.Strict)
+	fold.Bool("ignore-missing-schemas", &o.ignoreMissing, s.Run.IgnoreMissingSchemas)
+	fold.Bool("summary", &o.summary, s.Output.Summary)
+	fold.Bool("verbose", &o.verbose, s.Output.Verbose)
+	fold.Bool("exit-on-error", &o.exitOnError, s.Issues.ExitOnError)
+	fold.List("exclude", &o.exclude, s.Run.Exclude)
 
 	// The file says whether to colour, the flag says whether to stop; one is
 	// the negation of the other.
-	if !fold.changed("no-color") && s.Output.Color != nil {
+	if !fold.Changed("no-color") && s.Output.Color != nil {
 		o.noColor = !*s.Output.Color
 	}
 
-	if !fold.changed("concurrency") && s.Run.Concurrency != nil {
+	if !fold.Changed("concurrency") && s.Run.Concurrency != nil {
 		o.concurrency = *s.Run.Concurrency
 	}
 }
 
 // runLint resolves what to check and how to report it, then does the work.
-func (o *RunCmdOptions) runLint(cmd *cobra.Command, paths []string) error {
-	sc := scanner.New(o.fs(), o.exclude)
+func (o *options) runLint(cmd *cobra.Command, paths []string) error {
+	sc := scanner.New(o.FS(), o.exclude)
 
 	files, err := sc.Scan(paths)
 	if err != nil {
@@ -249,8 +261,8 @@ func (o *RunCmdOptions) runLint(cmd *cobra.Command, paths []string) error {
 }
 
 // lintAll checks every file and reports the results in path order, returning
-// ErrFilesInvalid when the gate was not met.
-func (o *RunCmdOptions) lintAll(
+// exit.ErrFilesInvalid when the gate was not met.
+func (o *options) lintAll(
 	cmd *cobra.Command,
 	linter *lint.Linter,
 	formatter lint.Formatter,
@@ -300,24 +312,24 @@ func (o *RunCmdOptions) lintAll(
 	}
 
 	if summary.Failed() {
-		return ErrFilesInvalid
+		return exit.ErrFilesInvalid
 	}
 
 	return nil
 }
 
-func (o *RunCmdOptions) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
+func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	cat, err := o.loadSchema(cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	severities, err := o.policy.resolve()
+	severities, err := o.policy.Severities()
 	if err != nil {
 		return nil, err
 	}
 
-	rules, err := o.policy.rules()
+	rules, err := o.policy.Rules()
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +346,7 @@ func (o *RunCmdOptions) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 
 	return lint.New(lint.Options{
 		Schema:               cat,
-		Fs:                   o.fs(),
+		Fs:                   o.FS(),
 		Availability:         lint.NewVersionIndex(o.store),
 		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
 		Rules:                rules,
@@ -349,7 +361,7 @@ func (o *RunCmdOptions) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 
 // loadSchema resolves the targeted release, falling back to the newest
 // schema that is not newer than the request when there is no exact match.
-func (o *RunCmdOptions) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
+func (o *options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
 	cat, err := o.store.Load(o.collectorVersion)
 	if err == nil {
 		return cat, nil

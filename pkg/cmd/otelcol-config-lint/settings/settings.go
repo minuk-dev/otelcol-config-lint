@@ -1,12 +1,13 @@
-package otelcolconfiglint
+// Package settings is the settings file: the shape a repository commits its
+// linting policy in, how one is found and read, the JSON Schema an editor
+// checks it against, and how it is folded into flags that were already parsed.
+package settings
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/samber/mo"
@@ -14,27 +15,39 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ErrUnknownSettingsVersion reports a settings file written against a schema
-// this release does not know.
-var ErrUnknownSettingsVersion = errors.New("unknown settings version")
+// ErrUnknownVersion reports a settings file written against a schema this
+// release does not know.
+var ErrUnknownVersion = errors.New("unknown settings version")
 
-// SettingsVersion is the schema the settings file is read as. A file may state
-// it to be explicit; a file that does not is read as this version. It exists so
-// a later schema can be told apart from this one rather than guessed at.
-const SettingsVersion = "1"
+// Version is the schema the settings file is read as. A file may state it to be
+// explicit; a file that does not is read as this version. It exists so a later
+// schema can be told apart from this one rather than guessed at.
+const Version = "1"
 
-// DefaultSettingsFile is the file looked for when no --config is given. It is
-// searched for in the working directory and then in each parent.
-const DefaultSettingsFile = ".otelcol-config-lint.yaml"
+// DefaultName is the file looked for when no --config is given. It is searched
+// for in the working directory and then in each parent.
+const DefaultName = ".otelcol-config-lint.yaml"
 
-// settingsNames are the spellings of the default file, tried in order. Both
-// YAML extensions are accepted because a repository should not have to rename
-// a file it already has.
-func settingsNames() []string {
-	return []string{DefaultSettingsFile, ".otelcol-config-lint.yml"}
+// The sets rules.default can name. They mirror golangci-lint's, minus the
+// curated middle: every rule the linter carries is one a collector config
+// should pass, so there is no subset to start from that is not simply all of
+// them.
+const (
+	// DefaultAll runs every registered rule, which is what a run that says
+	// nothing does.
+	DefaultAll = "all"
+	// DefaultNone runs only what rules.enable names.
+	DefaultNone = "none"
+)
+
+// Names are the spellings of the default file, tried in order. Both YAML
+// extensions are accepted because a repository should not have to rename a file
+// it already has.
+func Names() []string {
+	return []string{DefaultName, ".otelcol-config-lint.yml"}
 }
 
-// settings is the file form of the command line options, so a repository can
+// File is the file form of the command line options, so a repository can
 // commit its linting policy instead of repeating flags in CI.
 //
 // The layout follows golangci-lint: what to check under "run", which rules
@@ -42,41 +55,41 @@ func settingsNames() []string {
 // under "output". Every flag has a key here; the flags are the single-run
 // override, and the file is what the repository commits.
 //
-// The flat keys the first release shipped are still read -- see normalize --
+// The flat keys the first release shipped are still read -- see Normalize --
 // because a settings file that quietly stops taking effect is a worse outcome
 // than one that is out of style.
-type settings struct {
+type File struct {
 	// Version names the schema this file is written against.
 	Version string `yaml:"version"`
 
 	// Run is what to check, and against which collector.
-	Run runSettings `yaml:"run"`
+	Run RunBlock `yaml:"run"`
 	// Rules is which rules run and at what level.
-	Rules rulesSettings `yaml:"rules"`
+	Rules RulesBlock `yaml:"rules"`
 	// Issues is which findings make a file fail.
-	Issues issuesSettings `yaml:"issues"`
+	Issues IssuesBlock `yaml:"issues"`
 	// Output is how the findings are printed.
-	Output outputSettings `yaml:"output"`
+	Output OutputBlock `yaml:"output"`
 
 	// The flat form of the first release. Anything written here is folded into
 	// the blocks above, which win where both are written.
-	CollectorVersion     string              `yaml:"collectorVersion"`
-	Distribution         string              `yaml:"distribution"`
-	SchemaLocations      []string            `yaml:"schemaLocations"`
-	Strict               *bool               `yaml:"strict"`
-	IgnoreMissingSchemas *bool               `yaml:"ignoreMissingSchemas"`
-	Summary              *bool               `yaml:"summary"`
-	MinSeverity          string              `yaml:"minSeverity"`
-	FailOn               string              `yaml:"failOn"`
-	Disable              []string            `yaml:"disable"`
-	Severity             map[string]string   `yaml:"severity"`
-	Exclude              []string            `yaml:"exclude"`
-	Kubernetes           *kubernetesSettings `yaml:"kubernetes"`
+	CollectorVersion     string            `yaml:"collectorVersion"`
+	Distribution         string            `yaml:"distribution"`
+	SchemaLocations      []string          `yaml:"schemaLocations"`
+	Strict               *bool             `yaml:"strict"`
+	IgnoreMissingSchemas *bool             `yaml:"ignoreMissingSchemas"`
+	Summary              *bool             `yaml:"summary"`
+	MinSeverity          string            `yaml:"minSeverity"`
+	FailOn               string            `yaml:"failOn"`
+	Disable              []string          `yaml:"disable"`
+	Severity             map[string]string `yaml:"severity"`
+	Exclude              []string          `yaml:"exclude"`
+	Kubernetes           *Kubernetes       `yaml:"kubernetes"`
 }
 
-// runSettings is the "run" block: which collector the configs target and which
+// RunBlock is the "run" block: which collector the configs target and which
 // files are checked against it.
-type runSettings struct {
+type RunBlock struct {
 	// CollectorVersion is the release to validate against, e.g. v0.157.0.
 	CollectorVersion string `yaml:"collectorVersion"`
 	// Distribution names the collector binary the config will run on.
@@ -94,12 +107,12 @@ type runSettings struct {
 	Exclude []string `yaml:"exclude"`
 	// Kubernetes describes the pods the configs run in, per path, for the
 	// rules that cannot judge a config without knowing what it runs in.
-	Kubernetes kubernetesSettings `yaml:"kubernetes"`
+	Kubernetes Kubernetes `yaml:"kubernetes"`
 }
 
-// rulesSettings is the "rules" block: which rules run, at what level, and with
+// RulesBlock is the "rules" block: which rules run, at what level, and with
 // what settings of their own.
-type rulesSettings struct {
+type RulesBlock struct {
 	// Default is the set to start from: "all", every registered rule, or
 	// "none", which runs only what enable names.
 	Default string `yaml:"default"`
@@ -117,9 +130,46 @@ type rulesSettings struct {
 	Settings map[string]yaml.Node `yaml:"settings"`
 }
 
-// issuesSettings is the "issues" block: which findings are reported and which
+// Kubernetes is the "kubernetes" block of a settings file: what the pods these
+// configs run in look like, which is what the sizing rules check against.
+//
+// The block states the defaults, and overrides state the files that are a
+// different workload -- an agent DaemonSet at 256Mi next to a gateway
+// Deployment at 4Gi. There is deliberately no flag form of the overrides: a
+// path-to-limits table belongs in a file.
+type Kubernetes struct {
+	// Enabled says the configs run in Kubernetes. When it is not set, writing
+	// either memory number is taken to mean the same thing.
+	Enabled *bool `yaml:"enabled"`
+	// MemoryRequest and MemoryLimit are the container's resources, written as
+	// a Kubernetes quantity such as "512Mi".
+	MemoryRequest string `yaml:"memoryRequest"`
+	MemoryLimit   string `yaml:"memoryLimit"`
+	// Overrides are matched in order and the first match wins.
+	Overrides []KubernetesOverride `yaml:"overrides"`
+}
+
+// written reports whether the block says anything at all, which is how the
+// flat first-release form knows it has nothing to fold in.
+func (k Kubernetes) written() bool {
+	return k.Enabled != nil || k.MemoryRequest != "" || k.MemoryLimit != "" || len(k.Overrides) > 0
+}
+
+// KubernetesOverride is one path-matched entry of the kubernetes block. It
+// replaces the defaults for the files it matches rather than merging with
+// them, so what a file resolves to is stated in one place.
+type KubernetesOverride struct {
+	// Paths are glob patterns, matched against both the whole path and the
+	// base name, exactly as the exclude patterns are.
+	Paths         []string `yaml:"paths"`
+	Enabled       *bool    `yaml:"enabled"`
+	MemoryRequest string   `yaml:"memoryRequest"`
+	MemoryLimit   string   `yaml:"memoryLimit"`
+}
+
+// IssuesBlock is the "issues" block: which findings are reported and which
 // of them make a file fail.
-type issuesSettings struct {
+type IssuesBlock struct {
 	// MinSeverity is the lowest severity worth printing.
 	MinSeverity string `yaml:"minSeverity"`
 	// FailOn is the severity that makes a file invalid.
@@ -128,9 +178,9 @@ type issuesSettings struct {
 	ExitOnError *bool `yaml:"exitOnError"`
 }
 
-// outputSettings is the "output" block: how results are printed, as opposed to
+// OutputBlock is the "output" block: how results are printed, as opposed to
 // what counts as a result.
-type outputSettings struct {
+type OutputBlock struct {
 	// Format is text, json, junit, tap or github.
 	Format string `yaml:"format"`
 	// Summary appends a count of the outcomes.
@@ -145,7 +195,7 @@ type outputSettings struct {
 // UnmarshalYAML also accepts the block written as a bare format name, which is
 // the flat form the first release shipped: "output: json" and
 // "output: {format: json}" mean the same thing.
-func (o *outputSettings) UnmarshalYAML(node *yaml.Node) error {
+func (o *OutputBlock) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind == yaml.ScalarNode {
 		err := node.Decode(&o.Format)
 		if err != nil {
@@ -158,7 +208,7 @@ func (o *outputSettings) UnmarshalYAML(node *yaml.Node) error {
 	// The block is decoded through a type without this method, both to avoid
 	// recursing and to get the strictness the top-level decoder was given:
 	// Node.Decode does not carry KnownFields over.
-	type output outputSettings
+	type output OutputBlock
 
 	var block output
 
@@ -167,21 +217,21 @@ func (o *outputSettings) UnmarshalYAML(node *yaml.Node) error {
 		return fmt.Errorf("output: %w", err)
 	}
 
-	*o = outputSettings(block)
+	*o = OutputBlock(block)
 
 	return nil
 }
 
-// normalize folds the flat first-release keys into the blocks and returns the
+// Normalize folds the flat first-release keys into the blocks and returns the
 // ones that were written, so the caller can say they are on their way out. A
 // key written in both forms keeps the block's value: the new spelling is the
 // one the file means.
-func (s *settings) normalize() []string {
+func (s *File) Normalize() []string {
 	return append(s.foldScalars(), s.foldLists()...)
 }
 
 // foldScalars folds the flat keys holding a single value.
-func (s *settings) foldScalars() []string {
+func (s *File) foldScalars() []string {
 	var used []string
 
 	str := func(name string, dst *string, v string) {
@@ -220,7 +270,7 @@ func (s *settings) foldScalars() []string {
 
 // foldLists folds the flat keys holding a collection, which cannot share the
 // emptiness test the scalars use.
-func (s *settings) foldLists() []string {
+func (s *File) foldLists() []string {
 	var used []string
 
 	list := func(name string, dst *[]string, v []string) {
@@ -258,48 +308,10 @@ func (s *settings) foldLists() []string {
 	return used
 }
 
-// loadSettings reads the settings file and reports where it was read from. When
-// no path was given the default file is looked for, and not finding one is not
-// an error; an explicitly named file that is missing is.
-func (o *GlobalCmdOptions) loadSettings() (*settings, string, error) {
-	//nolint:exhaustruct // an absent file means every option keeps its default
-	empty := &settings{}
-
-	path := o.settingsFile
-
-	switch {
-	case o.noConfig:
-		return empty, "", nil
-	case path == "":
-		path = findSettings(o.fs(), workingDir())
-		if path == "" {
-			return empty, "", nil
-		}
-	}
-
-	src, err := afero.ReadFile(o.fs(), path)
-	if err != nil {
-		// A discovered file that vanished between the two calls is treated as
-		// no file at all, which is what it was a moment ago.
-		if o.settingsFile == "" && errors.Is(err, fs.ErrNotExist) {
-			return empty, "", nil
-		}
-
-		return nil, "", fmt.Errorf("read settings: %w", err)
-	}
-
-	s, err := parseSettings(src)
-	if err != nil {
-		return nil, "", fmt.Errorf("%s: %w", path, err)
-	}
-
-	return s, path, nil
-}
-
-// parseSettings decodes a settings file, rejecting keys it does not know: a
-// misspelled key is policy that silently did not apply.
-func parseSettings(src []byte) (*settings, error) {
-	var s settings
+// Parse decodes a settings file, rejecting keys it does not know: a misspelled
+// key is policy that silently did not apply.
+func Parse(src []byte) (*File, error) {
+	var s File
 
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
@@ -309,21 +321,21 @@ func parseSettings(src []byte) (*settings, error) {
 		return nil, err //nolint:wrapcheck // the caller names the file
 	}
 
-	if s.Version != "" && s.Version != SettingsVersion {
+	if s.Version != "" && s.Version != Version {
 		return nil, fmt.Errorf("%w %q (this release reads version %s)",
-			ErrUnknownSettingsVersion, s.Version, SettingsVersion)
+			ErrUnknownVersion, s.Version, Version)
 	}
 
 	return &s, nil
 }
 
-// findSettings looks for the default file in dir and then in each parent, so a
-// policy committed at the repository root governs a run started from a
-// subdirectory. The search stops at the directory holding .git: past the
-// repository is somebody else's policy, not this project's.
-func findSettings(fsys afero.Fs, dir string) string {
+// Find looks for the default file in dir and then in each parent, so a policy
+// committed at the repository root governs a run started from a subdirectory.
+// The search stops at the directory holding .git: past the repository is
+// somebody else's policy, not this project's.
+func Find(fsys afero.Fs, dir string) string {
 	for {
-		for _, name := range settingsNames() {
+		for _, name := range Names() {
 			path := filepath.Join(dir, name)
 			if ok, _ := afero.Exists(fsys, path); ok {
 				return path
@@ -341,18 +353,6 @@ func findSettings(fsys afero.Fs, dir string) string {
 
 		dir = parent
 	}
-}
-
-// workingDir is where the search for a settings file starts. A working
-// directory that cannot be read leaves the search relative, which finds a file
-// sitting right here and nothing above it.
-func workingDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-
-	return dir
 }
 
 // decodeStrict decodes a node into target, rejecting keys the target does not
@@ -375,38 +375,38 @@ func decodeStrict(node *yaml.Node, target any) error {
 	return nil
 }
 
-// settingsFold folds a settings file into flags that have already been parsed.
-// Each helper leaves the destination alone when the command line stated it,
-// which is the whole rule: the file is what the repository commits, and a flag
-// is how one run departs from it.
+// Fold folds a settings file into flags that have already been parsed. Each
+// helper leaves the destination alone when the command line stated it, which is
+// the whole rule: the file is what the repository commits, and a flag is how
+// one run departs from it.
 //
 // Every command that reads the file folds only the blocks it is about, so what
 // a flag of one command means is never decided by another command's key.
-type settingsFold struct {
-	// changed reports whether a flag was given on the command line, which is
+type Fold struct {
+	// Changed reports whether a flag was given on the command line, which is
 	// cobra's Flags().Changed for the command being run.
-	changed func(name string) bool
+	Changed func(name string) bool
 }
 
-// str takes a written value, an empty one meaning the file said nothing.
-func (f settingsFold) str(name string, dst *string, v string) {
-	if !f.changed(name) {
+// Str takes a written value, an empty one meaning the file said nothing.
+func (f Fold) Str(name string, dst *string, v string) {
+	if !f.Changed(name) {
 		*dst = mo.EmptyableToOption(v).OrElse(*dst)
 	}
 }
 
-// boolean takes a set value, a nil one meaning the file said nothing: false is
-// a thing to say about a flag whose default is true.
-func (f settingsFold) boolean(name string, dst *bool, v *bool) {
-	if !f.changed(name) {
+// Bool takes a set value, a nil one meaning the file said nothing: false is a
+// thing to say about a flag whose default is true.
+func (f Fold) Bool(name string, dst *bool, v *bool) {
+	if !f.Changed(name) {
 		*dst = mo.PointerToOption(v).OrElse(*dst)
 	}
 }
 
-// list appends rather than replaces: a repository's excludes and schema
+// List appends rather than replaces: a repository's excludes and schema
 // locations are added to by a run, not thrown away by one.
-func (f settingsFold) list(name string, dst *[]string, v []string) {
-	if !f.changed(name) && len(v) > 0 {
+func (f Fold) List(name string, dst *[]string, v []string) {
+	if !f.Changed(name) && len(v) > 0 {
 		*dst = append(*dst, v...)
 	}
 }

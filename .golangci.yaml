@@ -69,6 +69,12 @@ linters:
         # afero.Fs is how a filesystem is passed around; there is no concrete
         # type to return instead.
         - Fs$
+    wrapcheck:
+      ignore-package-globs:
+        # An error from another package of this module is already worded for
+        # whoever reads it by the package that raised it; wrapping it again at
+        # each hop only lengthens the message with the call stack.
+        - github.com/minuk-dev/otelcol-config-lint/*
     varnamelen:
       ignore-type-assert-ok: true
       ignore-map-index-ok: true
@@ -95,6 +101,7 @@ linters:
         - w # writer, walker
         - id
         - in # table-driven test input
+        - OK # exit.OK, an exit code that is always read package-qualified
         - tt # table-driven test case
         # The Kubernetes memory units, whose names are what a manifest writes.
         - Ki

@@ -9,12 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/exit"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 )
 
 // committedSchema is the generated copy an editor is pointed at.
-const committedSchema = "../../../" + otelcolconfiglint.SettingsSchemaFile
+const committedSchema = "../../../" + settings.SchemaFile
 
 // settingsFixtures holds one settings file per case the schema has to get
 // right. The valid ones are what an editor must not underline; the invalid ones
@@ -29,7 +30,7 @@ const settingsFixtures = "../../../testdata/settings"
 func TestTheCommittedSchemaIsUpToDate(t *testing.T) {
 	t.Parallel()
 
-	want, err := otelcolconfiglint.SettingsSchema()
+	want, err := settings.Schema()
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(committedSchema)
@@ -58,7 +59,7 @@ func TestTheSchemaCommandPrintsTheSchema(t *testing.T) {
 func TestTheSchemaNamesEveryRule(t *testing.T) {
 	t.Parallel()
 
-	doc, err := otelcolconfiglint.SettingsSchema()
+	doc, err := settings.Schema()
 	require.NoError(t, err)
 
 	var parsed struct {
@@ -102,7 +103,7 @@ func TestTheSettingsFixturesAreWhatTheySayTheyAre(t *testing.T) {
 			// fixture whose whole point is the value it writes.
 			code, _, errOut := lint(t, "", "--config", path, validConfig)
 
-			assert.Equalf(t, group.usage, code == otelcolconfiglint.ExitUsage,
+			assert.Equalf(t, group.usage, code == exit.Usage,
 				"%s %s, got exit %d: %s", path, group.explain, code, errOut)
 		}
 	}
