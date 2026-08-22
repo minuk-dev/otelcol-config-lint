@@ -9,14 +9,14 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/configschema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/list"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/run"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/version"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 )
 
 // GlobalCmdOptions is what every command shares: the filesystem to read, and
-// which settings file to read. It is the settings package's, named here as
-// well because it is what an embedder passes to NewCommand.
-type GlobalCmdOptions = settings.Options
+// which settings file to read. It is cmdutil's, named here as well because it
+// is what an embedder passes to NewCommand.
+type GlobalCmdOptions = cmdutil.GlobalOptions
 
 // NewCommand builds the root command. A nil opts is allowed, in which case a
 // zero value is used.

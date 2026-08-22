@@ -1,7 +1,10 @@
-// Package cmdutil holds what the commands share but no one command owns.
+// Package cmdutil holds what the commands share but no one command owns: the
+// options every command takes, the exit contract the binary reports, and, in
+// the packages under it, the settings file and the flag groups more than one
+// command declares.
 //
-// It is deliberately not a package under pkg/cmd: everything there is a
-// command, and this is not one.
+// It sits outside pkg/cmd on purpose. Everything there is a command, so a
+// directory there that is not one reads like a subcommand that does not exist.
 package cmdutil
 
 import "errors"

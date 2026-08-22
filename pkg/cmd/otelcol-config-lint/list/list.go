@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/rulepolicy"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/schemaflags"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/rulepolicy"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/schemaflags"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -22,7 +22,7 @@ var ErrNoSchemas = errors.New("no schemas available")
 
 // NewCommand builds "list" and its subcommands. Each one carries only the
 // flags that change what it prints, so their help stays short.
-func NewCommand(global *settings.Options) *cobra.Command {
+func NewCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "Print what the linter knows about",
@@ -42,7 +42,7 @@ func NewCommand(global *settings.Options) *cobra.Command {
 // flags and nothing else: the severities it lists are the ones the rules would
 // run at, and no other flag changes those.
 type rulesOptions struct {
-	*settings.Options
+	*cmdutil.GlobalOptions
 
 	ruleFlags rulepolicy.Flags
 
@@ -54,9 +54,9 @@ type rulesOptions struct {
 
 // newRulesCommand builds "list rules". The rule flags apply because they
 // decide the severity the rules will actually run at.
-func newRulesCommand(global *settings.Options) *cobra.Command {
+func newRulesCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 	//nolint:exhaustruct // the flags fill themselves in, and the policy is resolved by prepare
-	opts := &rulesOptions{Options: global}
+	opts := &rulesOptions{GlobalOptions: global}
 
 	cmd := &cobra.Command{
 		Use:   "rules",
@@ -94,7 +94,7 @@ func (o *rulesOptions) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	o.policy = o.ruleFlags.Policy(o.File())
+	o.policy = o.ruleFlags.Policy(o.Settings())
 
 	return nil
 }
@@ -133,7 +133,7 @@ func (o *rulesOptions) run(cmd *cobra.Command) error {
 // versionsOptions is what "list versions" was asked to print. It takes the
 // schema flags, which are what decide the schemas there are to list.
 type versionsOptions struct {
-	*settings.Options
+	*cmdutil.GlobalOptions
 
 	schemaFlags schemaflags.Flags
 
@@ -144,9 +144,9 @@ type versionsOptions struct {
 
 // newVersionsCommand builds "list versions". --collector-version is
 // deliberately absent: this is the command that says which ones exist.
-func newVersionsCommand(global *settings.Options) *cobra.Command {
+func newVersionsCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 	//nolint:exhaustruct // the flags fill themselves in, and the store is built by prepare
-	opts := &versionsOptions{Options: global}
+	opts := &versionsOptions{GlobalOptions: global}
 
 	cmd := &cobra.Command{
 		Use:   "versions",
@@ -181,7 +181,7 @@ func (o *versionsOptions) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	o.schemaFlags.ApplySettings(o.File(), o.Fold(cmd))
+	o.schemaFlags.ApplySettings(o.Settings(), o.Fold(cmd))
 	o.store = o.schemaFlags.Store(o.FS())
 
 	return nil

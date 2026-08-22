@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 )
 
 // NewCommand builds "config-schema", which prints the JSON Schema for the

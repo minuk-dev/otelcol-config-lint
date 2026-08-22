@@ -1,4 +1,4 @@
-package settings
+package cmdutil
 
 import (
 	"errors"
@@ -9,17 +9,19 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 )
 
-// Options are what every command shares: which settings file to read, which
-// filesystem to read it and everything else from, and the file itself once it
-// has been read.
+// GlobalOptions are what every command shares: which settings file to read,
+// which filesystem to read it and everything else from, and the file itself
+// once it has been read.
 //
 // They hold nothing about linting. Each command keeps its own flags and its
 // own resolved state in its own package, and folds in only the blocks it is
 // about; this is the part all of them honour, so the file is read once however
 // the commands are nested.
-type Options struct {
+type GlobalOptions struct {
 	// Fs is the filesystem the settings file, the config files and any local
 	// schema location are read from. A nil Fs means the real one, which is
 	// what the binary uses.
@@ -33,7 +35,7 @@ type Options struct {
 	// file is what the commands fold into their flags. It is nil until
 	// Prepare has read it, and never nil after: a run without a settings file
 	// is a file that says nothing.
-	file *File
+	file *settings.File
 	// path is where it was read from, and "" when there was none to read.
 	path string
 }
@@ -41,18 +43,18 @@ type Options struct {
 // RegisterFlags declares --config and --no-config. Every command that reads
 // the file honours them: the settings file states rule and schema policy, not
 // only lint options.
-func (o *Options) RegisterFlags(cmd *cobra.Command) {
+func (o *GlobalOptions) RegisterFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
 	flags.StringVarP(&o.settingsFile, "config", "c", "",
-		"settings file (default: "+DefaultName+", searched for here and in each parent)")
+		"settings file (default: "+settings.DefaultName+", searched for here and in each parent)")
 	flags.BoolVar(&o.noConfig, "no-config", false, "ignore any settings file and use the flags alone")
 }
 
 // Prepare reads the settings file the commands share, so each of them can then
 // fold the blocks it is about into its own flags. Reading it twice reads the
 // file once, because a subcommand prepares what it inherits as well as itself.
-func (o *Options) Prepare(cmd *cobra.Command) error {
+func (o *GlobalOptions) Prepare(cmd *cobra.Command) error {
 	if o.file != nil {
 		return nil
 	}
@@ -76,27 +78,27 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 	return nil
 }
 
-// File is the settings file the commands fold into their flags, which Prepare
-// has read by the time any of them asks for it.
-func (o *Options) File() *File {
+// Settings is the file the commands fold into their flags, which Prepare has
+// read by the time any of them asks for it.
+func (o *GlobalOptions) Settings() *settings.File {
 	return o.file
 }
 
-// Path is where that file was read from, and "" when there was none to read,
-// which is what --verbose reports.
-func (o *Options) Path() string {
+// SettingsPath is where that file was read from, and "" when there was none to
+// read, which is what --verbose reports.
+func (o *GlobalOptions) SettingsPath() string {
 	return o.path
 }
 
 // Fold returns the folder that applies the settings file to cmd's flags,
 // leaving alone whatever the command line already stated.
-func (o *Options) Fold(cmd *cobra.Command) Fold {
-	return Fold{Changed: cmd.Flags().Changed}
+func (o *GlobalOptions) Fold(cmd *cobra.Command) settings.Fold {
+	return settings.Fold{Changed: cmd.Flags().Changed}
 }
 
 // FS returns the filesystem to read, which is the real one unless the caller
 // named another.
-func (o *Options) FS() afero.Fs {
+func (o *GlobalOptions) FS() afero.Fs {
 	if o.Fs == nil {
 		return afero.NewOsFs()
 	}
@@ -107,9 +109,9 @@ func (o *Options) FS() afero.Fs {
 // load reads the settings file and reports where it was read from. When no
 // path was given the default file is looked for, and not finding one is not an
 // error; an explicitly named file that is missing is.
-func (o *Options) load() (*File, string, error) {
+func (o *GlobalOptions) load() (*settings.File, string, error) {
 	//nolint:exhaustruct // an absent file means every option keeps its default
-	empty := &File{}
+	empty := &settings.File{}
 
 	path := o.settingsFile
 
@@ -117,7 +119,7 @@ func (o *Options) load() (*File, string, error) {
 	case o.noConfig:
 		return empty, "", nil
 	case path == "":
-		path = Find(o.FS(), workingDir())
+		path = settings.Find(o.FS(), workingDir())
 		if path == "" {
 			return empty, "", nil
 		}
@@ -134,7 +136,7 @@ func (o *Options) load() (*File, string, error) {
 		return nil, "", fmt.Errorf("read settings: %w", err)
 	}
 
-	file, err := Parse(src)
+	file, err := settings.Parse(src)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s: %w", path, err)
 	}

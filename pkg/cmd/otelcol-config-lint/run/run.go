@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/rulepolicy"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/schemaflags"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/rulepolicy"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/schemaflags"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
@@ -43,7 +43,7 @@ const maxDefaultWorkers = 8
 // "list rules --strict" is a usage error rather than a flag that quietly does
 // nothing.
 type options struct {
-	*settings.Options
+	*cmdutil.GlobalOptions
 
 	// Flag groups shared with the listings, which take the ones that change
 	// what they print. The environment is this command's alone: only a lint
@@ -78,9 +78,9 @@ type options struct {
 
 // NewCommand builds "run". Its options are filled in by declareFlags and then
 // by the settings file, in that order.
-func NewCommand(global *settings.Options) *cobra.Command {
+func NewCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 	//nolint:exhaustruct // the flags fill themselves in, and the state is resolved by prepare
-	opts := &options{Options: global}
+	opts := &options{GlobalOptions: global}
 
 	cmd := &cobra.Command{
 		Use:   "run [flags] <file|dir|->...",
@@ -162,7 +162,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	file, fold := o.File(), o.Fold(cmd)
+	file, fold := o.Settings(), o.Fold(cmd)
 
 	o.applySettings(file, fold)
 	o.schemaFlags.ApplySettings(file, fold)
@@ -176,8 +176,8 @@ func (o *options) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	if o.verbose && o.Path() != "" {
-		cmd.PrintErrf("otelcol-config-lint: settings read from %s\n", o.Path())
+	if o.verbose && o.SettingsPath() != "" {
+		cmd.PrintErrf("otelcol-config-lint: settings read from %s\n", o.SettingsPath())
 	}
 
 	return nil
