@@ -93,6 +93,12 @@ func runSchema() object {
 			"type":  "array",
 			"items": object{"type": "string"},
 		},
+		"insecureSchemaLocation": object{
+			"description": "Allow a plain http:// schema location, which is otherwise refused. " +
+				"For a registry served on localhost; over a network anyone on the path decides " +
+				"what the rules report.",
+			"type": "boolean",
+		},
 		"strict": object{
 			"description": "Report unknown component settings as errors instead of warnings.",
 			"type":        "boolean",

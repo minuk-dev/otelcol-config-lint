@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -587,6 +589,47 @@ func TestListVersionsHonoursTheSchemaLocation(t *testing.T) {
 
 	if !strings.Contains(out, "v9.9.9") {
 		t.Errorf("a project schema should be listed:\n%s", out)
+	}
+}
+
+// TestAPlainHTTPSchemaLocationIsRefused pins that the schema a run reasons
+// from may not arrive over a transport anyone on the path can rewrite, and
+// that the refusal is reported where a bad flag is.
+func TestAPlainHTTPSchemaLocationIsRefused(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.FileServer(http.Dir(repoSchemas)))
+	defer srv.Close()
+
+	code, _, errOut := run(t, "", "run", "--no-config", "--schema-location", srv.URL, validConfig)
+	if code != otelcolconfiglint.ExitUsage {
+		t.Fatalf("an http:// location should not run, got exit %d: %s", code, errOut)
+	}
+
+	if !strings.Contains(errOut, "http") {
+		t.Errorf("the message should say what was refused:\n%s", errOut)
+	}
+
+	// The escape hatch is what a registry served on localhost is read under.
+	code, _, errOut = run(t, "", "run", "--no-config", "--insecure-schema-location",
+		"--schema-location", srv.URL, validConfig)
+	if code != 0 {
+		t.Errorf("the opt-in should permit the location, got exit %d: %s", code, errOut)
+	}
+}
+
+// TestListVersionsRefusesAPlainHTTPLocation pins that the listings hold to the
+// same rule: they read the same registries a run does.
+func TestListVersionsRefusesAPlainHTTPLocation(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := run(t, "", "list", "versions", "--no-config", "--schema-location", "http://example.invalid")
+	if code != otelcolconfiglint.ExitUsage {
+		t.Fatalf("an http:// location should not be listed, got exit %d: %s", code, errOut)
+	}
+
+	if !strings.Contains(errOut, "http") {
+		t.Errorf("the message should say what was refused:\n%s", errOut)
 	}
 }
 

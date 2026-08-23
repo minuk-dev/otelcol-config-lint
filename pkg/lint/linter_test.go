@@ -56,7 +56,7 @@ func newLinter(t *testing.T, opts lint.Options) *lint.Linter {
 	t.Helper()
 
 	if opts.Schema == nil {
-		cat, err := repoStore().Load(schema.Latest)
+		cat, err := repoStore().Load(t.Context(), schema.Latest)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -299,7 +299,7 @@ func TestTextFormatterQuietOnSuccess(t *testing.T) {
 func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 	t.Parallel()
 
-	idx := lint.NewVersionIndex(repoStore())
+	idx := lint.NewVersionIndex(t.Context(), repoStore())
 
 	versions := idx.Versions("exporter", "logging")
 	if len(versions) == 0 {

@@ -316,6 +316,10 @@
           "description": "Do not fail on components the schema does not describe, for a custom distribution.",
           "type": "boolean"
         },
+        "insecureSchemaLocation": {
+          "description": "Allow a plain http:// schema location, which is otherwise refused. For a registry served on localhost; over a network anyone on the path decides what the rules report.",
+          "type": "boolean"
+        },
         "kubernetes": {
           "additionalProperties": false,
           "description": "The pods the configs run in, for the rules that cannot judge a config without knowing what it runs in.",

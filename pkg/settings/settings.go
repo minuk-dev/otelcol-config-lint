@@ -84,6 +84,10 @@ type RunBlock struct {
 	Distribution string `yaml:"distribution"`
 	// SchemaLocations are searched in order before the published registry.
 	SchemaLocations []string `yaml:"schemaLocations"`
+	// InsecureSchemaLocation permits a plain http:// schema location, which is
+	// otherwise refused: a schema states which components exist, so a transport
+	// anyone can rewrite decides what the rules report.
+	InsecureSchemaLocation *bool `yaml:"insecureSchemaLocation"`
 	// Strict reports unknown component settings as errors.
 	Strict *bool `yaml:"strict"`
 	// IgnoreMissingSchemas keeps components absent from the schema from

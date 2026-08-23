@@ -71,8 +71,10 @@ whole reference: `files` (default `.`, whitespace-separated, globs allowed),
 several in order), `strict`, `ignore-missing-schemas`, `min-severity`,
 `fail-on`, `default`, `enable`, `disable`, `severity`, `exclude`, `output`
 (default `github`), `config`, `no-config`, `summary` (default `true`),
-`verbose` and `exit-on-error`. Only `--concurrency` and `--no-color` are left
-out: a runner gains nothing from either.
+`verbose` and `exit-on-error`. `--concurrency`, `--no-color` and
+`--insecure-schema-location` are left out: a runner gains nothing from the
+first two, and a workflow that reads its schemas over plain HTTP is one whose
+findings anyone on the path can choose.
 
 The counts come back as outputs — `exit-code`, `valid`, `invalid`, `errors`,
 `skipped`, `warnings` and `infos` — so a later step can decide what to do with
@@ -127,6 +129,7 @@ from it.
 | `--collector-version` | `run.collectorVersion` | release to validate against, e.g. `v0.157.0` (default `latest`) |
 | `--distribution` | `run.distribution` | collector binary to validate against: `core`, `contrib` (default), `k8s` or `otlp` |
 | `--schema-location` | `run.schemaLocations` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
+| `--insecure-schema-location` | `run.insecureSchemaLocation` | allow a plain `http://` schema location, which is otherwise refused. For a registry served on localhost |
 | `--strict` | `run.strict` | unknown component settings become errors instead of warnings |
 | `--ignore-missing-schemas` | `run.ignoreMissingSchemas` | do not fail on components absent from the schema (custom distributions) |
 | `--exclude` | `run.exclude` | glob patterns to skip when walking directories |
@@ -711,7 +714,7 @@ components:
       module: go.opentelemetry.io/collector/receiver/otlpreceiver
 ```
 
-They are read over HTTP by default, so nothing needs installing or cloning. To
+They are read over HTTPS by default, so nothing needs installing or cloning. To
 pin a copy, or to run without network access, point at a checkout:
 
 ```sh
@@ -724,6 +727,14 @@ template naming a single file, or `default` for the published registry. Repeat
 the flag to search several in order, so a private distribution's schema can take
 precedence over the public ones, or so a vendored copy answers before the
 network is tried.
+
+A remote location must be `https://`. The schema is what every rule reasons
+from — which components exist, which settings they take — so anyone able to
+rewrite one in flight decides what the linter reports; a plain `http://`
+location is refused unless `--insecure-schema-location` says otherwise, which
+is there for a registry served on localhost. One download is capped at 32 MiB,
+so a registry that is hostile or merely broken cannot stream the linter out of
+memory.
 
 ### Adding a release
 
