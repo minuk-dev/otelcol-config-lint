@@ -1198,3 +1198,56 @@ func TestALimitTooLargeToSizeIsNotGivenANumber(t *testing.T) {
 	assert.NotContains(t, rulesFired(t, out)["stdin"], "memory-limiter-sizing",
 		"a limit that does not fit in a byte count cannot be sized")
 }
+
+// TestSharedFlagsAgreeAcrossCommands pins that a flag two commands both take
+// means the same thing on both: same shorthand, same default, same help. A
+// command declaring its own flags is what keeps the help of each one short,
+// and this is what makes doing so safe.
+func TestSharedFlagsAgreeAcrossCommands(t *testing.T) {
+	t.Parallel()
+
+	// The flags more than one command declares. Each command owns its own, so
+	// what keeps them from drifting is this test rather than one declaration.
+	shared := map[string][][]string{
+		"distribution":    {{"run"}, {"list", "versions"}},
+		"schema-location": {{"run"}, {"list", "versions"}},
+		"default":         {{"run"}, {"list", "rules"}},
+		"enable":          {{"run"}, {"list", "rules"}},
+		"disable":         {{"run"}, {"list", "rules"}},
+		"severity":        {{"run"}, {"list", "rules"}},
+		"config":          {{"run"}, {"list", "rules"}, {"list", "versions"}},
+		"no-config":       {{"run"}, {"list", "rules"}, {"list", "versions"}},
+	}
+
+	root := otelcolconfiglint.NewCommand(nil)
+
+	for name, paths := range shared {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var first []string
+
+			for _, path := range paths {
+				where := strings.Join(path, " ")
+
+				cmd, _, err := root.Find(path)
+				require.NoErrorf(t, err, "%s should exist", where)
+
+				flag := cmd.Flags().Lookup(name)
+				require.NotNilf(t, flag, "%s should take --%s", where, name)
+
+				// Compared as one value so a difference names the flag rather
+				// than one of its three parts.
+				spelling := []string{flag.Shorthand, flag.DefValue, flag.Usage}
+
+				if first == nil {
+					first = spelling
+
+					continue
+				}
+
+				assert.Equalf(t, first, spelling, "%s declares --%s differently", where, name)
+			}
+		})
+	}
+}

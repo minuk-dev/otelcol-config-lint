@@ -1,13 +1,16 @@
 // Package rulepolicy is which rules run, at what level, and with what settings
-// of their own. "run" and "list rules" both take it: what the listing prints is
-// the policy a run would use.
+// of their own, once a command's rule flags and the settings file have both had
+// their say. "run" and "list rules" both resolve one: what the listing prints
+// is the policy a run would use.
+//
+// The flags stay with the commands that declare them; what arrives here is a
+// Selection, which is only what they said.
 package rulepolicy
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
@@ -125,49 +128,40 @@ func (p Policy) Rules() ([]rule.Rule, error) {
 	return configured, nil
 }
 
-// Flags select the rules: --default, --enable, --disable and --severity. "run"
-// and "list rules" both take them; no other command has any business changing
-// the policy.
-type Flags struct {
-	ruleDefault string
-	enable      []string
-	disable     []string
-	severity    []string
+// Selection is what a command's rule flags hold: the set to start from and the
+// rules moved in and out of it. The flags themselves belong to the command that
+// declares them; this is only what they said.
+type Selection struct {
+	// Default is the set to start from, "" meaning the file decides.
+	Default string
+	// Enable and Disable name rules to move in and out of that set.
+	Enable  []string
+	Disable []string
+	// Severity holds rule=level pairs.
+	Severity []string
 }
 
-// Register declares the rule selection on cmd.
-func (f *Flags) Register(cmd *cobra.Command) {
-	flags := cmd.Flags()
-
-	flags.StringVar(&f.ruleDefault, "default", "",
-		"rule set to start from: "+settings.DefaultAll+" (the default) or "+settings.DefaultNone)
-	flags.StringSliceVarP(&f.enable, "enable", "E", nil, "rules to turn on, on top of --default")
-	flags.StringSliceVarP(&f.disable, "disable", "D", nil, "rules to turn off")
-	flags.StringSliceVar(&f.severity, "severity", nil,
-		"rule=level overrides, e.g. missing-batch=warning")
-}
-
-// Policy builds the policy from the flags and the rules block. The rule lists
-// merge rather than replace: the file states the project policy and a
-// flag adds to it for a single run, which is how -E and -D read next to a
-// committed config.
-func (f *Flags) Policy(s *settings.File) Policy {
+// New builds the policy from a selection and the rules block. The rule lists
+// merge rather than replace: the file states the project policy and a flag
+// adds to it for a single run, which is how -E and -D read next to a committed
+// config.
+func New(s *settings.File, sel Selection) Policy {
 	// File pairs are listed first so a flag that names the same rule wins.
-	severity := make([]string, 0, len(s.Rules.Severity)+len(f.severity))
+	severity := make([]string, 0, len(s.Rules.Severity)+len(sel.Severity))
 	for _, name := range sets.List(sets.KeySet(s.Rules.Severity)) {
 		severity = append(severity, name+"="+s.Rules.Severity[name])
 	}
 
-	set := f.ruleDefault
+	set := sel.Default
 	if set == "" {
 		set = s.Rules.Default
 	}
 
 	return Policy{
 		set:      set,
-		enable:   append(trimAll(s.Rules.Enable), trimAll(f.enable)...),
-		disable:  append(trimAll(s.Rules.Disable), trimAll(f.disable)...),
-		severity: append(severity, trimAll(f.severity)...),
+		enable:   append(trimAll(s.Rules.Enable), trimAll(sel.Enable)...),
+		disable:  append(trimAll(s.Rules.Disable), trimAll(sel.Disable)...),
+		severity: append(severity, trimAll(sel.Severity)...),
 		settings: s.Rules.Settings,
 	}
 }

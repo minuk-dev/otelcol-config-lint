@@ -12,7 +12,6 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/rulepolicy"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/schemaflags"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
@@ -28,6 +27,8 @@ var (
 	ErrNoInput = cmdutil.NewUsageError("no files or directories specified")
 	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
 	ErrNoYAMLFiles = cmdutil.NewUsageError("no YAML files found")
+	// ErrNoOverridePaths reports an environment override that matches nothing.
+	ErrNoOverridePaths = cmdutil.NewUsageError("an override needs at least one path pattern")
 )
 
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
@@ -45,14 +46,20 @@ const maxDefaultWorkers = 8
 type options struct {
 	*cmdutil.GlobalOptions
 
-	// Flag groups shared with the listings, which take the ones that change
-	// what they print. The environment is this command's alone: only a lint
-	// run judges a config against what it runs in.
-	schemaFlags schemaflags.Flags
-	ruleFlags   rulepolicy.Flags
-	envFlags    environmentFlags
-
 	// flags
+	// Where the schemas come from, and which binary they describe.
+	distribution    string
+	schemaLocations []string
+	// Which rules run, and at what level.
+	ruleDefault string
+	enable      []string
+	disable     []string
+	severity    []string
+	// What the config runs in, for the rules that cannot judge one without.
+	kubernetes    bool
+	memoryRequest string
+	memoryLimit   string
+
 	collectorVersion string
 	output           string
 	exclude          []string
@@ -74,6 +81,13 @@ type options struct {
 	policy rulepolicy.Policy
 	// envPolicy resolves the environment of each file linted.
 	envPolicy lint.EnvironmentPolicy
+	// kubernetesEnabled is what the flag or the settings file said about
+	// running in Kubernetes; nil when neither said anything, which leaves the
+	// answer to be read from the memory numbers.
+	kubernetesEnabled *bool
+	// kubernetesOverrides are the per-path environments, which only the
+	// settings file can state.
+	kubernetesOverrides []settings.KubernetesOverride
 }
 
 // NewCommand builds "run". Its options are filled in by declareFlags and then
@@ -128,13 +142,23 @@ Exit codes:
 // of the settings file: the file is what a repository commits, and the flag is
 // how a single run departs from it.
 func (o *options) declareFlags(cmd *cobra.Command) {
-	o.RegisterFlags(cmd)
-	o.schemaFlags.Register(cmd)
-	o.ruleFlags.Register(cmd)
-	o.envFlags.register(cmd)
-
 	flags := cmd.Flags()
 
+	o.RegisterFlags(cmd)
+	flags.StringVar(&o.distribution, "distribution", schema.DefaultDistribution,
+		"collector distribution to validate against: core, contrib, k8s or otlp")
+	flags.StringSliceVar(&o.schemaLocations, "schema-location", nil,
+		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
+			"repeat to search several in order (default: the published registry)")
+	flags.StringVar(&o.ruleDefault, "default", "",
+		"rule set to start from: "+settings.DefaultAll+" (the default) or "+settings.DefaultNone)
+	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
+	flags.StringSliceVarP(&o.disable, "disable", "D", nil, "rules to turn off")
+	flags.StringSliceVar(&o.severity, "severity", nil,
+		"rule=level overrides, e.g. missing-batch=warning")
+	flags.BoolVar(&o.kubernetes, kubernetesFlag, false, "the config runs in a Kubernetes pod")
+	flags.StringVar(&o.memoryRequest, "memory-request", "", "container memory request, e.g. 256Mi")
+	flags.StringVar(&o.memoryLimit, "memory-limit", "", "container memory limit, e.g. 512Mi")
 	flags.StringVar(&o.collectorVersion, "collector-version", schema.Latest,
 		"collector release to validate against, e.g. v0.157.0")
 	flags.StringVar(&o.output, "output", "text", "output format: text, json, junit, tap or github")
@@ -165,13 +189,31 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	file, fold := o.Settings(), o.Fold(cmd)
 
 	o.applySettings(file, fold)
-	o.schemaFlags.ApplySettings(file, fold)
-	o.envFlags.applySettings(file, fold)
+	fold.Str("distribution", &o.distribution, file.Run.Distribution)
+	fold.List("schema-location", &o.schemaLocations, file.Run.SchemaLocations)
+	fold.Str("memory-request", &o.memoryRequest, file.Run.Kubernetes.MemoryRequest)
+	fold.Str("memory-limit", &o.memoryLimit, file.Run.Kubernetes.MemoryLimit)
 
-	o.policy = o.ruleFlags.Policy(file)
-	o.store = o.schemaFlags.Store(o.FS())
+	// The deployment environment is a tri-state: the flag wins, then the file,
+	// and with neither the memory numbers speak for themselves.
+	switch {
+	case fold.Changed(kubernetesFlag):
+		o.kubernetesEnabled = &o.kubernetes
+	case file.Run.Kubernetes.Enabled != nil:
+		o.kubernetesEnabled = file.Run.Kubernetes.Enabled
+	}
 
-	o.envPolicy, err = o.envFlags.policy()
+	o.kubernetesOverrides = file.Run.Kubernetes.Overrides
+
+	o.policy = rulepolicy.New(file, rulepolicy.Selection{
+		Default:  o.ruleDefault,
+		Enable:   o.enable,
+		Disable:  o.disable,
+		Severity: o.severity,
+	})
+	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.FS()}
+
+	o.envPolicy, err = o.environmentPolicy()
 	if err != nil {
 		return err
 	}

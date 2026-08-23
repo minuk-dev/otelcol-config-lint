@@ -12,7 +12,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/rulepolicy"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/schemaflags"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -43,7 +43,11 @@ func NewCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 type rulesOptions struct {
 	*cmdutil.GlobalOptions
 
-	ruleFlags rulepolicy.Flags
+	// flags
+	ruleDefault string
+	enable      []string
+	disable     []string
+	severity    []string
 
 	// internal state
 	// policy is which rules run and at what level, once the flags and the
@@ -83,7 +87,15 @@ func newRulesCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 // declareFlags declares the flags the listing takes.
 func (o *rulesOptions) declareFlags(cmd *cobra.Command) {
 	o.RegisterFlags(cmd)
-	o.ruleFlags.Register(cmd)
+
+	flags := cmd.Flags()
+
+	flags.StringVar(&o.ruleDefault, "default", "",
+		"rule set to start from: "+settings.DefaultAll+" (the default) or "+settings.DefaultNone)
+	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
+	flags.StringSliceVarP(&o.disable, "disable", "D", nil, "rules to turn off")
+	flags.StringSliceVar(&o.severity, "severity", nil,
+		"rule=level overrides, e.g. missing-batch=warning")
 }
 
 // prepare folds the rules block of the settings file into the flags.
@@ -93,7 +105,12 @@ func (o *rulesOptions) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	o.policy = o.ruleFlags.Policy(o.Settings())
+	o.policy = rulepolicy.New(o.Settings(), rulepolicy.Selection{
+		Default:  o.ruleDefault,
+		Enable:   o.enable,
+		Disable:  o.disable,
+		Severity: o.severity,
+	})
 
 	return nil
 }
@@ -134,7 +151,9 @@ func (o *rulesOptions) run(cmd *cobra.Command) error {
 type versionsOptions struct {
 	*cmdutil.GlobalOptions
 
-	schemaFlags schemaflags.Flags
+	// flags
+	distribution    string
+	schemaLocations []string
 
 	// internal state
 	// store is where the schemas are read from.
@@ -169,7 +188,14 @@ func newVersionsCommand(global *cmdutil.GlobalOptions) *cobra.Command {
 // declareFlags declares the flags the listing takes.
 func (o *versionsOptions) declareFlags(cmd *cobra.Command) {
 	o.RegisterFlags(cmd)
-	o.schemaFlags.Register(cmd)
+
+	flags := cmd.Flags()
+
+	flags.StringVar(&o.distribution, "distribution", schema.DefaultDistribution,
+		"collector distribution to validate against: core, contrib, k8s or otlp")
+	flags.StringSliceVar(&o.schemaLocations, "schema-location", nil,
+		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
+			"repeat to search several in order (default: the published registry)")
 }
 
 // prepare folds the schema keys of the settings file into the flags and builds
@@ -180,8 +206,12 @@ func (o *versionsOptions) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	o.schemaFlags.ApplySettings(o.Settings(), o.Fold(cmd))
-	o.store = o.schemaFlags.Store(o.FS())
+	file, fold := o.Settings(), o.Fold(cmd)
+
+	fold.Str("distribution", &o.distribution, file.Run.Distribution)
+	fold.List("schema-location", &o.schemaLocations, file.Run.SchemaLocations)
+
+	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.FS()}
 
 	return nil
 }

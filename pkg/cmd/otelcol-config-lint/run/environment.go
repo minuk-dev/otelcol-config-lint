@@ -4,82 +4,30 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
-
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/quantity"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
-// kubernetesFlag is the flag that says the configs run in a pod, named here
-// because the tri-state below has to ask whether it was given.
+// kubernetesFlag is the flag that says the configs run in a pod. It is named
+// because resolving the environment has to ask whether it was given, and a
+// flag looked up by a misspelled name is a question that answers no.
 const kubernetesFlag = "kubernetes"
 
-// ErrNoOverridePaths reports an environment override that matches nothing.
-var ErrNoOverridePaths = cmdutil.NewUsageError("an override needs at least one path pattern")
-
-// environmentFlags describe the pod the configs run in: --kubernetes and the
-// two memory numbers. Only "run" takes them, because only a lint run judges a
-// config against what it runs in.
-type environmentFlags struct {
-	// flags
-	kubernetes    bool
-	memoryRequest string
-	memoryLimit   string
-
-	// internal state
-	// enabled is what the flag or the settings file said about running in
-	// Kubernetes; nil when neither said anything, which leaves the answer to
-	// be read from the memory numbers.
-	enabled *bool
-	// overrides are the per-path environments, which only the settings file
-	// can state.
-	overrides []settings.KubernetesOverride
-}
-
-// register declares the environment flags on cmd.
-func (f *environmentFlags) register(cmd *cobra.Command) {
-	flags := cmd.Flags()
-
-	flags.BoolVar(&f.kubernetes, kubernetesFlag, false, "the config runs in a Kubernetes pod")
-	flags.StringVar(&f.memoryRequest, "memory-request", "", "container memory request, e.g. 256Mi")
-	flags.StringVar(&f.memoryLimit, "memory-limit", "", "container memory limit, e.g. 512Mi")
-}
-
-// applySettings folds the kubernetes block into the flags. The flags set the
-// defaults only; the per-path overrides are the file's alone.
-func (f *environmentFlags) applySettings(s *settings.File, fold settings.Fold) {
-	fold.Str("memory-request", &f.memoryRequest, s.Run.Kubernetes.MemoryRequest)
-	fold.Str("memory-limit", &f.memoryLimit, s.Run.Kubernetes.MemoryLimit)
-
-	// The deployment environment is a tri-state: the flag wins, then the file,
-	// and with neither the memory numbers speak for themselves.
-	switch {
-	case fold.Changed(kubernetesFlag):
-		f.enabled = &f.kubernetes
-	case s.Run.Kubernetes.Enabled != nil:
-		f.enabled = s.Run.Kubernetes.Enabled
-	}
-
-	f.overrides = s.Run.Kubernetes.Overrides
-}
-
-// policy builds the per-path environment from the flags and the settings
-// file. The flags are the single-file convenience, and the file is
+// environmentPolicy builds the per-path environment from the flags and the
+// settings file. The flags are the single-file convenience, and the file is
 // what a repository of configs commits.
-func (f *environmentFlags) policy() (lint.EnvironmentPolicy, error) {
+func (o *options) environmentPolicy() (lint.EnvironmentPolicy, error) {
 	var none lint.EnvironmentPolicy
 
-	fallback, err := environmentOf(f.enabled, f.memoryRequest, f.memoryLimit)
+	fallback, err := environmentOf(o.kubernetesEnabled, o.memoryRequest, o.memoryLimit)
 	if err != nil {
 		return none, fmt.Errorf("kubernetes: %w", err)
 	}
 
 	policy := lint.EnvironmentPolicy{Default: fallback, Overrides: nil}
 
-	for i, over := range f.overrides {
+	for i, over := range o.kubernetesOverrides {
 		where := fmt.Sprintf("kubernetes.overrides[%d]", i)
 
 		if len(over.Paths) == 0 {
