@@ -346,7 +346,7 @@ var (
 func (s Store) loadFrom(ctx context.Context, loc, version string) (*Schema, error) {
 	switch kindOf(loc) {
 	case locRemote:
-		return s.loadFromRegistry(loc, version, func(target string) (*Schema, error) {
+		return s.loadFromRegistry(ctx, loc, version, func(target string) (*Schema, error) {
 			return s.fetch(ctx, target)
 		})
 	case locTemplate, locFile:
@@ -355,7 +355,7 @@ func (s Store) loadFrom(ctx context.Context, loc, version string) (*Schema, erro
 		// A directory holding an index is a registry root, laid out by
 		// distribution. Without one it is the flat legacy layout.
 		if s.isRegistryDir(loc) {
-			return s.loadFromRegistry(loc, version, s.readLocal)
+			return s.loadFromRegistry(ctx, loc, version, s.readLocal)
 		}
 
 		return s.loadFlat(loc, version)
@@ -371,10 +371,12 @@ func (s Store) loadOne(ctx context.Context, target string) (*Schema, error) {
 	return s.readLocal(target)
 }
 
-// loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", preferring
-// the readable form when a root carries both.
-func (s Store) loadFromRegistry(root, version string, read func(string) (*Schema, error)) (*Schema, error) {
-	for _, ext := range extensions() {
+// loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", asking the
+// index which extension to use and falling back to trying each in turn.
+func (s Store) loadFromRegistry(
+	ctx context.Context, root, version string, read func(string) (*Schema, error),
+) (*Schema, error) {
+	for _, ext := range s.registryExtensions(ctx, root) {
 		c, err := read(join(root, s.distribution(), version+ext))
 		if err == nil {
 			return c, nil
@@ -386,6 +388,40 @@ func (s Store) loadFromRegistry(root, version string, read func(string) (*Schema
 	}
 
 	return nil, errNotFound
+}
+
+// registryExtensions is the order to look a schema up in: what the index named
+// first, then the rest.
+//
+// The index is only worth consulting for a remote root, where each miss is a
+// request and a 404 the registry counted against the rate limit. Locally a
+// miss is a stat, so the probe costs nothing worth reading a file to avoid.
+// The others stay behind the named one either way: an index can be older than
+// the field, or simply wrong, and the schema is there to be found regardless.
+func (s Store) registryExtensions(ctx context.Context, root string) []string {
+	if kindOf(root) != locRemote {
+		return extensions()
+	}
+
+	idx := s.indexAt(ctx, root)
+	if idx == nil {
+		return extensions()
+	}
+
+	named, ok := idx.Extension(s.distribution())
+	if !ok {
+		return extensions()
+	}
+
+	out := []string{named}
+
+	for _, ext := range extensions() {
+		if ext != named {
+			out = append(out, ext)
+		}
+	}
+
+	return out
 }
 
 // loadFlat reads "<dir>/<version>.<ext>", the layout used before schemas were
@@ -414,15 +450,55 @@ func (s Store) readLocal(path string) (*Schema, error) {
 	return readFile(s.fs(), path)
 }
 
-// fetchIndex reads a remote registry's index.
+// fetchIndex reads a remote registry's index, once per registry.
+//
+// Resolving a version consults the index and so does listing them, so a run
+// that lints against several releases would otherwise fetch the same file once
+// per lookup -- against a rate limit that counts requests, the fetch this
+// field was added to save. A failure is remembered too: a registry that could
+// not answer for the index is not going to answer any faster for being asked
+// again by every version in turn.
 func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
-	body, err := s.get(ctx, join(root, IndexFile))
+	// A location this store may not read is not a fetch, and not an answer to
+	// remember: another store, allowed to read it, would be handed the refusal.
+	err := s.refuseInsecure(root)
 	if err != nil {
 		return nil, err
 	}
 
-	return ReadIndex(bytes.NewReader(body))
+	cached, ok := indexMemo.Load(root)
+	if ok {
+		result, _ := cached.(indexResult)
+
+		return result.index, result.err
+	}
+
+	result := indexResult{index: nil, err: nil}
+
+	body, err := s.get(ctx, join(root, IndexFile))
+	if err == nil {
+		result.index, result.err = ReadIndex(bytes.NewReader(body))
+	} else {
+		result.err = err
+	}
+
+	indexMemo.Store(root, result)
+
+	return result.index, result.err
 }
+
+// indexResult is what one registry's index fetch came to, kept whether it
+// succeeded or not.
+type indexResult struct {
+	index *Index
+	err   error
+}
+
+// indexMemo holds each remote registry's index for the life of the process,
+// keyed by the root it was read from.
+//
+//nolint:gochecknoglobals // a registry has one index, and the point is to fetch it once
+var indexMemo sync.Map
 
 // join appends path segments to a registry root, which is a URL or a local
 // directory. Slashes are right for both: filepath.Join would break URLs on
@@ -456,8 +532,9 @@ func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
 // again, up to fetchAttempts times; see retry.go for which statuses earn one
 // and how long each wait is.
 func (s Store) get(ctx context.Context, url string) ([]byte, error) {
-	if !s.AllowInsecure && isInsecure(url) {
-		return nil, fmt.Errorf("%w: %s", errInsecureLocation, url)
+	err := s.refuseInsecure(url)
+	if err != nil {
+		return nil, err
 	}
 
 	for attempt := 0; ; attempt++ {
@@ -482,6 +559,16 @@ func (s Store) get(ctx context.Context, url string) ([]byte, error) {
 			return nil, err
 		}
 	}
+}
+
+// refuseInsecure reports the location the store will not read, so that a
+// refusal is raised before anything is fetched -- or remembered.
+func (s Store) refuseInsecure(url string) error {
+	if !s.AllowInsecure && isInsecure(url) {
+		return fmt.Errorf("%w: %s", errInsecureLocation, url)
+	}
+
+	return nil
 }
 
 // attempt makes one request and returns what it served. The body is read here
