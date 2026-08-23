@@ -602,20 +602,13 @@ func TestAPlainHTTPSchemaLocationIsRefused(t *testing.T) {
 	defer srv.Close()
 
 	code, _, errOut := run(t, "", "run", "--no-config", "--schema-location", srv.URL, validConfig)
-	if code != otelcolconfiglint.ExitUsage {
-		t.Fatalf("an http:// location should not run, got exit %d: %s", code, errOut)
-	}
-
-	if !strings.Contains(errOut, "http") {
-		t.Errorf("the message should say what was refused:\n%s", errOut)
-	}
+	require.Equal(t, otelcolconfiglint.ExitUsage, code, "an http:// location should not run: %s", errOut)
+	assert.Contains(t, errOut, "http", "the message should say what was refused")
 
 	// The escape hatch is what a registry served on localhost is read under.
 	code, _, errOut = run(t, "", "run", "--no-config", "--insecure-schema-location",
 		"--schema-location", srv.URL, validConfig)
-	if code != 0 {
-		t.Errorf("the opt-in should permit the location, got exit %d: %s", code, errOut)
-	}
+	assert.Equal(t, otelcolconfiglint.ExitOK, code, "the opt-in should permit the location: %s", errOut)
 }
 
 // TestListVersionsRefusesAPlainHTTPLocation pins that the listings hold to the
@@ -624,13 +617,8 @@ func TestListVersionsRefusesAPlainHTTPLocation(t *testing.T) {
 	t.Parallel()
 
 	code, _, errOut := run(t, "", "list", "versions", "--no-config", "--schema-location", "http://example.invalid")
-	if code != otelcolconfiglint.ExitUsage {
-		t.Fatalf("an http:// location should not be listed, got exit %d: %s", code, errOut)
-	}
-
-	if !strings.Contains(errOut, "http") {
-		t.Errorf("the message should say what was refused:\n%s", errOut)
-	}
+	require.Equal(t, otelcolconfiglint.ExitUsage, code, "an http:// location should not be listed: %s", errOut)
+	assert.Contains(t, errOut, "http", "the message should say what was refused")
 }
 
 // TestListSubcommandsRejectLintFlags pins the point of the split: the listings

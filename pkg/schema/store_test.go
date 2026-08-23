@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
@@ -536,35 +538,19 @@ func TestAPlainHTTPLocationIsRefused(t *testing.T) {
 	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}}
 
 	_, err := store.Load(t.Context(), "v0.157.0")
-	if err == nil {
-		t.Fatal("an http:// location should be refused")
-	}
-
-	if !strings.Contains(err.Error(), "http") {
-		t.Errorf("the error should say what it refused, got %v", err)
-	}
-
-	if asked != 0 {
-		t.Errorf("a refused location should not be fetched, got %d requests", asked)
-	}
-
-	if store.Validate() == nil {
-		t.Error("Validate should report the location a command is about to be refused for")
-	}
+	require.Error(t, err, "an http:// location should be refused")
+	assert.Contains(t, err.Error(), "http", "the error should say what it refused")
+	assert.Zero(t, asked, "a refused location should not be fetched")
+	require.Error(t, store.Validate(), "Validate should refuse it while a command is still reading flags")
 
 	// The opt-in is what a registry on localhost is served under.
 	allowed := store
 	allowed.AllowInsecure = true
 
-	err = allowed.Validate()
-	if err != nil {
-		t.Fatalf("the opt-in should permit http, got %v", err)
-	}
+	require.NoError(t, allowed.Validate(), "the opt-in should permit http")
 
 	_, err = allowed.Load(t.Context(), "v0.157.0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 }
 
 // TestARemoteSchemaIsCappedInSize pins that a location cannot decide how much
@@ -584,13 +570,9 @@ func TestARemoteSchemaIsCappedInSize(t *testing.T) {
 	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.yaml"}, AllowInsecure: true}
 
 	_, err := store.Load(t.Context(), "v0.157.0")
-	if err == nil {
-		t.Fatal("a body over the limit should not be decoded")
-	}
-
-	if !strings.Contains(err.Error(), "larger than") {
-		t.Errorf("the error should name the limit, got %v", err)
-	}
+	require.Error(t, err, "a body over the limit should not be decoded")
+	assert.Contains(t, err.Error(), "larger than",
+		"the error should name the limit rather than the parse it prevented")
 }
 
 // filler is an endless body, standing in for a registry that streams.
@@ -620,9 +602,7 @@ func TestFetchStopsWhenTheContextIsCancelled(t *testing.T) {
 	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}, AllowInsecure: true}
 
 	_, err := store.Load(ctx, "v0.157.0")
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("a cancelled run should report it, got %v", err)
-	}
+	require.ErrorIs(t, err, context.Canceled, "a cancelled run should end the fetch it started")
 }
 
 func write(t *testing.T, path, content string) {

@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -332,13 +334,8 @@ func TestTheRunsContextReachesARulesSchemaQuestion(t *testing.T) {
 
 	newLinter(t, lint.Options{Availability: avail}).Lint(ctx, "x.yaml", []byte(src))
 
-	if !avail.asked {
-		t.Fatal("an unknown component should have asked which releases ship it")
-	}
-
-	if avail.run != "this run" {
-		t.Errorf("the question should arrive on the linting call's context, got %q", avail.run)
-	}
+	require.True(t, avail.asked, "an unknown component should have asked which releases ship it")
+	assert.Equal(t, "this run", avail.run, "the question should arrive on the linting call's context")
 }
 
 func TestVersionIndexFindsRemovedComponents(t *testing.T) {

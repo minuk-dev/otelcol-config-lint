@@ -3,6 +3,8 @@ package schema
 import (
 	"net/http"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestStoresShareOneDefaultClient pins that a store without a client of its own
@@ -15,16 +17,9 @@ func TestStoresShareOneDefaultClient(t *testing.T) {
 
 	first, second := Store{}, Store{Distribution: "core"}
 
-	if first.client() != second.client() {
-		t.Error("stores with no client of their own should share the default one")
-	}
-
-	if first.client().Timeout != defaultFetchTimeout {
-		t.Errorf("the default client should carry the fetch timeout, got %v", first.client().Timeout)
-	}
+	assert.Same(t, first.client(), second.client(), "stores with no client of their own should share one")
+	assert.Equal(t, defaultFetchTimeout, first.client().Timeout, "the shared client should carry the fetch timeout")
 
 	own := Store{HTTPClient: &http.Client{}}
-	if own.client() == defaultClient() {
-		t.Error("a store with a client of its own should fetch with it")
-	}
+	assert.NotSame(t, defaultClient(), own.client(), "a store with a client of its own should fetch with it")
 }
