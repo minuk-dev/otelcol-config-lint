@@ -140,11 +140,11 @@ service:
 
 	l := newLinter(t, lint.Options{Environment: policy.Resolve})
 
-	if r := l.Lint("agent-node.yaml", []byte(src)); !fires(r, "memory-limiter-sizing") {
+	if r := l.Lint(t.Context(), "agent-node.yaml", []byte(src)); !fires(r, "memory-limiter-sizing") {
 		t.Errorf("the agent's limiter does not fit its container: %+v", r.Diagnostics)
 	}
 
-	if r := l.Lint("gateway.yaml", []byte(src)); fires(r, "memory-limiter-sizing") {
+	if r := l.Lint(t.Context(), "gateway.yaml", []byte(src)); fires(r, "memory-limiter-sizing") {
 		t.Errorf("the gateway has room for the same limiter: %+v", r.Diagnostics)
 	}
 }
@@ -153,7 +153,7 @@ func TestLinterWithoutAResolverKnowsNoEnvironment(t *testing.T) {
 	t.Parallel()
 
 	src := strings.Replace(good, "limit_mib: 512", "limit_mib: 4096", 1)
-	if r := newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src)); fires(r, "memory-limiter-sizing") {
+	if r := newLinter(t, lint.Options{}).Lint(t.Context(), "x.yaml", []byte(src)); fires(r, "memory-limiter-sizing") {
 		t.Errorf("sizing needs an environment nobody gave: %+v", r.Diagnostics)
 	}
 }

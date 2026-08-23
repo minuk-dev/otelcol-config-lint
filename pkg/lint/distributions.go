@@ -16,11 +16,6 @@ import (
 // Like VersionIndex it is built on first use, so a run that never meets an
 // unknown component pays nothing for it.
 type DistributionIndex struct {
-	// ctx is the run's, for the same reason VersionIndex holds one: the index
-	// is built inside the rule that asked, not at the call that made it.
-	//
-	//nolint:containedctx // the index is lazy; the context cannot arrive with the question
-	ctx     context.Context
 	store   schema.Store
 	version string
 
@@ -30,28 +25,31 @@ type DistributionIndex struct {
 
 // NewDistributionIndex returns an index over the sibling distributions store
 // can serve at the given collector release.
-func NewDistributionIndex(ctx context.Context, store schema.Store, version string) *DistributionIndex {
-	return &DistributionIndex{ctx: ctx, store: store, version: version, once: sync.Once{}, byKey: nil}
+func NewDistributionIndex(store schema.Store, version string) *DistributionIndex {
+	return &DistributionIndex{store: store, version: version, once: sync.Once{}, byKey: nil}
 }
 
 // Distributions returns the distributions shipping the component, sorted. The
 // one already being checked against is not among them: the caller knows it is
 // absent there, which is why it is asking.
-func (d *DistributionIndex) Distributions(k config.Kind, typ string) []string {
-	d.once.Do(d.build)
+//
+// The context is the asking run's, on the same terms as VersionIndex.Versions:
+// the first question is what reads the sibling distributions.
+func (d *DistributionIndex) Distributions(ctx context.Context, k config.Kind, typ string) []string {
+	d.once.Do(func() { d.build(ctx) })
 
 	return d.byKey[versionKey{k, typ}]
 }
 
-func (d *DistributionIndex) build() {
+func (d *DistributionIndex) build(ctx context.Context) {
 	d.byKey = map[versionKey][]string{}
 
-	for _, dist := range d.store.Distributions(d.ctx) {
+	for _, dist := range d.store.Distributions(ctx) {
 		if dist == d.store.Distribution {
 			continue
 		}
 
-		c, err := d.store.WithDistribution(dist).Load(d.ctx, d.version)
+		c, err := d.store.WithDistribution(dist).Load(ctx, d.version)
 		if err != nil {
 			continue
 		}

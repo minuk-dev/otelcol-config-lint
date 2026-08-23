@@ -349,11 +349,11 @@ func (o *options) lintAll(
 	results := make(map[string]lint.Result, files.Len())
 
 	if files.Has(scanner.StdinMarker) {
-		results[scanner.StdinMarker] = linter.LintReader("stdin", cmd.InOrStdin())
+		results[scanner.StdinMarker] = linter.LintReader(cmd.Context(), "stdin", cmd.InOrStdin())
 	}
 
 	onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
-	for r := range linter.LintAll(onDisk, o.concurrency) {
+	for r := range linter.LintAll(cmd.Context(), onDisk, o.concurrency) {
 		results[r.Path] = r
 	}
 
@@ -411,8 +411,8 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	return lint.New(lint.Options{
 		Schema:               cat,
 		Fs:                   o.FS(),
-		Availability:         lint.NewVersionIndex(cmd.Context(), o.store),
-		Distributions:        lint.NewDistributionIndex(cmd.Context(), o.store, cat.CollectorVersion),
+		Availability:         lint.NewVersionIndex(o.store),
+		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
 		Rules:                o.resolved.Rules,
 		Severities:           o.resolved.Severities,
 		Environment:          o.envPolicy.Resolve,

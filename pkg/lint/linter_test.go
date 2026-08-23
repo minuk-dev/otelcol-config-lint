@@ -2,6 +2,7 @@ package lint_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/spf13/afero"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
@@ -72,15 +74,15 @@ func TestStatuses(t *testing.T) {
 
 	l := newLinter(t, lint.Options{MinSeverity: diag.Error})
 
-	if r := l.Lint("good.yaml", []byte(good)); r.Status != lint.Valid {
+	if r := l.Lint(t.Context(), "good.yaml", []byte(good)); r.Status != lint.Valid {
 		t.Errorf("want valid, got %s: %+v", r.Status, r.Diagnostics)
 	}
 
-	if r := l.Lint("bad.yaml", []byte(bad)); r.Status != lint.Invalid {
+	if r := l.Lint(t.Context(), "bad.yaml", []byte(bad)); r.Status != lint.Invalid {
 		t.Errorf("want invalid, got %s", r.Status)
 	}
 
-	if r := l.LintFile(filepath.Join(t.TempDir(), "nope.yaml")); r.Status != lint.Error {
+	if r := l.LintFile(t.Context(), filepath.Join(t.TempDir(), "nope.yaml")); r.Status != lint.Error {
 		t.Errorf("a missing file should be an error, got %s", r.Status)
 	}
 }
@@ -90,7 +92,7 @@ func TestSyntaxErrorIsADiagnosticNotAFailure(t *testing.T) {
 
 	l := newLinter(t, lint.Options{})
 
-	r := l.Lint("broken.yaml", []byte("receivers:\n  otlp: [1, 2\n"))
+	r := l.Lint(t.Context(), "broken.yaml", []byte("receivers:\n  otlp: [1, 2\n"))
 	if r.Status != lint.Invalid {
 		t.Fatalf("want invalid, got %s", r.Status)
 	}
@@ -103,9 +105,9 @@ func TestSyntaxErrorIsADiagnosticNotAFailure(t *testing.T) {
 func TestMinSeverityFilters(t *testing.T) {
 	t.Parallel()
 
-	all := newLinter(t, lint.Options{MinSeverity: diag.Info}).Lint("x.yaml", []byte(bad))
+	all := newLinter(t, lint.Options{MinSeverity: diag.Info}).Lint(t.Context(), "x.yaml", []byte(bad))
 
-	errsOnly := newLinter(t, lint.Options{MinSeverity: diag.Error}).Lint("x.yaml", []byte(bad))
+	errsOnly := newLinter(t, lint.Options{MinSeverity: diag.Error}).Lint(t.Context(), "x.yaml", []byte(bad))
 	if len(errsOnly.Diagnostics) >= len(all.Diagnostics) {
 		t.Errorf("filtering did nothing: %d vs %d", len(errsOnly.Diagnostics), len(all.Diagnostics))
 	}
@@ -122,11 +124,12 @@ func TestFailOnRaisesTheGate(t *testing.T) {
 
 	// A config whose only problem is an unused component: warnings only.
 	src := good + "extensions:\n  zpages:\n"
-	if r := newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src)); r.Status != lint.Valid {
+	if r := newLinter(t, lint.Options{}).Lint(t.Context(), "x.yaml", []byte(src)); r.Status != lint.Valid {
 		t.Errorf("warnings should not fail by default: %+v", r.Diagnostics)
 	}
 
-	if r := newLinter(t, lint.Options{FailOn: diag.Warning}).Lint("x.yaml", []byte(src)); r.Status != lint.Invalid {
+	strictly := newLinter(t, lint.Options{FailOn: diag.Warning})
+	if r := strictly.Lint(t.Context(), "x.yaml", []byte(src)); r.Status != lint.Invalid {
 		t.Error("-fail-on warning should fail")
 	}
 }
@@ -135,7 +138,7 @@ func TestDisabledRule(t *testing.T) {
 	t.Parallel()
 
 	l := newLinter(t, lint.Options{Severities: map[string]diag.Severity{"empty-pipeline": diag.Off}})
-	for _, d := range l.Lint("x.yaml", []byte(bad)).Diagnostics {
+	for _, d := range l.Lint(t.Context(), "x.yaml", []byte(bad)).Diagnostics {
 		if d.Rule == "empty-pipeline" {
 			t.Fatal("a disabled rule reported anyway")
 		}
@@ -148,11 +151,11 @@ func TestIgnoreMissingSchemasSilencesUnknownComponents(t *testing.T) {
 	src := strings.Replace(good, "  otlp:\n    protocols:\n      grpc:", "  mycorp_custom:", 1)
 	src = strings.Replace(src, "receivers: [otlp]", "receivers: [mycorp_custom]", 1)
 
-	if r := newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src)); r.Status != lint.Invalid {
+	if r := newLinter(t, lint.Options{}).Lint(t.Context(), "x.yaml", []byte(src)); r.Status != lint.Invalid {
 		t.Error("an unknown component should fail by default")
 	}
 
-	r := newLinter(t, lint.Options{IgnoreMissingSchemas: true}).Lint("x.yaml", []byte(src))
+	r := newLinter(t, lint.Options{IgnoreMissingSchemas: true}).Lint(t.Context(), "x.yaml", []byte(src))
 	if r.Status != lint.Valid {
 		t.Errorf("want valid, got %s: %+v", r.Status, r.Diagnostics)
 	}
@@ -178,7 +181,7 @@ func TestLintAllVisitsEveryFile(t *testing.T) {
 	}
 
 	seen := map[string]bool{}
-	for r := range newLinter(t, lint.Options{}).LintAll(paths, 3) {
+	for r := range newLinter(t, lint.Options{}).LintAll(t.Context(), paths, 3) {
 		seen[r.Path] = true
 	}
 
@@ -201,11 +204,11 @@ func TestLintFileReadsTheGivenFs(t *testing.T) {
 
 	l := newLinter(t, lint.Options{Fs: fsys, MinSeverity: diag.Error})
 
-	if r := l.LintFile("/configs/agent.yaml"); r.Status != lint.Valid {
+	if r := l.LintFile(t.Context(), "/configs/agent.yaml"); r.Status != lint.Valid {
 		t.Errorf("want valid, got %s: %v %+v", r.Status, r.Err, r.Diagnostics)
 	}
 
-	if r := l.LintFile("/configs/absent.yaml"); r.Status != lint.Error {
+	if r := l.LintFile(t.Context(), "/configs/absent.yaml"); r.Status != lint.Error {
 		t.Errorf("a missing file should be an error, got %s", r.Status)
 	}
 }
@@ -216,8 +219,8 @@ func TestSummary(t *testing.T) {
 	l := newLinter(t, lint.Options{})
 
 	var s lint.Summary
-	s.Add(l.Lint("good.yaml", []byte(good)))
-	s.Add(l.Lint("bad.yaml", []byte(bad)))
+	s.Add(l.Lint(t.Context(), "good.yaml", []byte(good)))
+	s.Add(l.Lint(t.Context(), "bad.yaml", []byte(bad)))
 
 	if s.Valid != 1 || s.Invalid != 1 {
 		t.Errorf("unexpected summary: %+v", s)
@@ -232,7 +235,7 @@ func TestFormatters(t *testing.T) {
 	t.Parallel()
 
 	l := newLinter(t, lint.Options{})
-	result := l.Lint("bad.yaml", []byte(bad))
+	result := l.Lint(t.Context(), "bad.yaml", []byte(bad))
 
 	for _, name := range []string{"text", "json", "junit", "tap", "github"} {
 		var buf bytes.Buffer
@@ -296,12 +299,54 @@ func TestTextFormatterQuietOnSuccess(t *testing.T) {
 	}
 }
 
+// runKey marks a context as belonging to one run, which is what the recorder
+// below reads back out of the question it is asked.
+type runKey struct{}
+
+// askedWith records which run's context a rule's schema question arrived on.
+type askedWith struct {
+	asked bool
+	run   string
+}
+
+func (a *askedWith) Versions(ctx context.Context, _ config.Kind, _ string) []string {
+	a.asked = true
+	a.run, _ = ctx.Value(runKey{}).(string)
+
+	return nil
+}
+
+// TestTheRunsContextReachesARulesSchemaQuestion pins where the context lives.
+// The index behind Availability is a cache with no run of its own, so the
+// context comes from the call being served, not from the index: linting under
+// one is what decides which run a lookup belongs to, and cancelling that run is
+// what ends a fetch it started.
+func TestTheRunsContextReachesARulesSchemaQuestion(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(good, "  otlp:\n    protocols:\n      grpc:", "  mycorp_custom:", 1)
+	src = strings.Replace(src, "receivers: [otlp]", "receivers: [mycorp_custom]", 1)
+
+	avail := &askedWith{asked: false, run: ""}
+	ctx := context.WithValue(t.Context(), runKey{}, "this run")
+
+	newLinter(t, lint.Options{Availability: avail}).Lint(ctx, "x.yaml", []byte(src))
+
+	if !avail.asked {
+		t.Fatal("an unknown component should have asked which releases ship it")
+	}
+
+	if avail.run != "this run" {
+		t.Errorf("the question should arrive on the linting call's context, got %q", avail.run)
+	}
+}
+
 func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 	t.Parallel()
 
-	idx := lint.NewVersionIndex(t.Context(), repoStore())
+	idx := lint.NewVersionIndex(repoStore())
 
-	versions := idx.Versions("exporter", "logging")
+	versions := idx.Versions(t.Context(), "exporter", "logging")
 	if len(versions) == 0 {
 		t.Fatal("the logging exporter should exist in some published release")
 	}
@@ -312,7 +357,7 @@ func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 		}
 	}
 
-	if len(idx.Versions("exporter", "definitely_not_a_component")) != 0 {
+	if len(idx.Versions(t.Context(), "exporter", "definitely_not_a_component")) != 0 {
 		t.Error("an unknown component should have no versions")
 	}
 }
@@ -327,7 +372,7 @@ func TestAMissingCheckIntervalIsReportedOnce(t *testing.T) {
 
 	var about []string
 
-	for _, d := range newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src)).Diagnostics {
+	for _, d := range newLinter(t, lint.Options{}).Lint(t.Context(), "x.yaml", []byte(src)).Diagnostics {
 		if strings.Contains(d.Message, "check_interval") {
 			about = append(about, d.Rule)
 		}
@@ -346,7 +391,7 @@ func TestFormattersCarryTheDocumentationLink(t *testing.T) {
 	// A memory_limiter that is present and empty: the collector refuses to
 	// start, and upstream's README is what says so.
 	src := strings.Replace(good, "    check_interval: 1s\n    limit_mib: 512\n    spike_limit_mib: 128\n", "", 1)
-	result := newLinter(t, lint.Options{}).Lint("x.yaml", []byte(src))
+	result := newLinter(t, lint.Options{}).Lint(t.Context(), "x.yaml", []byte(src))
 
 	const docs = "processor/memorylimiterprocessor/README.md"
 
