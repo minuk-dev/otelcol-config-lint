@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
 // absSchemas resolves the schema fixture before the caller changes directory:

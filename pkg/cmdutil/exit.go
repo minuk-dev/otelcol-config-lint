@@ -1,6 +1,5 @@
 // Package cmdutil holds what the commands share but no one command owns: the
-// options every command takes, the codes a run ends in, and, in the package
-// under it, the settings file they all read.
+// options every command takes, and the codes a run ends in.
 //
 // It sits outside pkg/cmd on purpose. Everything there is a command, so a
 // directory there that is not one reads like a subcommand that does not exist.

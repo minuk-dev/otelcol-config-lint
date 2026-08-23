@@ -11,13 +11,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/termutil"
 )
 

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
 // GlobalOptions are what every command shares: which settings file to read,

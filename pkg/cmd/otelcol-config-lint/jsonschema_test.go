@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
 // committedSchema is the generated copy an editor is pointed at.
