@@ -54,8 +54,50 @@ type Service struct {
 	ExtensionsNode *yaml.Node
 	Pipelines      []Pipeline
 	PipelinesNode  *yaml.Node
-	TelemetryNode  *yaml.Node
-	Unknown        []Entry
+	// Telemetry is the "telemetry" block. Its Node is nil when the key is
+	// absent, so a rule reading it needs no guard of its own.
+	Telemetry Telemetry
+	Unknown   []Entry
+}
+
+// Telemetry is the "service.telemetry" block: how the collector reports on
+// itself. It is parsed one level further than the block above -- each signal,
+// and that signal's keys with their nodes -- which is as deep as a rule reads.
+type Telemetry struct {
+	KeyNode, Node *yaml.Node
+	// Logs, Metrics and Traces are the signal blocks, nil when the key is
+	// absent.
+	Logs, Metrics, Traces *TelemetrySignal
+	// Other holds the keys that are none of those, "resource" among them.
+	// Nothing here is called unknown: which keys telemetry accepts is a rule's
+	// judgement, and this is the parser.
+	Other []Entry
+}
+
+// TelemetrySignal is one signal's block inside service.telemetry, e.g.
+// service.telemetry.metrics. Its settings are kept flat, each with the node a
+// finding is positioned by.
+type TelemetrySignal struct {
+	Key           string
+	KeyNode, Node *yaml.Node
+	Settings      []Entry
+}
+
+// Setting returns one setting of the block. A nil block has none, so a rule
+// reading a key of a signal the config never wrote does not have to ask
+// whether the signal is there first.
+func (t *TelemetrySignal) Setting(key string) (Entry, bool) {
+	if t == nil {
+		return Entry{}, false
+	}
+
+	for _, e := range t.Settings {
+		if e.Key == key {
+			return e, true
+		}
+	}
+
+	return Entry{}, false
 }
 
 // Pipeline is one entry of service.pipelines.
@@ -208,7 +250,7 @@ func parseService(e Entry) *Service {
 			s.ExtensionsNode = sub.Node
 			s.Extensions = refs(sub.Node, sub.Path)
 		case "telemetry":
-			s.TelemetryNode = sub.Node
+			s.Telemetry = parseTelemetry(sub)
 		case "pipelines":
 			s.PipelinesNode = sub.Node
 			for _, p := range entries(sub.Node, sub.Path) {
@@ -220,6 +262,34 @@ func parseService(e Entry) *Service {
 	}
 
 	return s
+}
+
+func parseTelemetry(e Entry) Telemetry {
+	tel := Telemetry{KeyNode: e.KeyNode, Node: e.Node}
+
+	for _, sub := range entries(e.Node, e.Path) {
+		switch sub.Key {
+		case "logs":
+			tel.Logs = telemetrySignal(sub)
+		case "metrics":
+			tel.Metrics = telemetrySignal(sub)
+		case "traces":
+			tel.Traces = telemetrySignal(sub)
+		default:
+			tel.Other = append(tel.Other, sub)
+		}
+	}
+
+	return tel
+}
+
+// telemetrySignal reads one signal block. A signal written as anything but a
+// mapping has no settings, which is what a rule reading a key of it sees.
+func telemetrySignal(e Entry) *TelemetrySignal {
+	return &TelemetrySignal{
+		Key: e.Key, KeyNode: e.KeyNode, Node: e.Node,
+		Settings: entries(e.Node, e.Path),
+	}
 }
 
 func parsePipeline(e Entry) Pipeline {
