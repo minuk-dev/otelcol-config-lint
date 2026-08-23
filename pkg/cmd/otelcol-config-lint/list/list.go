@@ -147,8 +147,9 @@ type versionsOptions struct {
 	*cmdutil.GlobalOptions
 
 	// flags
-	distribution    string
-	schemaLocations []string
+	distribution           string
+	schemaLocations        []string
+	insecureSchemaLocation bool
 
 	// internal state
 	// store is where the schemas are read from.
@@ -191,6 +192,8 @@ func (o *versionsOptions) declareFlags(cmd *cobra.Command) {
 	flags.StringSliceVar(&o.schemaLocations, "schema-location", nil,
 		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
 			"repeat to search several in order (default: the published registry)")
+	flags.BoolVar(&o.insecureSchemaLocation, "insecure-schema-location", false,
+		"allow a plain http:// schema location, for a registry served on localhost")
 }
 
 // prepare folds the schema keys of the settings file into the flags and builds
@@ -205,15 +208,27 @@ func (o *versionsOptions) prepare(cmd *cobra.Command) error {
 
 	fold.Str("distribution", &o.distribution, file.Run.Distribution)
 	fold.List("schema-location", &o.schemaLocations, file.Run.SchemaLocations)
+	fold.Bool("insecure-schema-location", &o.insecureSchemaLocation, file.Run.InsecureSchemaLocation)
 
-	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.FS()}
+	o.store = schema.Store{
+		Locations:     o.schemaLocations,
+		Distribution:  o.distribution,
+		AllowInsecure: o.insecureSchemaLocation,
+		Fs:            o.FS(),
+	}
+
+	err = o.store.Validate()
+	if err != nil {
+		return fmt.Errorf("--schema-location: %w; pass --insecure-schema-location"+
+			" to allow one served on localhost", err)
+	}
 
 	return nil
 }
 
 // run prints one row per schema version, newest first.
 func (o *versionsOptions) run(cmd *cobra.Command) error {
-	versions := o.store.Versions()
+	versions := o.store.Versions(cmd.Context())
 	if len(versions) == 0 {
 		return ErrNoSchemas
 	}
@@ -221,7 +236,7 @@ func (o *versionsOptions) run(cmd *cobra.Command) error {
 	w := newColumns(cmd.OutOrStdout())
 
 	for i, v := range versions {
-		cat, err := o.store.Load(v)
+		cat, err := o.store.Load(cmd.Context(), v)
 		if err != nil {
 			w.row(v, "unreadable: "+err.Error(), "")
 

@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"context"
 	"sync"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -28,19 +29,24 @@ func NewVersionIndex(store schema.Store) *VersionIndex {
 }
 
 // Versions returns the schema versions containing the component, oldest first.
-func (v *VersionIndex) Versions(k config.Kind, typ string) []string {
-	v.once.Do(v.build)
+//
+// The context is the asking run's: the first question is what walks the store,
+// which for a remote registry means a fetch per release. It is built once, so
+// the first question's context is the one that build runs under; a later
+// question is answered from the map.
+func (v *VersionIndex) Versions(ctx context.Context, k config.Kind, typ string) []string {
+	v.once.Do(func() { v.build(ctx) })
 
 	return v.byKey[versionKey{k, typ}]
 }
 
-func (v *VersionIndex) build() {
+func (v *VersionIndex) build(ctx context.Context) {
 	v.byKey = map[versionKey][]string{}
-	versions := v.store.Versions()
+	versions := v.store.Versions(ctx)
 	// Store.Versions is newest first; walk backwards so results read oldest
 	// first, which is how a "added in ..." hint wants to be read.
 	for i := len(versions) - 1; i >= 0; i-- {
-		c, err := v.store.Load(versions[i])
+		c, err := v.store.Load(ctx, versions[i])
 		if err != nil {
 			continue
 		}

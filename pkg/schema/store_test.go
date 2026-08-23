@@ -1,7 +1,9 @@
 package schema_test
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
@@ -69,7 +73,7 @@ func TestTheRepositoryRegistryLoads(t *testing.T) {
 
 	store := schema.Store{Locations: []string{repoSchemas}}
 
-	versions := store.Versions()
+	versions := store.Versions(t.Context())
 	if len(versions) == 0 {
 		t.Fatal("the registry lists no schemas")
 	}
@@ -80,7 +84,7 @@ func TestTheRepositoryRegistryLoads(t *testing.T) {
 		}
 	}
 
-	latest, err := store.Load(schema.Latest)
+	latest, err := store.Load(t.Context(), schema.Latest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +107,7 @@ func TestUnknownVersionSuggestsTheNearestOlder(t *testing.T) {
 
 	store := schema.Store{Locations: []string{repoSchemas}}
 
-	_, err := store.Load("v0.115.0")
+	_, err := store.Load(t.Context(), "v0.115.0")
 	if err == nil {
 		t.Fatal("want an error for a version with no schema")
 	}
@@ -132,7 +136,7 @@ func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 
 	store := schema.Store{Locations: []string{dir, repoSchemas}}
 
-	cat, err := store.Load("v0.157.0")
+	cat, err := store.Load(t.Context(), "v0.157.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +146,7 @@ func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 	}
 
 	// Versions not present locally still fall through to the next location.
-	_, err = store.Load("v0.110.0")
+	_, err = store.Load(t.Context(), "v0.110.0")
 	if err != nil {
 		t.Errorf("fallthrough to the registry failed: %v", err)
 	}
@@ -157,7 +161,7 @@ func TestTemplateLocation(t *testing.T) {
 
 	store := schema.Store{Locations: []string{filepath.Join(dir, "otel-{{.Version}}.json")}}
 
-	cat, err := store.Load("v0.150.0")
+	cat, err := store.Load(t.Context(), "v0.150.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,14 +185,14 @@ func TestRemoteLocation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}}
+	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}, AllowInsecure: true}
 
-	_, err := store.Load("v0.140.0")
+	_, err := store.Load(t.Context(), "v0.140.0")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = store.Load("v0.130.0")
+	_, err = store.Load(t.Context(), "v0.130.0")
 	if err == nil {
 		t.Error("a 404 should not resolve")
 	}
@@ -247,7 +251,7 @@ func TestRegistryDirectorySelectsTheDistribution(t *testing.T) {
 	for dist, want := range map[string]int{"": 2, distCore: 1, distContrib: 2} {
 		store := schema.Store{Locations: []string{root}, Distribution: dist}
 
-		cat, err := store.Load("v0.157.0")
+		cat, err := store.Load(t.Context(), "v0.157.0")
 		if err != nil {
 			t.Fatalf("distribution %q: %v", dist, err)
 		}
@@ -272,7 +276,7 @@ func TestRegistryDirectoryEnumeratesFromTheIndex(t *testing.T) {
 	registry(t, root)
 
 	store := schema.Store{Locations: []string{root}}
-	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
+	if got := store.Versions(t.Context()); len(got) != 1 || got[0] != latestVersion {
 		t.Errorf("Versions() = %v, want [%s]", got, latestVersion)
 	}
 }
@@ -292,9 +296,9 @@ func TestRemoteRegistryRoot(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore}
+	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore, AllowInsecure: true}
 
-	cat, err := store.Load("v0.157.0")
+	cat, err := store.Load(t.Context(), "v0.157.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +307,7 @@ func TestRemoteRegistryRoot(t *testing.T) {
 		t.Errorf("unexpected schema: %+v", cat)
 	}
 
-	if got := store.Versions(); len(got) != 1 || got[0] != "v0.157.0" {
+	if got := store.Versions(t.Context()); len(got) != 1 || got[0] != "v0.157.0" {
 		t.Errorf("Versions() = %v, want [v0.157.0] from the index", got)
 	}
 }
@@ -322,11 +326,11 @@ func TestIndexVersionsArePerDistribution(t *testing.T) {
 		`{"distributions":{"contrib":["v0.157.0","v0.150.0"],"core":["v0.157.0"]}}`)
 
 	store := schema.Store{Locations: []string{root}, Distribution: distCore}
-	if got := store.Versions(); len(got) != 1 || got[0] != latestVersion {
+	if got := store.Versions(t.Context()); len(got) != 1 || got[0] != latestVersion {
 		t.Errorf("Versions() = %v, want only the release core has", got)
 	}
 
-	if got := (schema.Store{Locations: []string{root}}).Versions(); len(got) != 2 {
+	if got := (schema.Store{Locations: []string{root}}).Versions(t.Context()); len(got) != 2 {
 		t.Errorf("the default distribution should see both releases, got %v", got)
 	}
 }
@@ -344,12 +348,12 @@ func TestARegistryRefusesADistributionItLacks(t *testing.T) {
 	write(t, filepath.Join(root, schema.IndexFile),
 		`{"distributions":{"contrib":["v0.157.0"]}}`)
 
-	_, err := (schema.Store{Locations: []string{root}, Distribution: "k8s"}).Load(latestVersion)
+	_, err := (schema.Store{Locations: []string{root}, Distribution: "k8s"}).Load(t.Context(), latestVersion)
 	if err == nil {
 		t.Fatal("k8s is not in this registry, so it must not resolve")
 	}
 
-	_, err = (schema.Store{Locations: []string{root}}).Load(latestVersion)
+	_, err = (schema.Store{Locations: []string{root}}).Load(t.Context(), latestVersion)
 	if err != nil {
 		t.Errorf("the default distribution should still resolve: %v", err)
 	}
@@ -367,7 +371,7 @@ func TestDefaultExpandsToTheOfficialRegistry(t *testing.T) {
 	// The local flat location answers first, so nothing reaches the network.
 	store := schema.Store{Locations: []string{dir, schema.Default}}
 
-	_, err := store.Load(latestVersion)
+	_, err := store.Load(t.Context(), latestVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,9 +401,9 @@ func TestRemoteFileLocation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := schema.Store{Locations: []string{srv.URL + "/schemas/v0.157.0.yaml"}}
+	store := schema.Store{Locations: []string{srv.URL + "/schemas/v0.157.0.yaml"}, AllowInsecure: true}
 
-	_, err := store.Load("v0.157.0")
+	_, err := store.Load(t.Context(), "v0.157.0")
 	if err != nil {
 		t.Fatalf("%v (requested %v)", err, asked)
 	}
@@ -427,7 +431,7 @@ func TestDistributionPlaceholderInATemplate(t *testing.T) {
 		Distribution: distCore,
 	}
 
-	cat, err := store.Load("v0.150.0")
+	cat, err := store.Load(t.Context(), "v0.150.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,11 +457,11 @@ func TestStoreFsReadsAnInMemoryRegistry(t *testing.T) {
 
 	store := schema.Store{Locations: []string{root}, Distribution: distCore, Fs: fsys}
 
-	if got := store.Versions(); !slices.Equal(got, []string{"v0.150.0"}) {
+	if got := store.Versions(t.Context()); !slices.Equal(got, []string{"v0.150.0"}) {
 		t.Errorf("Versions() = %v, want the in-memory index", got)
 	}
 
-	cat, err := store.Load(schema.Latest)
+	cat, err := store.Load(t.Context(), schema.Latest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +478,7 @@ func TestStoreFsIsNotTheRealFilesystem(t *testing.T) {
 
 	store := schema.Store{Locations: []string{repoSchemas}, Fs: afero.NewMemMapFs()}
 
-	_, err := store.Load(schema.Latest)
+	_, err := store.Load(t.Context(), schema.Latest)
 	if err == nil {
 		t.Error("want an error: the committed schemas are not on the given Fs")
 	}
@@ -494,7 +498,7 @@ func TestAliasesAreMarkedDeprecated(t *testing.T) {
 
 	store := schema.Store{Locations: []string{repoSchemas}}
 
-	cat, err := store.Load(schema.Latest)
+	cat, err := store.Load(t.Context(), schema.Latest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,6 +518,91 @@ func TestAliasesAreMarkedDeprecated(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestAPlainHTTPLocationIsRefused pins the default: a schema decides which
+// components exist, so it may not arrive over a transport anyone on the path
+// can rewrite.
+func TestAPlainHTTPLocationIsRefused(t *testing.T) {
+	t.Parallel()
+
+	var asked int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		asked++
+
+		_, _ = w.Write([]byte(`{"collectorVersion":"v0.157.0","components":{}}`))
+	}))
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}}
+
+	_, err := store.Load(t.Context(), "v0.157.0")
+	require.Error(t, err, "an http:// location should be refused")
+	assert.Contains(t, err.Error(), "http", "the error should say what it refused")
+	assert.Zero(t, asked, "a refused location should not be fetched")
+	require.Error(t, store.Validate(), "Validate should refuse it while a command is still reading flags")
+
+	// The opt-in is what a registry on localhost is served under.
+	allowed := store
+	allowed.AllowInsecure = true
+
+	require.NoError(t, allowed.Validate(), "the opt-in should permit http")
+
+	_, err = allowed.Load(t.Context(), "v0.157.0")
+	require.NoError(t, err)
+}
+
+// TestARemoteSchemaIsCappedInSize pins that a location cannot decide how much
+// memory the linter spends. The cap is reported as itself, not as a parse
+// failure part-way through a truncated document.
+func TestARemoteSchemaIsCappedInSize(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "collectorVersion: v0.157.0\ncomponents: {}\n# ")
+
+		// More than the store will accept, streamed rather than allocated.
+		_, _ = io.CopyN(w, filler{}, 64<<20)
+	}))
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.yaml"}, AllowInsecure: true}
+
+	_, err := store.Load(t.Context(), "v0.157.0")
+	require.Error(t, err, "a body over the limit should not be decoded")
+	assert.Contains(t, err.Error(), "larger than",
+		"the error should name the limit rather than the parse it prevented")
+}
+
+// filler is an endless body, standing in for a registry that streams.
+type filler struct{}
+
+func (filler) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+
+	return len(p), nil
+}
+
+// TestFetchStopsWhenTheContextIsCancelled pins that an interrupt reaches a
+// request that is already in flight, rather than waiting out the timeout.
+func TestFetchStopsWhenTheContextIsCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		cancel()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL + "/{{.Version}}.json"}, AllowInsecure: true}
+
+	_, err := store.Load(ctx, "v0.157.0")
+	require.ErrorIs(t, err, context.Canceled, "a cancelled run should end the fetch it started")
 }
 
 func write(t *testing.T, path, content string) {

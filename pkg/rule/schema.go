@@ -13,6 +13,14 @@ type Availability interface {
 	Versions(k config.Kind, typ string) []string
 }
 
+// AvailabilityFunc adapts a function to Availability. It is how a caller binds
+// what the interface deliberately does not carry -- the context of the run
+// asking, say -- without a rule having to know that anything was bound.
+type AvailabilityFunc func(k config.Kind, typ string) []string
+
+// Versions returns the schema versions containing the component, oldest first.
+func (f AvailabilityFunc) Versions(k config.Kind, typ string) []string { return f(k, typ) }
+
 // Distributions reports which distributions of the targeted release ship a
 // component type. A schema describes one distribution, so this is what lets a
 // rule say where a component the running binary lacks does ship.
@@ -21,6 +29,13 @@ type Distributions interface {
 	// sorted, excluding the one being checked against.
 	Distributions(k config.Kind, typ string) []string
 }
+
+// DistributionsFunc adapts a function to Distributions, as AvailabilityFunc
+// does to Availability.
+type DistributionsFunc func(k config.Kind, typ string) []string
+
+// Distributions returns the distributions containing the component, sorted.
+func (f DistributionsFunc) Distributions(k config.Kind, typ string) []string { return f(k, typ) }
 
 // SchemaReady reports whether a schema with components was resolved. Rules
 // that consult the schema stay silent otherwise rather than reporting every

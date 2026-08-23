@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -588,6 +590,35 @@ func TestListVersionsHonoursTheSchemaLocation(t *testing.T) {
 	if !strings.Contains(out, "v9.9.9") {
 		t.Errorf("a project schema should be listed:\n%s", out)
 	}
+}
+
+// TestAPlainHTTPSchemaLocationIsRefused pins that the schema a run reasons
+// from may not arrive over a transport anyone on the path can rewrite, and
+// that the refusal is reported where a bad flag is.
+func TestAPlainHTTPSchemaLocationIsRefused(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.FileServer(http.Dir(repoSchemas)))
+	defer srv.Close()
+
+	code, _, errOut := run(t, "", "run", "--no-config", "--schema-location", srv.URL, validConfig)
+	require.Equal(t, otelcolconfiglint.ExitUsage, code, "an http:// location should not run: %s", errOut)
+	assert.Contains(t, errOut, "http", "the message should say what was refused")
+
+	// The escape hatch is what a registry served on localhost is read under.
+	code, _, errOut = run(t, "", "run", "--no-config", "--insecure-schema-location",
+		"--schema-location", srv.URL, validConfig)
+	assert.Equal(t, otelcolconfiglint.ExitOK, code, "the opt-in should permit the location: %s", errOut)
+}
+
+// TestListVersionsRefusesAPlainHTTPLocation pins that the listings hold to the
+// same rule: they read the same registries a run does.
+func TestListVersionsRefusesAPlainHTTPLocation(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := run(t, "", "list", "versions", "--no-config", "--schema-location", "http://example.invalid")
+	require.Equal(t, otelcolconfiglint.ExitUsage, code, "an http:// location should not be listed: %s", errOut)
+	assert.Contains(t, errOut, "http", "the message should say what was refused")
 }
 
 // TestListSubcommandsRejectLintFlags pins the point of the split: the listings

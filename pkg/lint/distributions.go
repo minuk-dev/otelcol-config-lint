@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"context"
 	"sync"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -31,21 +32,24 @@ func NewDistributionIndex(store schema.Store, version string) *DistributionIndex
 // Distributions returns the distributions shipping the component, sorted. The
 // one already being checked against is not among them: the caller knows it is
 // absent there, which is why it is asking.
-func (d *DistributionIndex) Distributions(k config.Kind, typ string) []string {
-	d.once.Do(d.build)
+//
+// The context is the asking run's, on the same terms as VersionIndex.Versions:
+// the first question is what reads the sibling distributions.
+func (d *DistributionIndex) Distributions(ctx context.Context, k config.Kind, typ string) []string {
+	d.once.Do(func() { d.build(ctx) })
 
 	return d.byKey[versionKey{k, typ}]
 }
 
-func (d *DistributionIndex) build() {
+func (d *DistributionIndex) build(ctx context.Context) {
 	d.byKey = map[versionKey][]string{}
 
-	for _, dist := range d.store.Distributions() {
+	for _, dist := range d.store.Distributions(ctx) {
 		if dist == d.store.Distribution {
 			continue
 		}
 
-		c, err := d.store.WithDistribution(dist).Load(d.version)
+		c, err := d.store.WithDistribution(dist).Load(ctx, d.version)
 		if err != nil {
 			continue
 		}

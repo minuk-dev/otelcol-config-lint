@@ -2,6 +2,7 @@
 package lint
 
 import (
+	"context"
 	"errors"
 	"io"
 	"sync"
@@ -55,9 +56,9 @@ type Options struct {
 	// Fs is the filesystem LintFile reads from. A nil Fs means the real one.
 	Fs afero.Fs
 	// Availability lets diagnostics mention other releases. May be nil.
-	Availability rule.Availability
+	Availability Availability
 	// Distributions lets diagnostics mention other distributions. May be nil.
-	Distributions rule.Distributions
+	Distributions Distributions
 	// Rules is the set to run. A nil Rules means every registered rule, which
 	// is what a caller with no per-rule settings to apply wants; a caller that
 	// has some passes what rule.Configure returned.
@@ -80,6 +81,21 @@ type Options struct {
 	MinSeverity diag.Severity
 	// FailOn is the severity at which a file counts as invalid.
 	FailOn diag.Severity
+}
+
+// Availability reports which releases ship a component type. It is what
+// rule.Availability is bound from, and it takes a context because answering
+// can mean walking a remote registry: that fetch belongs to the run asking the
+// question, not to whoever built the index. VersionIndex implements it.
+type Availability interface {
+	Versions(ctx context.Context, k config.Kind, typ string) []string
+}
+
+// Distributions reports which distributions of the targeted release ship a
+// component type, on the same terms as Availability. DistributionIndex
+// implements it.
+type Distributions interface {
+	Distributions(ctx context.Context, k config.Kind, typ string) []string
 }
 
 // Linter checks config files against a rule set.
@@ -132,27 +148,29 @@ func (l *Linter) SeverityFor(r rule.Rule) diag.Severity {
 }
 
 // LintFile reads and checks a single config file.
-func (l *Linter) LintFile(path string) Result {
+func (l *Linter) LintFile(ctx context.Context, path string) Result {
 	src, err := afero.ReadFile(l.fs(), path)
 	if err != nil {
 		return Result{Path: path, Status: Error, Err: err}
 	}
 
-	return l.Lint(path, src)
+	return l.Lint(ctx, path, src)
 }
 
 // LintReader checks config read from r, reporting it under name.
-func (l *Linter) LintReader(name string, r io.Reader) Result {
+func (l *Linter) LintReader(ctx context.Context, name string, r io.Reader) Result {
 	src, err := io.ReadAll(r)
 	if err != nil {
 		return Result{Path: name, Status: Error, Err: err}
 	}
 
-	return l.Lint(name, src)
+	return l.Lint(ctx, name, src)
 }
 
-// Lint checks config source that was read from path.
-func (l *Linter) Lint(path string, src []byte) Result {
+// Lint checks config source that was read from path. The context is what the
+// schema lookups a rule may make run under, so a run that is cancelled does
+// not leave one waiting on a registry.
+func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 	f, err := config.Parse(path, src)
 	if err != nil {
 		var syn *config.SyntaxError
@@ -167,20 +185,35 @@ func (l *Linter) Lint(path string, src []byte) Result {
 		return Result{Path: path, Status: Error, Err: err}
 	}
 
-	ctx := rule.Context{
+	ruleCtx := rule.Context{
 		File:   f,
 		Schema: l.opts.Schema,
 		Index:  rule.NewIndex(f),
-		Avail:  l.opts.Availability,
-		Dists:  l.opts.Distributions,
+		Avail:  nil,
+		Dists:  nil,
 		Strict: l.opts.Strict,
 		Env:    l.environment(path),
+	}
+
+	// The context is bound here rather than held by whatever answers. An index
+	// is a cache with no run of its own, so the run a lookup belongs to is the
+	// one asking, and the rule asks without knowing a context was involved.
+	if l.opts.Availability != nil {
+		ruleCtx.Avail = rule.AvailabilityFunc(func(k config.Kind, typ string) []string {
+			return l.opts.Availability.Versions(ctx, k, typ)
+		})
+	}
+
+	if l.opts.Distributions != nil {
+		ruleCtx.Dists = rule.DistributionsFunc(func(k config.Kind, typ string) []string {
+			return l.opts.Distributions.Distributions(ctx, k, typ)
+		})
 	}
 
 	var found diag.Diagnostics
 
 	for _, r := range l.rules {
-		for _, d := range rule.Run(r, ctx, l.SeverityFor(r)) {
+		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
 			if d.Severity.AtLeast(l.opts.MinSeverity) {
 				found = append(found, d)
 			}
@@ -203,7 +236,7 @@ func (l *Linter) Lint(path string, src []byte) Result {
 
 // LintAll checks paths concurrently with up to n workers, sending results in
 // completion order. It closes the returned channel when every path is done.
-func (l *Linter) LintAll(paths []string, n int) <-chan Result {
+func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Result {
 	if n < 1 {
 		n = 1
 	}
@@ -216,7 +249,7 @@ func (l *Linter) LintAll(paths []string, n int) <-chan Result {
 	for range n {
 		workers.Go(func() {
 			for p := range in {
-				out <- l.LintFile(p)
+				out <- l.LintFile(ctx, p)
 			}
 		})
 	}

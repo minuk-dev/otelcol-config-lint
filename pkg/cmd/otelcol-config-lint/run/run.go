@@ -54,8 +54,9 @@ type options struct {
 
 	// flags
 	// Where the schemas come from, and which binary they describe.
-	distribution    string
-	schemaLocations []string
+	distribution           string
+	schemaLocations        []string
+	insecureSchemaLocation bool
 	// Which rules run, and at what level.
 	ruleDefault string
 	enable      []string
@@ -157,6 +158,8 @@ func (o *options) declareFlags(cmd *cobra.Command) {
 	flags.StringSliceVar(&o.schemaLocations, "schema-location", nil,
 		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
 			"repeat to search several in order (default: the published registry)")
+	flags.BoolVar(&o.insecureSchemaLocation, "insecure-schema-location", false,
+		"allow a plain http:// schema location, for a registry served on localhost")
 	flags.StringVar(&o.ruleDefault, "default", "",
 		"rule set to start from: "+ruleset.DefaultAll+" (the default) or "+ruleset.DefaultNone)
 	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
@@ -198,6 +201,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	o.applySettings(file, fold)
 	fold.Str("distribution", &o.distribution, file.Run.Distribution)
 	fold.List("schema-location", &o.schemaLocations, file.Run.SchemaLocations)
+	fold.Bool("insecure-schema-location", &o.insecureSchemaLocation, file.Run.InsecureSchemaLocation)
 	fold.Str("memory-request", &o.memoryRequest, file.Run.Kubernetes.MemoryRequest)
 	fold.Str("memory-limit", &o.memoryLimit, file.Run.Kubernetes.MemoryLimit)
 
@@ -226,7 +230,20 @@ func (o *options) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.FS()}
+	o.store = schema.Store{
+		Locations:     o.schemaLocations,
+		Distribution:  o.distribution,
+		AllowInsecure: o.insecureSchemaLocation,
+		Fs:            o.FS(),
+	}
+
+	// A location the store will refuse is a bad flag, so it is reported here
+	// with the rest of them rather than as a registry that served nothing.
+	err = o.store.Validate()
+	if err != nil {
+		return fmt.Errorf("--schema-location: %w; pass --insecure-schema-location"+
+			" to allow one served on localhost", err)
+	}
 
 	o.envPolicy, err = o.environmentPolicy()
 	if err != nil {
@@ -332,11 +349,11 @@ func (o *options) lintAll(
 	results := make(map[string]lint.Result, files.Len())
 
 	if files.Has(scanner.StdinMarker) {
-		results[scanner.StdinMarker] = linter.LintReader("stdin", cmd.InOrStdin())
+		results[scanner.StdinMarker] = linter.LintReader(cmd.Context(), "stdin", cmd.InOrStdin())
 	}
 
 	onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
-	for r := range linter.LintAll(onDisk, o.concurrency) {
+	for r := range linter.LintAll(cmd.Context(), onDisk, o.concurrency) {
 		results[r.Path] = r
 	}
 
@@ -409,7 +426,7 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 // loadSchema resolves the targeted release, falling back to the newest
 // schema that is not newer than the request when there is no exact match.
 func (o *options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
-	cat, err := o.store.Load(o.collectorVersion)
+	cat, err := o.store.Load(cmd.Context(), o.collectorVersion)
 	if err == nil {
 		return cat, nil
 	}
@@ -426,7 +443,7 @@ func (o *options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
 
 	cmd.PrintErrf("otelcol-config-lint: no schema for %s, falling back to %s\n", unknown.Version, near)
 
-	cat, err = o.store.Load(near)
+	cat, err = o.store.Load(cmd.Context(), near)
 	if err != nil {
 		return nil, fmt.Errorf("load schema %s: %w", near, err)
 	}
