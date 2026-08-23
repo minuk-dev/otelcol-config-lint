@@ -56,6 +56,11 @@ const (
 	// process: sensitive settings belong in a secret store or on an encrypted
 	// filesystem, pulled into the config by expansion.
 	ConfigSecurityDocs = "https://opentelemetry.io/docs/security/config-best-practices/"
+	// InternalTelemetryDocs is upstream's page on the collector's own
+	// observability: what service.telemetry configures, that
+	// service::telemetry::metrics::address is ignored as of v0.123.0 and what
+	// readers replace it with, and which metrics a level turns off.
+	InternalTelemetryDocs = "https://opentelemetry.io/docs/collector/internal-telemetry/"
 	// KubernetesResourceDocs states what requests and limits do, and the QoS
 	// class a pod lands in when they differ.
 	KubernetesResourceDocs = "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"

@@ -1,0 +1,28 @@
+# telemetry-metrics-disabled: the collector's own metrics turned off.
+#
+# There are reasons to run this way. The cost is that the metrics which say the
+# collector is dropping data -- the queue sizes, the send failures -- are not
+# emitted either, so a pipeline in trouble looks exactly like a healthy one.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+service:
+  telemetry:
+    metrics:
+      level: none # telemetry-metrics-disabled: nothing is reported about the collector itself
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

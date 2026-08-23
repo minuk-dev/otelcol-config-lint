@@ -4,6 +4,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
@@ -73,6 +76,73 @@ func TestParsePipeline(t *testing.T) {
 	if len(f.Service.Extensions) != 1 {
 		t.Errorf("unexpected service extensions: %+v", f.Service.Extensions)
 	}
+}
+
+// telemetrySample writes each signal of service.telemetry, plus the one key
+// that is none of them.
+const telemetrySample = `
+service:
+  telemetry:
+    resource:
+      service.name: collector
+    logs:
+      level: info
+    metrics:
+      level: none
+      address: localhost:8888
+    traces:
+      processors: []
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug]
+`
+
+func TestParseTelemetry(t *testing.T) {
+	t.Parallel()
+
+	f, err := config.Parse("sample.yaml", []byte(telemetrySample))
+	require.NoError(t, err)
+
+	tel := f.Service.Telemetry
+	require.NotNil(t, tel.Node, "the block should be parsed, not only noted")
+	require.NotNil(t, tel.Metrics)
+	require.NotNil(t, tel.Logs)
+	require.NotNil(t, tel.Traces)
+
+	level, written := tel.Metrics.Setting("level")
+	require.True(t, written, "metrics should carry its settings")
+	assert.Equal(t, "none", level.Node.Value)
+	assert.Equal(t, "service.telemetry.metrics.level", level.Path)
+
+	address, written := tel.Metrics.Setting("address")
+	require.True(t, written)
+	// The sample starts with a blank line, so "address:" is on line 10.
+	assert.Equal(t, 10, f.Pos(address.KeyNode).Line, "a finding needs the key's own position")
+
+	_, written = tel.Metrics.Setting("readers")
+	assert.False(t, written, "a key nobody wrote is not a setting")
+
+	require.Len(t, tel.Other, 1, "resource is neither a signal nor an error")
+	assert.Equal(t, "resource", tel.Other[0].Key)
+}
+
+// TestATelemetrySignalNobodyWroteReadsAsEmpty pins the nil case rules rely on:
+// asking an absent signal for a setting answers, rather than panicking.
+func TestATelemetrySignalNobodyWroteReadsAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	f, err := config.Parse("sample.yaml", []byte(sample))
+	require.NoError(t, err)
+
+	_, written := f.Service.Telemetry.Metrics.Setting("level")
+	assert.False(t, written, "a config with no telemetry block has no metrics level")
+
+	f, err = config.Parse("sample.yaml", []byte("service:\n  telemetry:\n    metrics: none\n"))
+	require.NoError(t, err)
+
+	_, written = f.Service.Telemetry.Metrics.Setting("level")
+	assert.False(t, written, "a signal written as a scalar has no settings to read")
 }
 
 func TestPositionsPointAtTheRightLine(t *testing.T) {
