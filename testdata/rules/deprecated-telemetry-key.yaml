@@ -1,0 +1,29 @@
+# deprecated-telemetry-key: a service.telemetry key the collector stopped reading.
+#
+# The collector does not refuse this config. It starts, and serves its own
+# metrics wherever the readers say -- which, with no readers written, is the
+# default -- while the scrape target this file names stays empty.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  otlp_grpc:
+    endpoint: backend:4317
+service:
+  telemetry:
+    metrics:
+      # deprecated-telemetry-key: ignored from v0.123.0; a pull reader replaces it
+      address: localhost:8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

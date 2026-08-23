@@ -382,14 +382,26 @@ sampling, `batch` last), `missing-memory-limiter`,
 `missing-batch`, `memory-limiter-config`, `memory-limiter-sizing`,
 `batch-size-bounds`, `no-persistent-queue`, `debug-exporter-verbosity`.
 
+**The collector's own telemetry** — `deprecated-telemetry-key`,
+`telemetry-metrics-disabled`. `service.telemetry` is the one block that is about
+the run rather than about the data, and both rules report a silence rather than
+a failure. `service.telemetry.metrics.address` is ignored from v0.123.0 onward:
+a collector upgraded across that release starts, and serves its metrics wherever
+its `readers` say, while the scrape target the config names stays empty. The
+rule holds its tongue when `--collector-version` is older, because there the key
+still works. `metrics.level: none` is a legitimate setting with an unadvertised
+cost — the metrics it turns off are the ones that say the collector is dropping
+data, the queue sizes and `otelcol_exporter_send_failed_*` among them.
+
 **Security** — `insecure-tls`, `receiver-binds-all-interfaces`,
 `debug-extension-exposed`, `hardcoded-secret`.
 
-Every practice and security rule cites the upstream page it rests on — the
-`memorylimiterprocessor`, `batchprocessor`, `exporterhelper`, `debugexporter`,
-`tailsamplingprocessor` and `probabilisticsamplerprocessor` READMEs,
-`configtls`, upstream's security best practices, and the Kubernetes resource
-docs for the container's request and limit.
+Every practice, telemetry and security rule cites the upstream page it rests on
+— the `memorylimiterprocessor`, `batchprocessor`, `exporterhelper`,
+`debugexporter`, `tailsamplingprocessor` and `probabilisticsamplerprocessor`
+READMEs, `configtls`, the internal telemetry page, upstream's security best
+practices, and the Kubernetes resource docs for the container's request and
+limit.
 
 `processor-order` is about where a processor stands rather than what it is set
 to. Two of its clauses are the ends of the chain: `memory_limiter` first, so

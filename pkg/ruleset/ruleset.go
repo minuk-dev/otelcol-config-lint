@@ -25,6 +25,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/debugextensionexposed"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/deprecatedcomponent"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/deprecatedfield"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/deprecatedtelemetrykey"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/duplicatekey"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/duplicatereference"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/emptypipeline"
@@ -42,6 +43,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/requiredfield"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/servicerequired"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/signalsupport"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/telemetrymetricsdisabled"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/undefinedextensionreference"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/undefinedreference"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/unknowncomponent"
@@ -98,6 +100,11 @@ func All() []rule.Rule {
 		missingbatch.New(),
 		nopersistentqueue.New(),
 		debugexporterverbosity.New(),
+
+		// The collector's own observability, which is the one part of a config
+		// that is about the run rather than about the data.
+		deprecatedtelemetrykey.New(),
+		telemetrymetricsdisabled.New(),
 
 		// What a config hands to the world around it.
 		insecuretls.New(),
