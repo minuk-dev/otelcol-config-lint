@@ -1,4 +1,4 @@
-package otelcolconfiglint
+package settings
 
 import (
 	"encoding/json"
@@ -9,26 +9,26 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 )
 
-// SettingsSchemaFile is where the generated schema is committed, and the name
+// SchemaFile is where the generated schema is committed, and the name
 // the published copy is served under.
-const SettingsSchemaFile = "otelcol-config-lint.schema.json"
+const SchemaFile = "otelcol-config-lint.schema.json"
 
-// SettingsSchemaID is the URL an editor points at. It names the copy on main
+// SchemaID is the URL an editor points at. It names the copy on main
 // rather than a release, because the rule names it enumerates track the rules
 // the linter has, and an editor checking a file against a year-old list would
 // underline names that work.
-const SettingsSchemaID = "https://raw.githubusercontent.com/minuk-dev/" +
-	"otelcol-config-lint/main/" + SettingsSchemaFile
+const SchemaID = "https://raw.githubusercontent.com/minuk-dev/" +
+	"otelcol-config-lint/main/" + SchemaFile
 
 // object is one JSON Schema node. The schema is built as data rather than
 // written out by hand so the parts that move -- the rule names, the severity
 // levels -- come from the same declarations the linter itself reads.
 type object = map[string]any
 
-// SettingsSchema returns the JSON Schema for a settings file, indented and
+// Schema returns the JSON Schema for a settings file, indented and
 // newline-terminated, exactly as the committed copy is written.
-func SettingsSchema() ([]byte, error) {
-	doc, err := json.MarshalIndent(settingsSchema(), "", "  ")
+func Schema() ([]byte, error) {
+	doc, err := json.MarshalIndent(schemaDoc(), "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode schema: %w", err)
 	}
@@ -36,17 +36,17 @@ func SettingsSchema() ([]byte, error) {
 	return append(doc, '\n'), nil
 }
 
-// settingsSchema builds the whole document. Every block is closed --
+// schemaDoc builds the whole document. Every block is closed --
 // additionalProperties is false throughout -- because the linter rejects a key
 // it does not know, and an editor that accepted one would be quietly promising
 // that a misspelled setting is in force.
-func settingsSchema() object {
+func schemaDoc() object {
 	properties := object{
 		"version": object{
 			"description": "The schema this file is written against. A file that omits it is read as " +
-				SettingsVersion + ".",
+				Version + ".",
 			"type": "string",
-			"enum": []any{SettingsVersion},
+			"enum": []any{Version},
 		},
 		"run":    runSchema(),
 		"rules":  rulesSchema(),
@@ -58,9 +58,9 @@ func settingsSchema() object {
 
 	return object{
 		"$schema":              "https://json-schema.org/draft/2020-12/schema",
-		"$id":                  SettingsSchemaID,
+		"$id":                  SchemaID,
 		"title":                "otelcol-config-lint settings",
-		"description":          "Settings for otelcol-config-lint, read from " + DefaultSettingsFile + " or --config.",
+		"description":          "Settings for otelcol-config-lint, read from " + DefaultName + " or --config.",
 		"type":                 "object",
 		"additionalProperties": false,
 		"properties":           properties,
@@ -165,7 +165,7 @@ func rulesSchema() object {
 		"default": object{
 			"description": "The set to start from: every rule, or only what enable names.",
 			"type":        "string",
-			"enum":        []any{defaultAll, defaultNone},
+			"enum":        []any{ruleset.DefaultAll, ruleset.DefaultNone},
 		},
 		"enable": object{
 			"description": "Rules to turn on, on top of the set named by default.",

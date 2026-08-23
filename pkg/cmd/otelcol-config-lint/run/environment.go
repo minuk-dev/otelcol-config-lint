@@ -1,7 +1,6 @@
-package otelcolconfiglint
+package run
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,51 +9,10 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
-// ErrNoOverridePaths reports an environment override that matches nothing.
-var ErrNoOverridePaths = errors.New("an override needs at least one path pattern")
-
-// kubernetesSettings is the "kubernetes" block of a settings file: what the
-// pods these configs run in look like, which is what the sizing rules check
-// against.
-//
-// The block states the defaults, and overrides state the files that are a
-// different workload -- an agent DaemonSet at 256Mi next to a gateway
-// Deployment at 4Gi. There is deliberately no flag form of the overrides: a
-// path-to-limits table belongs in a file.
-type kubernetesSettings struct {
-	// Enabled says the configs run in Kubernetes. When it is not set, writing
-	// either memory number is taken to mean the same thing.
-	Enabled *bool `yaml:"enabled"`
-	// MemoryRequest and MemoryLimit are the container's resources, written as
-	// a Kubernetes quantity such as "512Mi".
-	MemoryRequest string `yaml:"memoryRequest"`
-	MemoryLimit   string `yaml:"memoryLimit"`
-	// Overrides are matched in order and the first match wins.
-	Overrides []kubernetesOverride `yaml:"overrides"`
-}
-
-// written reports whether the block says anything at all, which is how the
-// flat first-release form knows it has nothing to fold in.
-func (k kubernetesSettings) written() bool {
-	return k.Enabled != nil || k.MemoryRequest != "" || k.MemoryLimit != "" || len(k.Overrides) > 0
-}
-
-// kubernetesOverride is one path-matched entry of the kubernetes block. It
-// replaces the defaults for the files it matches rather than merging with
-// them, so what a file resolves to is stated in one place.
-type kubernetesOverride struct {
-	// Paths are glob patterns, matched against both the whole path and the
-	// base name, exactly as the exclude patterns are.
-	Paths         []string `yaml:"paths"`
-	Enabled       *bool    `yaml:"enabled"`
-	MemoryRequest string   `yaml:"memoryRequest"`
-	MemoryLimit   string   `yaml:"memoryLimit"`
-}
-
 // environmentPolicy builds the per-path environment from the flags and the
-// settings file. The flags set the defaults only; they are the single-file
-// convenience, and the file is what a repository of configs commits.
-func (o *Options) environmentPolicy() (lint.EnvironmentPolicy, error) {
+// settings file. The flags are the single-file convenience, and the file is
+// what a repository of configs commits.
+func (o *options) environmentPolicy() (lint.EnvironmentPolicy, error) {
 	var none lint.EnvironmentPolicy
 
 	fallback, err := environmentOf(o.kubernetesEnabled, o.memoryRequest, o.memoryLimit)

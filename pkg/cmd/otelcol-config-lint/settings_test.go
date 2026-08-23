@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
 // absSchemas resolves the schema fixture before the caller changes directory:
@@ -300,7 +300,7 @@ func TestASettingsFileFromAnotherVersionIsReported(t *testing.T) {
 	code, _, errOut := lint(t, "", "--config", path, badConfig)
 
 	assert.Equal(t, 2, code)
-	assert.Contains(t, errOut, otelcolconfiglint.SettingsVersion)
+	assert.Contains(t, errOut, settings.Version)
 }
 
 // TestConcurrencyKeepsItsOldShorthand guards the rename: -n was the whole flag

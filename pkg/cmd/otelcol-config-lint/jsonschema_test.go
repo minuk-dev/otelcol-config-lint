@@ -11,10 +11,11 @@ import (
 
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
 // committedSchema is the generated copy an editor is pointed at.
-const committedSchema = "../../../" + otelcolconfiglint.SettingsSchemaFile
+const committedSchema = "../../../" + settings.SchemaFile
 
 // settingsFixtures holds one settings file per case the schema has to get
 // right. The valid ones are what an editor must not underline; the invalid ones
@@ -29,7 +30,7 @@ const settingsFixtures = "../../../testdata/settings"
 func TestTheCommittedSchemaIsUpToDate(t *testing.T) {
 	t.Parallel()
 
-	want, err := otelcolconfiglint.SettingsSchema()
+	want, err := settings.Schema()
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(committedSchema)
@@ -58,7 +59,7 @@ func TestTheSchemaCommandPrintsTheSchema(t *testing.T) {
 func TestTheSchemaNamesEveryRule(t *testing.T) {
 	t.Parallel()
 
-	doc, err := otelcolconfiglint.SettingsSchema()
+	doc, err := settings.Schema()
 	require.NoError(t, err)
 
 	var parsed struct {

@@ -49,7 +49,7 @@ func tree(t *testing.T, names ...string) afero.Fs {
 
 // newScanner builds the default scanner pointed at an in-memory tree.
 func newScanner(fsys afero.Fs, exclude []string) *scanner.Scanner {
-	s := scanner.New(exclude)
+	s := scanner.New(nil, exclude)
 	s.Fs = fsys
 
 	return s
@@ -436,7 +436,7 @@ func TestNilFsReadsTheRealFilesystem(t *testing.T) {
 		}
 	}
 
-	files, err := scanner.New([]string{"*.generated.yaml"}).Scan([]string{dir})
+	files, err := scanner.New(nil, []string{"*.generated.yaml"}).Scan([]string{dir})
 	if err != nil {
 		t.Fatal(err)
 	}
