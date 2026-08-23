@@ -107,6 +107,10 @@ type Store struct {
 	// Fs is the filesystem local locations are read from. A nil Fs means the
 	// real one. Remote locations go over HTTPClient and ignore it.
 	Fs afero.Fs
+
+	// retryDelay shortens the wait between attempts. It is unexported because
+	// only this package's own tests have a reason to set it.
+	retryDelay time.Duration
 }
 
 // Versions lists every schema the store can serve, newest first. Templated and
@@ -448,15 +452,43 @@ func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
 }
 
 // get performs the request behind fetch and fetchIndex, and returns what the
-// endpoint served. The body is read here rather than handed to a decoder so
-// that maxRemoteBytes is enforced in one place, and so that a location serving
-// too much is reported as exactly that instead of as a parse failure part-way
-// through a truncated document.
+// endpoint served. A location that throttles or fails transiently is asked
+// again, up to fetchAttempts times; see retry.go for which statuses earn one
+// and how long each wait is.
 func (s Store) get(ctx context.Context, url string) ([]byte, error) {
 	if !s.AllowInsecure && isInsecure(url) {
 		return nil, fmt.Errorf("%w: %s", errInsecureLocation, url)
 	}
 
+	for attempt := 0; ; attempt++ {
+		body, err := s.attempt(ctx, url)
+		if err == nil {
+			return body, nil
+		}
+
+		var status *statusError
+
+		last := attempt == fetchAttempts-1
+		if !errors.As(err, &status) || !status.retryable() || last {
+			if attempt > 0 {
+				return nil, fmt.Errorf("%w (gave up after %d attempts)", err, attempt+1)
+			}
+
+			return nil, err
+		}
+
+		err = sleep(ctx, retryDelay(attempt, s.retryBase(), status.after))
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+// attempt makes one request and returns what it served. The body is read here
+// rather than handed to a decoder so that maxRemoteBytes is enforced in one
+// place, and so that a location serving too much is reported as exactly that
+// instead of as a parse failure part-way through a truncated document.
+func (s Store) attempt(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request for %s: %w", url, err)
@@ -475,8 +507,24 @@ func (s Store) get(ctx context.Context, url string) ([]byte, error) {
 	case http.StatusNotFound:
 		return nil, errNotFound
 	default:
-		return nil, fmt.Errorf("GET %s: %w %s", url, errBadStatus, resp.Status)
+		return nil, &statusError{
+			url:    url,
+			status: resp.Status,
+			code:   resp.StatusCode,
+			after:  retryAfter(resp.Header, time.Now()),
+		}
 	}
+}
+
+// retryBase is how long the wait after a first failed attempt is. Only a test
+// sets one of its own, so that a retry it is exercising costs milliseconds
+// rather than seconds.
+func (s Store) retryBase() time.Duration {
+	if s.retryDelay > 0 {
+		return s.retryDelay
+	}
+
+	return retryBaseDelay
 }
 
 // readBody reads a response under maxRemoteBytes. One byte past the limit is
