@@ -21,6 +21,22 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
+// TestMain keeps the on-disk schema cache out of the developer's own cache
+// directory: a test fetching from a local server should not leave anything
+// behind outside its own temporary files.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "schema-cache")
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	_ = os.Setenv("XDG_CACHE_HOME", dir)
+
+	m.Run()
+}
+
 func TestCompare(t *testing.T) {
 	t.Parallel()
 
@@ -750,4 +766,40 @@ func registryServer(t *testing.T, index string, served ...string) (*[]string, *h
 	}))
 
 	return &asked, srv
+}
+
+// TestARegistryIsReadOnceAcrossRuns pins what the cache is for: the schema for
+// a release will never change, so a second run reads it from disk. Against a
+// registry that throttles, re-downloading the same immutable file on every
+// invocation is the worst pattern there is.
+func TestARegistryIsReadOnceAcrossRuns(t *testing.T) {
+	t.Parallel()
+
+	asked, srv := registryServer(t, `{"distributions":{"core":["v0.157.0"]}}`)
+	defer srv.Close()
+
+	// One cache directory, two stores: the second is the next run.
+	dir := t.TempDir()
+
+	for range 2 {
+		store := schema.Store{
+			Locations:     []string{srv.URL},
+			Distribution:  distCore,
+			AllowInsecure: true,
+			CacheDir:      dir,
+		}
+
+		_, err := store.Load(t.Context(), latestVersion)
+		require.NoError(t, err)
+	}
+
+	schemas := 0
+
+	for _, path := range *asked {
+		if strings.HasPrefix(path, "/core/") {
+			schemas++
+		}
+	}
+
+	assert.Equal(t, 1, schemas, "the second run should have read the schema from the cache")
 }

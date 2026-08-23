@@ -104,9 +104,17 @@ type Store struct {
 	// anyone able to rewrite one in flight decides what the rules report. Turn
 	// it on for a registry served over loopback, where there is no flight.
 	AllowInsecure bool
-	// Fs is the filesystem local locations are read from. A nil Fs means the
-	// real one. Remote locations go over HTTPClient and ignore it.
+	// Fs is the filesystem local locations are read from, and the on-disk
+	// cache is kept on. A nil Fs means the real one.
 	Fs afero.Fs
+	// NoCache keeps what a registry serves out of the on-disk cache, so every
+	// run fetches it again. It is what to reach for when a published schema
+	// has been corrected under a version already read once.
+	NoCache bool
+	// CacheDir is where what a registry served is kept between runs. An empty
+	// value means $XDG_CACHE_HOME/otelcol-config-lint, or the platform's own
+	// cache directory when the environment names none.
+	CacheDir string
 
 	// retryDelay shortens the wait between attempts. It is unexported because
 	// only this package's own tests have a reason to set it.
@@ -475,7 +483,7 @@ func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
 
 	result := indexResult{index: nil, err: nil}
 
-	body, err := s.get(ctx, join(root, IndexFile))
+	body, err := s.get(ctx, join(root, IndexFile), revalidated)
 	if err == nil {
 		result.index, result.err = ReadIndex(bytes.NewReader(body))
 	} else {
@@ -519,7 +527,7 @@ func isInsecure(loc string) bool {
 
 // fetch reads a schema over the network.
 func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
-	body, err := s.get(ctx, url)
+	body, err := s.get(ctx, url, immutable)
 	if err != nil {
 		return nil, err
 	}
@@ -528,19 +536,44 @@ func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
 }
 
 // get performs the request behind fetch and fetchIndex, and returns what the
-// endpoint served. A location that throttles or fails transiently is asked
-// again, up to fetchAttempts times; see retry.go for which statuses earn one
-// and how long each wait is.
-func (s Store) get(ctx context.Context, url string) ([]byte, error) {
+// endpoint served -- or what a previous run did, when the cache holds it and
+// the location is one that does not change under the same URL.
+//
+// A location that throttles or fails transiently is asked again, up to
+// fetchAttempts times; see retry.go for which statuses earn one and how long
+// each wait is.
+func (s Store) get(ctx context.Context, url string, keep freshness) ([]byte, error) {
 	err := s.refuseInsecure(url)
 	if err != nil {
 		return nil, err
 	}
 
+	cache := s.cache()
+
+	cached, etag := s.cached(cache, url, keep)
+	if cached != nil && keep == immutable {
+		return cached, nil
+	}
+
 	for attempt := 0; ; attempt++ {
-		body, err := s.attempt(ctx, url)
+		answer, err := s.attempt(ctx, url, etag)
 		if err == nil {
-			return body, nil
+			if answer.notModified {
+				// Only what was offered can come back unmodified. An endpoint
+				// answering this to a request that offered nothing has served
+				// no body and named nothing to serve instead.
+				if cached == nil {
+					return nil, notModified(url)
+				}
+
+				return cached, nil
+			}
+
+			if cache != nil {
+				cache.save(url, answer.body, answer.etag)
+			}
+
+			return answer.body, nil
 		}
 
 		var status *statusError
@@ -561,6 +594,38 @@ func (s Store) get(ctx context.Context, url string) ([]byte, error) {
 	}
 }
 
+// notModified reports an endpoint answering 304 to a request that offered no
+// validator, which leaves the run with nothing to read.
+func notModified(url string) error {
+	return &statusError{
+		url:    url,
+		status: "304 " + http.StatusText(http.StatusNotModified),
+		code:   http.StatusNotModified,
+		after:  0,
+	}
+}
+
+// cached returns what the cache holds for a URL, and the validator to offer
+// the registry with it. A location whose content cannot change under the same
+// URL is not revalidated, so it carries no validator: the point of caching a
+// published schema is that no request is made at all.
+func (s Store) cached(cache *diskCache, url string, keep freshness) ([]byte, string) {
+	if cache == nil {
+		return nil, ""
+	}
+
+	body, etag, ok := cache.load(url)
+	if !ok {
+		return nil, ""
+	}
+
+	if keep == immutable {
+		return body, ""
+	}
+
+	return body, etag
+}
+
 // refuseInsecure reports the location the store will not read, so that a
 // refusal is raised before anything is fetched -- or remembered.
 func (s Store) refuseInsecure(url string) error {
@@ -571,30 +636,56 @@ func (s Store) refuseInsecure(url string) error {
 	return nil
 }
 
-// attempt makes one request and returns what it served. The body is read here
-// rather than handed to a decoder so that maxRemoteBytes is enforced in one
-// place, and so that a location serving too much is reported as exactly that
-// instead of as a parse failure part-way through a truncated document.
-func (s Store) attempt(ctx context.Context, url string) ([]byte, error) {
+// served is what one attempt came back with: the body, the validator to keep
+// beside it, or word that what the cache already holds still stands.
+type served struct {
+	body []byte
+	// etag validates the body on a later run, and is empty when the endpoint
+	// offered none.
+	etag string
+	// notModified says the endpoint recognised the validator that was offered,
+	// so the cached body is current and was not sent again.
+	notModified bool
+}
+
+// attempt makes one request and returns what it served, offering etag when
+// there is a cached copy to revalidate. The body is read here rather than
+// handed to a decoder so that maxRemoteBytes is enforced in one place, and so
+// that a location serving too much is reported as exactly that instead of as a
+// parse failure part-way through a truncated document.
+func (s Store) attempt(ctx context.Context, url, etag string) (served, error) {
+	none := served{body: nil, etag: "", notModified: false}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("build request for %s: %w", url, err)
+		return none, fmt.Errorf("build request for %s: %w", url, err)
+	}
+
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
 	}
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch %s: %w", url, err)
+		return none, fmt.Errorf("fetch %s: %w", url, err)
 	}
 
 	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return readBody(url, resp.Body)
+		body, err := readBody(url, resp.Body)
+		if err != nil {
+			return none, err
+		}
+
+		return served{body: body, etag: resp.Header.Get("ETag"), notModified: false}, nil
+	case http.StatusNotModified:
+		return served{body: nil, etag: etag, notModified: true}, nil
 	case http.StatusNotFound:
-		return nil, errNotFound
+		return none, errNotFound
 	default:
-		return nil, &statusError{
+		return none, &statusError{
 			url:    url,
 			status: resp.Status,
 			code:   resp.StatusCode,

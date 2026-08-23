@@ -36,9 +36,9 @@ func TestGetRetriesAThrottledRegistry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := Store{AllowInsecure: true, retryDelay: testRetryDelay}
+	store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true}
 
-	body, err := store.get(t.Context(), srv.URL)
+	body, err := store.get(t.Context(), srv.URL, immutable)
 	require.NoError(t, err)
 	assert.Equal(t, "served", string(body))
 	assert.Equal(t, int32(3), requests.Load(), "the throttled attempts should have been retried")
@@ -58,9 +58,9 @@ func TestGetGivesUpAfterTheLastAttempt(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := Store{AllowInsecure: true, retryDelay: testRetryDelay}
+	store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true}
 
-	_, err := store.get(t.Context(), srv.URL)
+	_, err := store.get(t.Context(), srv.URL, immutable)
 	require.ErrorIs(t, err, errBadStatus)
 	assert.Contains(t, err.Error(), "503")
 	assert.Contains(t, err.Error(), "gave up after 3 attempts")
@@ -93,9 +93,9 @@ func TestGetDoesNotRetryWhatWillNotChange(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			store := Store{AllowInsecure: true, retryDelay: testRetryDelay}
+			store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true}
 
-			_, err := store.get(t.Context(), srv.URL)
+			_, err := store.get(t.Context(), srv.URL, immutable)
 			require.Error(t, err)
 			assert.Equal(t, int32(1), requests.Load(), "one request is all this status is worth")
 		})
@@ -117,9 +117,9 @@ func TestGetStopsRetryingWhenTheRunIsCancelled(t *testing.T) {
 
 	// A minute of backoff, which the cancellation has to cut short for this to
 	// return at all.
-	store := Store{AllowInsecure: true, retryDelay: time.Minute}
+	store := Store{AllowInsecure: true, retryDelay: time.Minute, NoCache: true}
 
-	_, err := store.get(ctx, srv.URL)
+	_, err := store.get(ctx, srv.URL, immutable)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
