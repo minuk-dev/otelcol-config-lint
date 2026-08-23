@@ -11,24 +11,30 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/rulepolicy"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/scanner"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/termutil"
 )
 
-// Errors reported for input this command cannot lint.
+// Errors this command reports.
 var (
 	// ErrNoInput reports that no file, directory or "-" was given.
-	ErrNoInput = cmdutil.NewUsageError("no files or directories specified")
+	ErrNoInput = errors.New("no files or directories specified")
 	// ErrNoYAMLFiles reports that the given paths held nothing to lint.
-	ErrNoYAMLFiles = cmdutil.NewUsageError("no YAML files found")
+	ErrNoYAMLFiles = errors.New("no YAML files found")
 	// ErrNoOverridePaths reports an environment override that matches nothing.
-	ErrNoOverridePaths = cmdutil.NewUsageError("an override needs at least one path pattern")
+	ErrNoOverridePaths = errors.New("an override needs at least one path pattern")
+
+	// ErrFilesInvalid ends the run with the exit code that means findings. It
+	// carries no message worth printing: the formatter has already reported
+	// every finding, so the caller should map it to an exit code and stay
+	// quiet.
+	ErrFilesInvalid = errors.New("at least one file is invalid")
 )
 
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
@@ -76,9 +82,10 @@ type options struct {
 	// internal state
 	// store is where the schemas are read from.
 	store schema.Store
-	// policy is which rules run, at what level, and with what settings, once
-	// the flags and the file have both had their say.
-	policy rulepolicy.Policy
+	// resolved is which rules run and at what level, once the flags and the
+	// file have both had their say and every name has been held to the rules
+	// that exist.
+	resolved ruleset.Resolved
 	// envPolicy resolves the environment of each file linted.
 	envPolicy lint.EnvironmentPolicy
 	// kubernetesEnabled is what the flag or the settings file said about
@@ -151,12 +158,12 @@ func (o *options) declareFlags(cmd *cobra.Command) {
 		"where to find schemas: a directory, a {{.Version}} template, a URL, or \"default\";\n"+
 			"repeat to search several in order (default: the published registry)")
 	flags.StringVar(&o.ruleDefault, "default", "",
-		"rule set to start from: "+settings.DefaultAll+" (the default) or "+settings.DefaultNone)
+		"rule set to start from: "+ruleset.DefaultAll+" (the default) or "+ruleset.DefaultNone)
 	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
 	flags.StringSliceVarP(&o.disable, "disable", "D", nil, "rules to turn off")
 	flags.StringSliceVar(&o.severity, "severity", nil,
 		"rule=level overrides, e.g. missing-batch=warning")
-	flags.BoolVar(&o.kubernetes, kubernetesFlag, false, "the config runs in a Kubernetes pod")
+	flags.BoolVar(&o.kubernetes, "kubernetes", false, "the config runs in a Kubernetes pod")
 	flags.StringVar(&o.memoryRequest, "memory-request", "", "container memory request, e.g. 256Mi")
 	flags.StringVar(&o.memoryLimit, "memory-limit", "", "container memory limit, e.g. 512Mi")
 	flags.StringVar(&o.collectorVersion, "collector-version", schema.Latest,
@@ -197,7 +204,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	// The deployment environment is a tri-state: the flag wins, then the file,
 	// and with neither the memory numbers speak for themselves.
 	switch {
-	case fold.Changed(kubernetesFlag):
+	case fold.Changed("kubernetes"):
 		o.kubernetesEnabled = &o.kubernetes
 	case file.Run.Kubernetes.Enabled != nil:
 		o.kubernetesEnabled = file.Run.Kubernetes.Enabled
@@ -205,12 +212,20 @@ func (o *options) prepare(cmd *cobra.Command) error {
 
 	o.kubernetesOverrides = file.Run.Kubernetes.Overrides
 
-	o.policy = rulepolicy.New(file, rulepolicy.Selection{
+	// The rules are resolved here rather than at the first lint, so a rule
+	// named that does not exist is reported where every other bad flag is.
+	o.resolved, err = ruleset.Resolve(file.RuleSelection(ruleset.Selection{
 		Default:  o.ruleDefault,
 		Enable:   o.enable,
 		Disable:  o.disable,
 		Severity: o.severity,
-	})
+		// Per-rule settings are the file's alone, which RuleSelection carries.
+		Settings: nil,
+	}))
+	if err != nil {
+		return err
+	}
+
 	o.store = schema.Store{Locations: o.schemaLocations, Distribution: o.distribution, Fs: o.FS()}
 
 	o.envPolicy, err = o.environmentPolicy()
@@ -354,7 +369,7 @@ func (o *options) lintAll(
 	}
 
 	if summary.Failed() {
-		return cmdutil.ErrFilesInvalid
+		return ErrFilesInvalid
 	}
 
 	return nil
@@ -366,24 +381,14 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 		return nil, err
 	}
 
-	severities, err := o.policy.Severities()
-	if err != nil {
-		return nil, err
-	}
-
-	rules, err := o.policy.Rules()
-	if err != nil {
-		return nil, err
-	}
-
 	minSeverity, err := diag.ParseSeverity(o.minSeverity)
 	if err != nil {
-		return nil, cmdutil.AsUsageError(fmt.Errorf("--min-severity: %w", err))
+		return nil, fmt.Errorf("--min-severity: %w", err)
 	}
 
 	failOn, err := diag.ParseSeverity(o.failOn)
 	if err != nil {
-		return nil, cmdutil.AsUsageError(fmt.Errorf("--fail-on: %w", err))
+		return nil, fmt.Errorf("--fail-on: %w", err)
 	}
 
 	return lint.New(lint.Options{
@@ -391,8 +396,8 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 		Fs:                   o.FS(),
 		Availability:         lint.NewVersionIndex(o.store),
 		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
-		Rules:                rules,
-		Severities:           severities,
+		Rules:                o.resolved.Rules,
+		Severities:           o.resolved.Severities,
 		Environment:          o.envPolicy.Resolve,
 		Strict:               o.strict,
 		IgnoreMissingSchemas: o.ignoreMissing,

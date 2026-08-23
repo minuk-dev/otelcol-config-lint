@@ -9,11 +9,6 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
 
-// kubernetesFlag is the flag that says the configs run in a pod. It is named
-// because resolving the environment has to ask whether it was given, and a
-// flag looked up by a misspelled name is a question that answers no.
-const kubernetesFlag = "kubernetes"
-
 // environmentPolicy builds the per-path environment from the flags and the
 // settings file. The flags are the single-file convenience, and the file is
 // what a repository of configs commits.

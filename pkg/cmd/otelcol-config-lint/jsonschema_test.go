@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
+	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 )
@@ -103,7 +103,7 @@ func TestTheSettingsFixturesAreWhatTheySayTheyAre(t *testing.T) {
 			// fixture whose whole point is the value it writes.
 			code, _, errOut := lint(t, "", "--config", path, validConfig)
 
-			assert.Equalf(t, group.usage, code == cmdutil.ExitUsage,
+			assert.Equalf(t, group.usage, code == otelcolconfiglint.ExitUsage,
 				"%s %s, got exit %d: %s", path, group.explain, code, errOut)
 		}
 	}

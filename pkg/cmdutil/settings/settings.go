@@ -28,18 +28,6 @@ const Version = "1"
 // for in the working directory and then in each parent.
 const DefaultName = ".otelcol-config-lint.yaml"
 
-// The sets rules.default can name. They mirror golangci-lint's, minus the
-// curated middle: every rule the linter carries is one a collector config
-// should pass, so there is no subset to start from that is not simply all of
-// them.
-const (
-	// DefaultAll runs every registered rule, which is what a run that says
-	// nothing does.
-	DefaultAll = "all"
-	// DefaultNone runs only what rules.enable names.
-	DefaultNone = "none"
-)
-
 // Names are the spellings of the default file, tried in order. Both YAML
 // extensions are accepted because a repository should not have to rename a file
 // it already has.

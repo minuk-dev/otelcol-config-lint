@@ -165,7 +165,7 @@ func rulesSchema() object {
 		"default": object{
 			"description": "The set to start from: every rule, or only what enable names.",
 			"type":        "string",
-			"enum":        []any{DefaultAll, DefaultNone},
+			"enum":        []any{ruleset.DefaultAll, ruleset.DefaultNone},
 		},
 		"enable": object{
 			"description": "Rules to turn on, on top of the set named by default.",

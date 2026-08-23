@@ -4,6 +4,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -11,13 +12,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/rulepolicy"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil/settings"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // ErrNoSchemas reports that no schema version could be found.
-var ErrNoSchemas = cmdutil.NewUsageError("no schemas available")
+var ErrNoSchemas = errors.New("no schemas available")
 
 // NewCommand builds "list" and its subcommands. Each one carries only the
 // flags that change what it prints, so their help stays short.
@@ -50,9 +50,9 @@ type rulesOptions struct {
 	severity    []string
 
 	// internal state
-	// policy is which rules run and at what level, once the flags and the
+	// resolved is which rules run and at what level, once the flags and the
 	// rules block have both had their say.
-	policy rulepolicy.Policy
+	resolved ruleset.Resolved
 }
 
 // newRulesCommand builds "list rules". The rule flags apply because they
@@ -91,7 +91,7 @@ func (o *rulesOptions) declareFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
 	flags.StringVar(&o.ruleDefault, "default", "",
-		"rule set to start from: "+settings.DefaultAll+" (the default) or "+settings.DefaultNone)
+		"rule set to start from: "+ruleset.DefaultAll+" (the default) or "+ruleset.DefaultNone)
 	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
 	flags.StringSliceVarP(&o.disable, "disable", "D", nil, "rules to turn off")
 	flags.StringSliceVar(&o.severity, "severity", nil,
@@ -105,12 +105,17 @@ func (o *rulesOptions) prepare(cmd *cobra.Command) error {
 		return err
 	}
 
-	o.policy = rulepolicy.New(o.Settings(), rulepolicy.Selection{
+	o.resolved, err = ruleset.Resolve(o.Settings().RuleSelection(ruleset.Selection{
 		Default:  o.ruleDefault,
 		Enable:   o.enable,
 		Disable:  o.disable,
 		Severity: o.severity,
-	})
+		// Per-rule settings are the file's alone, which RuleSelection carries.
+		Settings: nil,
+	}))
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -118,23 +123,13 @@ func (o *rulesOptions) prepare(cmd *cobra.Command) error {
 // run prints one row per rule: its name, the severity it will run at, and what
 // it reports.
 func (o *rulesOptions) run(cmd *cobra.Command) error {
-	overrides, err := o.policy.Severities()
-	if err != nil {
-		return err
-	}
-
-	rules, err := o.policy.Rules()
-	if err != nil {
-		return err
-	}
-
 	w := newColumns(cmd.OutOrStdout())
 
-	for _, r := range rules {
+	for _, r := range o.resolved.Rules {
 		sev := r.Severity()
 
 		note := ""
-		if s, ok := overrides[r.Name()]; ok && s != sev {
+		if s, ok := o.resolved.Severities[r.Name()]; ok && s != sev {
 			sev, note = s, " (overridden)"
 		}
 

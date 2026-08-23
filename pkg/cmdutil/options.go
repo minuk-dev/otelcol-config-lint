@@ -138,7 +138,7 @@ func (o *GlobalOptions) load() (*settings.File, string, error) {
 
 	file, err := settings.Parse(src)
 	if err != nil {
-		return nil, "", AsUsageError(fmt.Errorf("%s: %w", path, err))
+		return nil, "", fmt.Errorf("%s: %w", path, err)
 	}
 
 	return file, path, nil
