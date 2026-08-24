@@ -110,7 +110,9 @@ while IFS= read -r location; do
 done <<<"${in_schema_location}"
 
 # Deliberately unquoted: files are separated by whitespace, and a glob such as
-# configs/*.yaml is expanded here, against the workspace.
+# configs/*.yaml is expanded here, against the workspace. The cost is that a
+# path containing a space is split into two paths that do not exist, which is
+# why action.yml says the input cannot hold one.
 # shellcheck disable=SC2206
 files=(${in_files})
 if [ ${#files[@]} -eq 0 ]; then
@@ -122,7 +124,15 @@ fi
 # The second pass re-reads the schema, from the registry over the network when
 # no --schema-location is given; one schema for one release is a small download,
 # and it buys the same numbers whichever format was asked for.
-report="${TMPDIR:-/tmp}/otelcol-config-lint.json"
+#
+# The name is drawn per run rather than fixed. A hosted runner gives each job a
+# container of its own and a fixed name would do, but a self-hosted runner with
+# a reused workspace, or two matrix legs sharing a TMPDIR, would have two runs
+# writing and reading one file -- and the summary one of them published would
+# be the other's. No suffix on the template: busybox mktemp only accepts the
+# X's at the end, and nothing here reads the report by extension.
+report="$(mktemp "${TMPDIR:-/tmp}/otelcol-config-lint.XXXXXX")"
+trap 'rm -f "${report}"' EXIT
 
 code=0
 otelcol-config-lint run "${flags[@]}" --output json "${files[@]}" >"${report}" || code=$?
