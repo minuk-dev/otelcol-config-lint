@@ -92,6 +92,12 @@ type RunBlock struct {
 	// earlier runs, which is what picks up a correction to a schema already
 	// published under a version this machine has read.
 	NoCache *bool `yaml:"noCache"`
+	// AllowNearestFallback checks against the newest release that is not newer
+	// than collectorVersion when the registry has no schema for it, instead of
+	// ending the run. For a repository deliberately tracking ahead of the
+	// registry; otherwise a release nobody published is a mistake worth
+	// hearing about.
+	AllowNearestFallback *bool `yaml:"allowNearestFallback"`
 	// Strict reports unknown component settings as errors.
 	Strict *bool `yaml:"strict"`
 	// IgnoreMissingSchemas keeps components absent from the schema from

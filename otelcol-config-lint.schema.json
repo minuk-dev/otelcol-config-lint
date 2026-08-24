@@ -284,6 +284,10 @@
       "additionalProperties": false,
       "description": "What to check, and against which collector.",
       "properties": {
+        "allowNearestFallback": {
+          "description": "Check against the nearest older release when the registry has no schema for collectorVersion, instead of ending the run. Without it a release nobody published is a usage error, because the config would otherwise be checked against a component set nobody asked for.",
+          "type": "boolean"
+        },
         "collectorVersion": {
           "description": "Collector release to validate against. \"latest\" uses the newest schema available.",
           "examples": [

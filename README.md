@@ -132,6 +132,7 @@ from it.
 | `--schema-location` | `run.schemaLocations` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
 | `--insecure-schema-location` | `run.insecureSchemaLocation` | allow a plain `http://` schema location, which is otherwise refused. For a registry served on localhost |
 | `--no-cache` | `run.noCache` | fetch schemas again instead of reading the ones kept from earlier runs |
+| `--allow-nearest-fallback` | `run.allowNearestFallback` | check against the nearest older release when the registry has no schema for the one asked for. Without it, that is a usage error |
 | `--strict` | `run.strict` | unknown component settings become errors instead of warnings |
 | `--ignore-missing-schemas` | `run.ignoreMissingSchemas` | do not fail on components absent from the schema (custom distributions) |
 | `--exclude` | `run.exclude` | glob patterns to skip when walking directories |
@@ -154,7 +155,11 @@ from it.
 a comma-separated list, and may also be repeated.
 
 Exit codes: `0` everything passed, `1` at least one file failed, `2` the command
-could not run.
+could not run. A `--collector-version` the registry has no schema for is that
+last case: the run ends naming the nearest release available, because checking
+the config against a release nobody asked for and exiting `0` says nothing that
+CI can read. Pass `--allow-nearest-fallback` to check against it anyway, for a
+repository deliberately tracking ahead of the registry.
 
 ```sh
 otelcol-config-lint run config.yaml                               # lint one file
@@ -849,10 +854,9 @@ deprecated alias. Both resolve, and using the old name reports
 Nobody has to remember. The [`schemas`](.github/workflows/schemas.yaml) workflow
 runs weekly, reads upstream's release tags, and for each one the registry does
 not have yet generates the schemas and opens a pull request against
-`otelcol-config-schemas`, one per release. A release with no schema is not a gap
-the linter reports — `--collector-version v0.158.0` falls back to the newest
-release it does have and checks the config against the wrong component set — so
-the registry has to keep up on its own. Dispatch the workflow with a version to
+`otelcol-config-schemas`, one per release. A release with no schema stops the
+run — `--collector-version v0.158.0` is a usage error naming the newest release
+the registry does have — so the registry has to keep up on its own. Dispatch the workflow with a version to
 generate one by hand, present or not.
 
 The generated diff is several megabytes of YAML, so the pull request leads with
