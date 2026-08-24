@@ -1,7 +1,9 @@
 name: otelcol-config-lint
+# GitHub Marketplace rejects a description of 125 characters or more, so this
+# says only what the linter is for; the README carries the rest.
 description: >-
-  Lint OpenTelemetry Collector config files against a specific collector
-  release, with findings as inline pull-request annotations.
+  Lint OpenTelemetry Collector configs against a specific collector release,
+  with findings as pull-request annotations.
 author: minuk-dev
 
 branding:
