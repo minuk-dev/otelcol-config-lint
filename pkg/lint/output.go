@@ -333,9 +333,14 @@ func (f *tapFormatter) Result(r Result) error {
 }
 
 func (f *tapFormatter) Finish(Summary) error {
-	err := writef(f.w, "1..%d\n%s\n", f.n, strings.Join(f.lines, "\n"))
+	// A run with nothing to say is the plan and no more. Joining an empty set
+	// of lines onto it would leave a blank line a strict consumer need not
+	// accept.
+	if len(f.lines) == 0 {
+		return writef(f.w, "1..%d\n", f.n)
+	}
 
-	return err
+	return writef(f.w, "1..%d\n%s\n", f.n, strings.Join(f.lines, "\n"))
 }
 
 // githubFormatter emits GitHub Actions workflow commands so findings show up as

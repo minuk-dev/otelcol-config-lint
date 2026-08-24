@@ -9,8 +9,9 @@
 package version
 
 import (
+	"fmt"
+	"regexp"
 	"runtime/debug"
-	"strings"
 )
 
 const (
@@ -30,9 +31,13 @@ const (
 	shortRevisionLen = 7
 
 	// pseudoRevisionLen is how much of a commit a module pseudo-version
-	// carries, and so how much of one to look for in a version to recognise
-	// that the toolchain derived it rather than a person choosing it.
+	// carries, and so how much of one to compare against a version to
+	// recognise that the toolchain derived it rather than a person choosing it.
 	pseudoRevisionLen = 12
+
+	// pseudoStampLen is the length of the UTC build timestamp a pseudo-version
+	// carries just before the commit, e.g. 20260808131440.
+	pseudoStampLen = 14
 
 	// dirtySuffix marks a build from a tree with uncommitted changes. The
 	// toolchain writes "+dirty" onto a version derived from a tag; this is the
@@ -99,6 +104,14 @@ func render(moduleVersion, revision string, modified bool) string {
 	return short
 }
 
+// pseudoVersionRE matches what every module pseudo-version ends in: the build
+// timestamp and the commit it was derived from, with the toolchain's "+dirty"
+// left in place. What comes before differs with the last tag -- there may be
+// none, or "-0." or "-<pre>.0." after one -- so the tail is what says the
+// toolchain wrote the version rather than a person choosing it.
+var pseudoVersionRE = regexp.MustCompile(
+	fmt.Sprintf(`[-.][0-9]{%d}-([0-9a-f]{%d})(?:\+[0-9A-Za-z.-]+)?$`, pseudoStampLen, pseudoRevisionLen))
+
 // derivedFrom reports whether a module version is a pseudo-version standing in
 // for the given commit rather than a tag someone chose.
 func derivedFrom(moduleVersion, revision string) bool {
@@ -106,5 +119,7 @@ func derivedFrom(moduleVersion, revision string) bool {
 		return false
 	}
 
-	return strings.Contains(moduleVersion, revision[:pseudoRevisionLen])
+	m := pseudoVersionRE.FindStringSubmatch(moduleVersion)
+
+	return m != nil && m[1] == revision[:pseudoRevisionLen]
 }

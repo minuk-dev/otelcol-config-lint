@@ -67,11 +67,13 @@ func (w FieldWalker) walk(field *schema.Field, node *yaml.Node, path string) {
 		return
 	}
 
-	if node.Kind == yaml.AliasNode {
-		node = node.Alias // validate what the anchor resolves to
-		if node == nil {
-			return
-		}
+	// Validate what the anchor resolves to. An anchor can name an alias, so
+	// one hop is not always enough; what is left after the whole chain is an
+	// anchor that contains itself, which is not a document the collector
+	// loads either and not one to report a type error against.
+	node = ResolveAlias(node)
+	if node == nil || node.Kind == yaml.AliasNode {
+		return
 	}
 
 	if IsNull(node) {

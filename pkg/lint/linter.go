@@ -177,7 +177,7 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 		if ok := asSyntaxError(err, &syn); ok {
 			return Result{
 				Path: path, Status: Invalid,
-				Diagnostics: diag.Diagnostics{syn.Diagnostic()},
+				Diagnostics: syn.Diagnostics(),
 				Err:         err,
 			}
 		}

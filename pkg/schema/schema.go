@@ -227,6 +227,10 @@ const yamlIndent = 2
 // errEmptySchema reports a schema file with no document in it.
 var errEmptySchema = errors.New("decode schema: empty document")
 
+// errMultiDocumentSchema reports a schema file holding more than one YAML
+// document, where everything after the first would otherwise be dropped.
+var errMultiDocumentSchema = errors.New("decode schema: more than one document")
+
 // Format is a schema serialisation format.
 type Format string
 
@@ -251,6 +255,20 @@ func Read(r io.Reader) (*Schema, error) {
 			return nil, errEmptySchema
 		}
 
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	// A schema is one document. A stray "---" in a generated file would
+	// otherwise validate against whatever came first and take the rest with
+	// it in silence, which is not something the outcome would ever show.
+	var extra Schema
+
+	err = dec.Decode(&extra)
+	if err == nil {
+		return nil, errMultiDocumentSchema
+	}
+
+	if !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("decode schema: %w", err)
 	}
 

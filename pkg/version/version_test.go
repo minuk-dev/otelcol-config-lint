@@ -43,6 +43,26 @@ func TestRender(t *testing.T) {
 			modified:      false,
 			want:          "b7dbdd5",
 		},
+		"a pseudo-version cut after a tag gives way to the commit too": {
+			moduleVersion: "v1.2.4-0.20260808131440-b7dbdd5cfc07",
+			revision:      revision,
+			modified:      false,
+			want:          "b7dbdd5",
+		},
+		"a tag that happens to carry the commit is still the tag": {
+			// Not a pseudo-version: no build timestamp before the commit, so
+			// it is a name someone chose and what the binary should report.
+			moduleVersion: "v1.2.3-b7dbdd5cfc07",
+			revision:      revision,
+			modified:      false,
+			want:          "v1.2.3-b7dbdd5cfc07",
+		},
+		"a pseudo-version standing in for another commit is reported as it is": {
+			moduleVersion: "v0.0.0-20260808131440-0123456789ab",
+			revision:      revision,
+			modified:      false,
+			want:          "v0.0.0-20260808131440-0123456789ab",
+		},
 		"an untagged dirty tree is named the way git describe names it": {
 			moduleVersion: "v0.0.0-20260808131440-b7dbdd5cfc07+dirty",
 			revision:      revision,
