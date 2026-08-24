@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 
 	"github.com/spf13/afero"
@@ -25,6 +26,31 @@ type Index struct {
 	// distribution before v0.120.0, so asking a flat list of versions what the
 	// otlp registry holds would name releases it cannot serve.
 	Distributions map[string][]string `json:"distributions"`
+	// Extensions names the file extension each distribution's schemas should
+	// be fetched with. Without it a fetch has to probe ".yaml", ".yml" and
+	// ".json" in turn, which against a remote registry is three requests and
+	// two wasted 404s for every schema read.
+	//
+	// It is optional, and a registry whose releases do not agree on one form
+	// leaves a distribution out rather than naming the wrong one; the probe is
+	// still there for those, and for an index written before this field was.
+	Extensions map[string]string `json:"extensions,omitempty"`
+}
+
+// Extension returns the file extension a distribution's schemas are published
+// with, and whether the index named a usable one.
+//
+// A value outside the set this package reads is refused. The index comes from
+// the registry and the answer goes into a URL, so a registry that names
+// something else -- a path of its own choosing, or simply a typo -- gets the
+// probe rather than a fetch aimed wherever it pointed.
+func (i *Index) Extension(distribution string) (string, bool) {
+	ext, ok := i.Extensions[distribution]
+	if !ok || !slices.Contains(Extensions(), ext) {
+		return "", false
+	}
+
+	return ext, true
 }
 
 // Names returns the distributions the index covers, sorted.

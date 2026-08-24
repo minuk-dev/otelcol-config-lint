@@ -99,6 +99,12 @@ func runSchema() object {
 				"what the rules report.",
 			"type": "boolean",
 		},
+		"noCache": object{
+			"description": "Fetch schemas again instead of reading the ones kept from earlier runs. " +
+				"A published schema does not change under its version, so it is kept between runs; " +
+				"this is what picks up a correction to one already read.",
+			"type": "boolean",
+		},
 		"strict": object{
 			"description": "Report unknown component settings as errors instead of warnings.",
 			"type":        "boolean",

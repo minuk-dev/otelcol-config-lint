@@ -88,6 +88,10 @@ type RunBlock struct {
 	// otherwise refused: a schema states which components exist, so a transport
 	// anyone can rewrite decides what the rules report.
 	InsecureSchemaLocation *bool `yaml:"insecureSchemaLocation"`
+	// NoCache fetches schemas again rather than reading the ones kept from
+	// earlier runs, which is what picks up a correction to a schema already
+	// published under a version this machine has read.
+	NoCache *bool `yaml:"noCache"`
 	// Strict reports unknown component settings as errors.
 	Strict *bool `yaml:"strict"`
 	// IgnoreMissingSchemas keeps components absent from the schema from

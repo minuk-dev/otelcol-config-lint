@@ -71,10 +71,11 @@ whole reference: `files` (default `.`, whitespace-separated, globs allowed),
 several in order), `strict`, `ignore-missing-schemas`, `min-severity`,
 `fail-on`, `default`, `enable`, `disable`, `severity`, `exclude`, `output`
 (default `github`), `config`, `no-config`, `summary` (default `true`),
-`verbose` and `exit-on-error`. `--concurrency`, `--no-color` and
+`verbose` and `exit-on-error`. `--concurrency`, `--no-color`, `--no-cache` and
 `--insecure-schema-location` are left out: a runner gains nothing from the
-first two, and a workflow that reads its schemas over plain HTTP is one whose
-findings anyone on the path can choose.
+first two, a fresh container has no cache to read, and a workflow that reads
+its schemas over plain HTTP is one whose findings anyone on the path can
+choose.
 
 The counts come back as outputs — `exit-code`, `valid`, `invalid`, `errors`,
 `skipped`, `warnings` and `infos` — so a later step can decide what to do with
@@ -130,6 +131,7 @@ from it.
 | `--distribution` | `run.distribution` | collector binary to validate against: `core`, `contrib` (default), `k8s` or `otlp` |
 | `--schema-location` | `run.schemaLocations` | where to find schemas: a registry directory or URL, a `{{.Version}}`/`{{.Distribution}}` template, or `default`. Repeat to search several in order |
 | `--insecure-schema-location` | `run.insecureSchemaLocation` | allow a plain `http://` schema location, which is otherwise refused. For a registry served on localhost |
+| `--no-cache` | `run.noCache` | fetch schemas again instead of reading the ones kept from earlier runs |
 | `--strict` | `run.strict` | unknown component settings become errors instead of warnings |
 | `--ignore-missing-schemas` | `run.ignoreMissingSchemas` | do not fail on components absent from the schema (custom distributions) |
 | `--exclude` | `run.exclude` | glob patterns to skip when walking directories |
@@ -748,6 +750,24 @@ is there for a registry served on localhost. One download is capped at 32 MiB,
 so a registry that is hostile or merely broken cannot stream the linter out of
 memory.
 
+### Caching
+
+A schema describes one release of one distribution, so what it says under a
+version does not change. Fetched schemas are therefore kept between runs, under
+`$XDG_CACHE_HOME/otelcol-config-lint` (the platform's own cache directory when
+the environment names none), and a second run reads them from there without
+asking the registry. The index, which grows a line per release, is offered back
+with its ETag instead, so an up-to-date run pays a `304` rather than the file.
+
+`--no-cache` reads nothing and keeps nothing. The registry tracks its own main,
+so a schema can be corrected under a version this machine has already read;
+that is when to reach for it. Deleting the directory has the same effect once.
+
+A throttled or briefly failing registry is asked again — three attempts, waiting
+as long as a `Retry-After` asks for and backing off from half a second
+otherwise — so one `429` does not fail a lint. A `404` is not retried: it means
+the registry does not carry that version, which waiting will not change.
+
 ### Adding a release
 
 A distribution is described by the same [OCB builder
@@ -775,7 +795,11 @@ go run ./cmd/schemagen generate --builder acme=./builder.yaml --registry ./schem
 
 `cmd/schemagen` downloads every module the manifest names, plus everything they
 require, and writes `<distribution>/<version>.yaml` and `.json` into the schema
-repository, along with the `index.json` listing them. The download goes through
+repository, along with the `index.json` listing them. The index also records
+the extension each distribution's schemas should be fetched with, so reading
+one over the network costs a single request instead of probing `.yaml`, `.yml`
+and `.json` in turn; a distribution whose releases do not agree on one form
+names none, and is probed as before. The download goes through
 the `go` command, so `GOPROXY`, `GOPRIVATE` and whatever credentials this
 machine builds with apply unchanged: a **private component resolves exactly as
 it does for the build that consumes it**, and a `replaces:` entry pointing at a

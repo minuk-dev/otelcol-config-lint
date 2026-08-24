@@ -57,6 +57,7 @@ type options struct {
 	distribution           string
 	schemaLocations        []string
 	insecureSchemaLocation bool
+	noCache                bool
 	// Which rules run, and at what level.
 	ruleDefault string
 	enable      []string
@@ -160,6 +161,8 @@ func (o *options) declareFlags(cmd *cobra.Command) {
 			"repeat to search several in order (default: the published registry)")
 	flags.BoolVar(&o.insecureSchemaLocation, "insecure-schema-location", false,
 		"allow a plain http:// schema location, for a registry served on localhost")
+	flags.BoolVar(&o.noCache, "no-cache", false,
+		"fetch schemas again instead of reading the ones kept from earlier runs")
 	flags.StringVar(&o.ruleDefault, "default", "",
 		"rule set to start from: "+ruleset.DefaultAll+" (the default) or "+ruleset.DefaultNone)
 	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
@@ -202,6 +205,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	fold.Str("distribution", &o.distribution, file.Run.Distribution)
 	fold.List("schema-location", &o.schemaLocations, file.Run.SchemaLocations)
 	fold.Bool("insecure-schema-location", &o.insecureSchemaLocation, file.Run.InsecureSchemaLocation)
+	fold.Bool("no-cache", &o.noCache, file.Run.NoCache)
 	fold.Str("memory-request", &o.memoryRequest, file.Run.Kubernetes.MemoryRequest)
 	fold.Str("memory-limit", &o.memoryLimit, file.Run.Kubernetes.MemoryLimit)
 
@@ -234,6 +238,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 		Locations:     o.schemaLocations,
 		Distribution:  o.distribution,
 		AllowInsecure: o.insecureSchemaLocation,
+		NoCache:       o.noCache,
 		Fs:            o.FS(),
 	}
 

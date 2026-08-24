@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -19,6 +20,22 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
+
+// TestMain keeps the on-disk schema cache out of the developer's own cache
+// directory: a test fetching from a local server should not leave anything
+// behind outside its own temporary files.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "schema-cache")
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	_ = os.Setenv("XDG_CACHE_HOME", dir)
+
+	m.Run()
+}
 
 func TestCompare(t *testing.T) {
 	t.Parallel()
@@ -612,4 +629,177 @@ func write(t *testing.T, path, content string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestRemoteRegistryFetchesTheExtensionTheIndexNames pins the request the
+// index saves. A registry publishing JSON used to cost three requests and two
+// 404s for one schema, against a rate limit that counts every one of them.
+func TestRemoteRegistryFetchesTheExtensionTheIndexNames(t *testing.T) {
+	t.Parallel()
+
+	asked, srv := registryServer(t,
+		`{"distributions":{"core":["v0.157.0"]},"extensions":{"core":".json"}}`)
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore, AllowInsecure: true}
+
+	_, err := store.Load(t.Context(), latestVersion)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"/" + schema.IndexFile, "/core/v0.157.0.json"}, *asked,
+		"the named extension should be fetched outright")
+}
+
+// TestRemoteRegistryProbesAnIndexThatNamesNothing pins the fallback: an index
+// written before the field existed, or one whose releases do not agree on a
+// form, still resolves -- by trying each extension, the way it always did.
+func TestRemoteRegistryProbesAnIndexThatNamesNothing(t *testing.T) {
+	t.Parallel()
+
+	// Published as JSON alone, so the probe has to walk past two misses.
+	asked, srv := registryServer(t, `{"distributions":{"core":["v0.157.0"]}}`, ".json")
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore, AllowInsecure: true}
+
+	_, err := store.Load(t.Context(), latestVersion)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"/" + schema.IndexFile, "/core/v0.157.0.yaml", "/core/v0.157.0.yml", "/core/v0.157.0.json",
+	}, *asked, "every extension should be probed, in preference order")
+}
+
+// TestRemoteRegistryRefusesAnExtensionItDoesNotRead pins that the index cannot
+// aim a fetch wherever it likes. The value becomes part of a URL and the index
+// comes from the registry, so anything outside the set this package reads is
+// ignored rather than requested.
+func TestRemoteRegistryRefusesAnExtensionItDoesNotRead(t *testing.T) {
+	t.Parallel()
+
+	asked, srv := registryServer(t,
+		`{"distributions":{"core":["v0.157.0"]},"extensions":{"core":"/../../etc/passwd"}}`)
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore, AllowInsecure: true}
+
+	_, err := store.Load(t.Context(), latestVersion)
+	require.NoError(t, err)
+
+	for _, path := range *asked {
+		assert.NotContains(t, path, "passwd", "the index should not decide what is fetched")
+	}
+}
+
+// TestRemoteRegistryReadsItsIndexOnce pins that resolving several versions
+// does not re-fetch the file that says which versions there are. Against a
+// rate limit that counts requests, an index fetched per lookup would spend
+// more than the extension it names saves.
+func TestRemoteRegistryReadsItsIndexOnce(t *testing.T) {
+	t.Parallel()
+
+	asked, srv := registryServer(t,
+		`{"distributions":{"core":["v0.157.0"]},"extensions":{"core":".json"}}`)
+	defer srv.Close()
+
+	store := schema.Store{Locations: []string{srv.URL}, Distribution: distCore, AllowInsecure: true}
+
+	for range 3 {
+		_, err := store.Load(t.Context(), schema.Latest)
+		require.NoError(t, err)
+	}
+
+	indexes := 0
+
+	for _, path := range *asked {
+		if path == "/"+schema.IndexFile {
+			indexes++
+		}
+	}
+
+	assert.Equal(t, 1, indexes, "the index should be read once per registry, not once per lookup")
+}
+
+// registryServer serves a registry holding one core schema under the given
+// index, published in the named forms (every form when none are named), and
+// records the paths it was asked for.
+func registryServer(t *testing.T, index string, served ...string) (*[]string, *httptest.Server) {
+	t.Helper()
+
+	if len(served) == 0 {
+		served = schema.Extensions()
+	}
+
+	var (
+		lock  sync.Mutex
+		asked []string
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lock.Lock()
+
+		asked = append(asked, r.URL.Path)
+
+		lock.Unlock()
+
+		if r.URL.Path == "/"+schema.IndexFile {
+			_, _ = w.Write([]byte(index))
+
+			return
+		}
+
+		for _, ext := range served {
+			if r.URL.Path != "/core/"+latestVersion+ext {
+				continue
+			}
+
+			if ext == ".json" {
+				_, _ = w.Write([]byte(`{"collectorVersion":"v0.157.0","distribution":"core","components":{}}`))
+			} else {
+				_, _ = w.Write([]byte("collectorVersion: v0.157.0\ndistribution: core\ncomponents: {}\n"))
+			}
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	return &asked, srv
+}
+
+// TestARegistryIsReadOnceAcrossRuns pins what the cache is for: the schema for
+// a release will never change, so a second run reads it from disk. Against a
+// registry that throttles, re-downloading the same immutable file on every
+// invocation is the worst pattern there is.
+func TestARegistryIsReadOnceAcrossRuns(t *testing.T) {
+	t.Parallel()
+
+	asked, srv := registryServer(t, `{"distributions":{"core":["v0.157.0"]}}`)
+	defer srv.Close()
+
+	// One cache directory, two stores: the second is the next run.
+	dir := t.TempDir()
+
+	for range 2 {
+		store := schema.Store{
+			Locations:     []string{srv.URL},
+			Distribution:  distCore,
+			AllowInsecure: true,
+			CacheDir:      dir,
+		}
+
+		_, err := store.Load(t.Context(), latestVersion)
+		require.NoError(t, err)
+	}
+
+	schemas := 0
+
+	for _, path := range *asked {
+		if strings.HasPrefix(path, "/core/") {
+			schemas++
+		}
+	}
+
+	assert.Equal(t, 1, schemas, "the second run should have read the schema from the cache")
 }

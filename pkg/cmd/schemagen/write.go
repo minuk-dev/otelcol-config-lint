@@ -82,20 +82,27 @@ func (o *Options) writeIndex() error {
 		return fmt.Errorf("read %s: %w", o.registryDir, err)
 	}
 
-	idx := &schema.Index{Distributions: map[string][]string{}}
+	idx := &schema.Index{Distributions: map[string][]string{}, Extensions: map[string]string{}}
 
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 
-		versions := versionsIn(filepath.Join(o.registryDir, e.Name()))
+		dir := filepath.Join(o.registryDir, e.Name())
+
+		versions := versionsIn(dir)
 		if len(versions) == 0 {
 			// Not a distribution, just a directory that happens to sit here.
 			continue
 		}
 
 		idx.Distributions[e.Name()] = versions
+
+		ext := extensionIn(dir, versions)
+		if ext != "" {
+			idx.Extensions[e.Name()] = ext
+		}
 	}
 
 	dest := filepath.Join(o.registryDir, schema.IndexFile)
@@ -117,6 +124,41 @@ func (o *Options) writeIndex() error {
 	o.logf("wrote %s (%d distributions)\n", dest, len(idx.Distributions))
 
 	return nil
+}
+
+// extensionIn returns the file extension a distribution's schemas should be
+// fetched with: the form every release in the directory is served as, which is
+// the preferred one where a release carries several. It is recorded in the
+// index so that a remote fetch asks once instead of probing each extension in
+// turn.
+//
+// Releases that disagree -- older ones published only as JSON, say, and newer
+// ones as YAML -- have no single answer, and an index naming one of them would
+// send half the fetches at a file that is not there. Those record nothing, and
+// are probed as before.
+func extensionIn(dir string, versions []string) string {
+	answer := ""
+
+	for _, v := range versions {
+		found := ""
+
+		for _, ext := range schema.Extensions() {
+			_, err := os.Stat(filepath.Join(dir, v+ext))
+			if err == nil {
+				found = ext
+
+				break
+			}
+		}
+
+		if answer != "" && found != answer {
+			return ""
+		}
+
+		answer = found
+	}
+
+	return answer
 }
 
 // versionsIn lists the releases a distribution directory holds, in any of the

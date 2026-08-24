@@ -104,9 +104,21 @@ type Store struct {
 	// anyone able to rewrite one in flight decides what the rules report. Turn
 	// it on for a registry served over loopback, where there is no flight.
 	AllowInsecure bool
-	// Fs is the filesystem local locations are read from. A nil Fs means the
-	// real one. Remote locations go over HTTPClient and ignore it.
+	// Fs is the filesystem local locations are read from, and the on-disk
+	// cache is kept on. A nil Fs means the real one.
 	Fs afero.Fs
+	// NoCache keeps what a registry serves out of the on-disk cache, so every
+	// run fetches it again. It is what to reach for when a published schema
+	// has been corrected under a version already read once.
+	NoCache bool
+	// CacheDir is where what a registry served is kept between runs. An empty
+	// value means $XDG_CACHE_HOME/otelcol-config-lint, or the platform's own
+	// cache directory when the environment names none.
+	CacheDir string
+
+	// retryDelay shortens the wait between attempts. It is unexported because
+	// only this package's own tests have a reason to set it.
+	retryDelay time.Duration
 }
 
 // Versions lists every schema the store can serve, newest first. Templated and
@@ -342,7 +354,7 @@ var (
 func (s Store) loadFrom(ctx context.Context, loc, version string) (*Schema, error) {
 	switch kindOf(loc) {
 	case locRemote:
-		return s.loadFromRegistry(loc, version, func(target string) (*Schema, error) {
+		return s.loadFromRegistry(ctx, loc, version, func(target string) (*Schema, error) {
 			return s.fetch(ctx, target)
 		})
 	case locTemplate, locFile:
@@ -351,7 +363,7 @@ func (s Store) loadFrom(ctx context.Context, loc, version string) (*Schema, erro
 		// A directory holding an index is a registry root, laid out by
 		// distribution. Without one it is the flat legacy layout.
 		if s.isRegistryDir(loc) {
-			return s.loadFromRegistry(loc, version, s.readLocal)
+			return s.loadFromRegistry(ctx, loc, version, s.readLocal)
 		}
 
 		return s.loadFlat(loc, version)
@@ -367,10 +379,12 @@ func (s Store) loadOne(ctx context.Context, target string) (*Schema, error) {
 	return s.readLocal(target)
 }
 
-// loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", preferring
-// the readable form when a root carries both.
-func (s Store) loadFromRegistry(root, version string, read func(string) (*Schema, error)) (*Schema, error) {
-	for _, ext := range extensions() {
+// loadFromRegistry reads "<root>/<distribution>/<version>.<ext>", asking the
+// index which extension to use and falling back to trying each in turn.
+func (s Store) loadFromRegistry(
+	ctx context.Context, root, version string, read func(string) (*Schema, error),
+) (*Schema, error) {
+	for _, ext := range s.registryExtensions(ctx, root) {
 		c, err := read(join(root, s.distribution(), version+ext))
 		if err == nil {
 			return c, nil
@@ -382,6 +396,40 @@ func (s Store) loadFromRegistry(root, version string, read func(string) (*Schema
 	}
 
 	return nil, errNotFound
+}
+
+// registryExtensions is the order to look a schema up in: what the index named
+// first, then the rest.
+//
+// The index is only worth consulting for a remote root, where each miss is a
+// request and a 404 the registry counted against the rate limit. Locally a
+// miss is a stat, so the probe costs nothing worth reading a file to avoid.
+// The others stay behind the named one either way: an index can be older than
+// the field, or simply wrong, and the schema is there to be found regardless.
+func (s Store) registryExtensions(ctx context.Context, root string) []string {
+	if kindOf(root) != locRemote {
+		return extensions()
+	}
+
+	idx := s.indexAt(ctx, root)
+	if idx == nil {
+		return extensions()
+	}
+
+	named, ok := idx.Extension(s.distribution())
+	if !ok {
+		return extensions()
+	}
+
+	out := []string{named}
+
+	for _, ext := range extensions() {
+		if ext != named {
+			out = append(out, ext)
+		}
+	}
+
+	return out
 }
 
 // loadFlat reads "<dir>/<version>.<ext>", the layout used before schemas were
@@ -410,15 +458,55 @@ func (s Store) readLocal(path string) (*Schema, error) {
 	return readFile(s.fs(), path)
 }
 
-// fetchIndex reads a remote registry's index.
+// fetchIndex reads a remote registry's index, once per registry.
+//
+// Resolving a version consults the index and so does listing them, so a run
+// that lints against several releases would otherwise fetch the same file once
+// per lookup -- against a rate limit that counts requests, the fetch this
+// field was added to save. A failure is remembered too: a registry that could
+// not answer for the index is not going to answer any faster for being asked
+// again by every version in turn.
 func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
-	body, err := s.get(ctx, join(root, IndexFile))
+	// A location this store may not read is not a fetch, and not an answer to
+	// remember: another store, allowed to read it, would be handed the refusal.
+	err := s.refuseInsecure(root)
 	if err != nil {
 		return nil, err
 	}
 
-	return ReadIndex(bytes.NewReader(body))
+	cached, ok := indexMemo.Load(root)
+	if ok {
+		result, _ := cached.(indexResult)
+
+		return result.index, result.err
+	}
+
+	result := indexResult{index: nil, err: nil}
+
+	body, err := s.get(ctx, join(root, IndexFile), revalidated)
+	if err == nil {
+		result.index, result.err = ReadIndex(bytes.NewReader(body))
+	} else {
+		result.err = err
+	}
+
+	indexMemo.Store(root, result)
+
+	return result.index, result.err
 }
+
+// indexResult is what one registry's index fetch came to, kept whether it
+// succeeded or not.
+type indexResult struct {
+	index *Index
+	err   error
+}
+
+// indexMemo holds each remote registry's index for the life of the process,
+// keyed by the root it was read from.
+//
+//nolint:gochecknoglobals // a registry has one index, and the point is to fetch it once
+var indexMemo sync.Map
 
 // join appends path segments to a registry root, which is a URL or a local
 // directory. Slashes are right for both: filepath.Join would break URLs on
@@ -439,7 +527,7 @@ func isInsecure(loc string) bool {
 
 // fetch reads a schema over the network.
 func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
-	body, err := s.get(ctx, url)
+	body, err := s.get(ctx, url, immutable)
 	if err != nil {
 		return nil, err
 	}
@@ -448,35 +536,173 @@ func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
 }
 
 // get performs the request behind fetch and fetchIndex, and returns what the
-// endpoint served. The body is read here rather than handed to a decoder so
-// that maxRemoteBytes is enforced in one place, and so that a location serving
-// too much is reported as exactly that instead of as a parse failure part-way
-// through a truncated document.
-func (s Store) get(ctx context.Context, url string) ([]byte, error) {
-	if !s.AllowInsecure && isInsecure(url) {
-		return nil, fmt.Errorf("%w: %s", errInsecureLocation, url)
+// endpoint served -- or what a previous run did, when the cache holds it and
+// the location is one that does not change under the same URL.
+//
+// A location that throttles or fails transiently is asked again, up to
+// fetchAttempts times; see retry.go for which statuses earn one and how long
+// each wait is.
+func (s Store) get(ctx context.Context, url string, keep freshness) ([]byte, error) {
+	err := s.refuseInsecure(url)
+	if err != nil {
+		return nil, err
 	}
+
+	cache := s.cache()
+
+	cached, etag := s.cached(cache, url, keep)
+	if cached != nil && keep == immutable {
+		return cached, nil
+	}
+
+	for attempt := 0; ; attempt++ {
+		answer, err := s.attempt(ctx, url, etag)
+		if err == nil {
+			if answer.notModified {
+				// Only what was offered can come back unmodified. An endpoint
+				// answering this to a request that offered nothing has served
+				// no body and named nothing to serve instead.
+				if cached == nil {
+					return nil, notModified(url)
+				}
+
+				return cached, nil
+			}
+
+			if cache != nil {
+				cache.save(url, answer.body, answer.etag)
+			}
+
+			return answer.body, nil
+		}
+
+		var status *statusError
+
+		last := attempt == fetchAttempts-1
+		if !errors.As(err, &status) || !status.retryable() || last {
+			if attempt > 0 {
+				return nil, fmt.Errorf("%w (gave up after %d attempts)", err, attempt+1)
+			}
+
+			return nil, err
+		}
+
+		err = sleep(ctx, retryDelay(attempt, s.retryBase(), status.after))
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+// notModified reports an endpoint answering 304 to a request that offered no
+// validator, which leaves the run with nothing to read.
+func notModified(url string) error {
+	return &statusError{
+		url:    url,
+		status: "304 " + http.StatusText(http.StatusNotModified),
+		code:   http.StatusNotModified,
+		after:  0,
+	}
+}
+
+// cached returns what the cache holds for a URL, and the validator to offer
+// the registry with it. A location whose content cannot change under the same
+// URL is not revalidated, so it carries no validator: the point of caching a
+// published schema is that no request is made at all.
+func (s Store) cached(cache *diskCache, url string, keep freshness) ([]byte, string) {
+	if cache == nil {
+		return nil, ""
+	}
+
+	body, etag, ok := cache.load(url)
+	if !ok {
+		return nil, ""
+	}
+
+	if keep == immutable {
+		return body, ""
+	}
+
+	return body, etag
+}
+
+// refuseInsecure reports the location the store will not read, so that a
+// refusal is raised before anything is fetched -- or remembered.
+func (s Store) refuseInsecure(url string) error {
+	if !s.AllowInsecure && isInsecure(url) {
+		return fmt.Errorf("%w: %s", errInsecureLocation, url)
+	}
+
+	return nil
+}
+
+// served is what one attempt came back with: the body, the validator to keep
+// beside it, or word that what the cache already holds still stands.
+type served struct {
+	body []byte
+	// etag validates the body on a later run, and is empty when the endpoint
+	// offered none.
+	etag string
+	// notModified says the endpoint recognised the validator that was offered,
+	// so the cached body is current and was not sent again.
+	notModified bool
+}
+
+// attempt makes one request and returns what it served, offering etag when
+// there is a cached copy to revalidate. The body is read here rather than
+// handed to a decoder so that maxRemoteBytes is enforced in one place, and so
+// that a location serving too much is reported as exactly that instead of as a
+// parse failure part-way through a truncated document.
+func (s Store) attempt(ctx context.Context, url, etag string) (served, error) {
+	none := served{body: nil, etag: "", notModified: false}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("build request for %s: %w", url, err)
+		return none, fmt.Errorf("build request for %s: %w", url, err)
+	}
+
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
 	}
 
 	resp, err := s.client().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch %s: %w", url, err)
+		return none, fmt.Errorf("fetch %s: %w", url, err)
 	}
 
 	defer func() { _ = resp.Body.Close() }()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return readBody(url, resp.Body)
+		body, err := readBody(url, resp.Body)
+		if err != nil {
+			return none, err
+		}
+
+		return served{body: body, etag: resp.Header.Get("ETag"), notModified: false}, nil
+	case http.StatusNotModified:
+		return served{body: nil, etag: etag, notModified: true}, nil
 	case http.StatusNotFound:
-		return nil, errNotFound
+		return none, errNotFound
 	default:
-		return nil, fmt.Errorf("GET %s: %w %s", url, errBadStatus, resp.Status)
+		return none, &statusError{
+			url:    url,
+			status: resp.Status,
+			code:   resp.StatusCode,
+			after:  retryAfter(resp.Header, time.Now()),
+		}
 	}
+}
+
+// retryBase is how long the wait after a first failed attempt is. Only a test
+// sets one of its own, so that a retry it is exercising costs milliseconds
+// rather than seconds.
+func (s Store) retryBase() time.Duration {
+	if s.retryDelay > 0 {
+		return s.retryDelay
+	}
+
+	return retryBaseDelay
 }
 
 // readBody reads a response under maxRemoteBytes. One byte past the limit is

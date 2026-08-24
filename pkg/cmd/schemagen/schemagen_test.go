@@ -2,6 +2,7 @@ package schemagen_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/schemagen"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // run executes the command and returns its exit code and streams. The wiring
@@ -393,6 +395,50 @@ replaces:
 	index := readFile(t, filepath.Join(out, "index.json"))
 	assert.Contains(t, index, "custom")
 	assert.Contains(t, index, "v0.157.0")
+	// Both forms are written, so the readable one is what a fetch should ask
+	// for, and the index says so rather than leaving it to be probed.
+	assert.Contains(t, index, `"extensions"`)
+	assert.Contains(t, index, `".yaml"`)
+}
+
+// TestIndexNamesTheExtensionPublished covers the request the index saves: a
+// registry publishing one form says which, so reading a schema from it over
+// the network costs one request instead of a probe through three.
+func TestIndexNamesTheExtensionPublished(t *testing.T) {
+	t.Parallel()
+
+	modules, out := t.TempDir(), t.TempDir()
+	manifest := singleComponentManifest(t, modules)
+
+	code, _, stderr := run(t, "--builder", "custom="+manifest, "--registry", out,
+		"--formats", "json", "--cache", t.TempDir())
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+
+	var idx schema.Index
+
+	require.NoError(t, json.Unmarshal([]byte(readFile(t, filepath.Join(out, "index.json"))), &idx))
+
+	ext, named := idx.Extension("custom")
+	assert.True(t, named, "the index named no extension for a distribution published as JSON alone")
+	assert.Equal(t, ".json", ext)
+
+	// A release published in another form leaves the distribution with no
+	// single answer, so the index names none and the probe stays the fallback.
+	writeFile(t, filepath.Join(out, "custom", "v0.150.0.yaml"),
+		"collectorVersion: v0.150.0\ndistribution: custom\ncomponents: {}\n")
+
+	code, _, stderr = run(t, "--builder", "custom="+manifest, "--registry", out,
+		"--formats", "json", "--cache", t.TempDir())
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+
+	// Decoded into a fresh index: an absent "extensions" key leaves whatever
+	// the previous decode put there, which is the value under test.
+	var regenerated schema.Index
+
+	require.NoError(t, json.Unmarshal([]byte(readFile(t, filepath.Join(out, "index.json"))), &regenerated))
+
+	_, named = regenerated.Extension("custom")
+	assert.False(t, named, "releases that disagree on a form should name none")
 }
 
 // TestWritesOneFile covers the single-manifest form: the schema goes where

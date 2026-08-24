@@ -375,6 +375,10 @@
           },
           "type": "object"
         },
+        "noCache": {
+          "description": "Fetch schemas again instead of reading the ones kept from earlier runs. A published schema does not change under its version, so it is kept between runs; this is what picks up a correction to one already read.",
+          "type": "boolean"
+        },
         "schemaLocations": {
           "description": "Where to find schemas, searched in order: a directory, a URL, a {{.Version}}/{{.Distribution}} template, or \"default\" for the published registry.",
           "items": {
