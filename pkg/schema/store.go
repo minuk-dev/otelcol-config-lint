@@ -932,8 +932,9 @@ func Normalize(v string) string {
 
 // Compare orders two collector versions. It returns a negative number when a is
 // older than b, zero when they are equal, and a positive number otherwise. A
-// pre-release sorts before the release it leads up to, and unparsable segments
-// compare as zero so malformed versions sort as oldest.
+// pre-release sorts before the release it leads up to, two pre-releases sort
+// the way semver orders them, and unparsable segments compare as zero so
+// malformed versions sort as oldest.
 func Compare(a, b string) int {
 	pa, pb := parseVersion(a), parseVersion(b)
 	for i := range pa {
@@ -951,8 +952,84 @@ func Compare(a, b string) int {
 	case rb == "":
 		return -1
 	default:
-		return strings.Compare(ra, rb)
+		return comparePrerelease(ra, rb)
 	}
+}
+
+// comparePrerelease orders two pre-release suffixes, e.g. "rc.2" against
+// "rc.10". Both are non-empty: a release against a pre-release is decided by
+// Compare before it gets here.
+//
+// Semver compares the suffix field by field rather than byte by byte, which is
+// what keeps rc.2 below rc.10, and a list that runs out first sorts below the
+// longer one that shares its prefix, so "rc" is below "rc.1".
+func comparePrerelease(ra, rb string) int {
+	fieldsA, fieldsB := strings.Split(ra, "."), strings.Split(rb, ".")
+	for i := range min(len(fieldsA), len(fieldsB)) {
+		if c := compareIdentifier(fieldsA[i], fieldsB[i]); c != 0 {
+			return c
+		}
+	}
+
+	return len(fieldsA) - len(fieldsB)
+}
+
+// compareIdentifier orders one field of a pre-release suffix. Two all-digit
+// fields compare as numbers, anything else compares as text, and a numeric
+// field sorts below an alphanumeric one.
+func compareIdentifier(a, b string) int {
+	numA, numB := isNumeric(a), isNumeric(b)
+
+	switch {
+	case numA && numB:
+		return compareNumeric(a, b)
+	case numA:
+		return -1
+	case numB:
+		return 1
+	default:
+		return strings.Compare(a, b)
+	}
+}
+
+// compareNumeric orders two all-digit fields as numbers, without converting
+// them: a field is only bounded by how long the string is, and a version that
+// overflows an int should still sort rather than wrap.
+func compareNumeric(a, b string) int {
+	a, b = trimLeadingZeros(a), trimLeadingZeros(b)
+	if len(a) != len(b) {
+		return len(a) - len(b)
+	}
+
+	return strings.Compare(a, b)
+}
+
+// trimLeadingZeros drops the padding of a digit string, keeping the last digit
+// so "000" stays a number. Semver forbids the padding, but a registry is free
+// to publish it and the ordering should not turn on that.
+func trimLeadingZeros(s string) string {
+	trimmed := strings.TrimLeft(s, "0")
+	if trimmed == "" {
+		return "0"
+	}
+
+	return trimmed
+}
+
+// isNumeric reports whether a pre-release field is all digits, which is what
+// makes it compare as a number.
+func isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 // prerelease returns the suffix after the first "-", e.g. "rc.1".
