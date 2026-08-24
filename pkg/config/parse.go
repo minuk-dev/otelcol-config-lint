@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -401,50 +402,109 @@ func join(parent, key string) string {
 }
 
 // SyntaxError is a YAML parse failure with a position, when one is available.
+//
+// One parse can fail more than once: a yaml.TypeError carries an entry for
+// every value in the document that could not be unmarshalled. The first is
+// this error's own position and message and [SyntaxError.Rest] holds the
+// others, so a config with three type errors reports three rather than
+// handing them out one re-run at a time.
 type SyntaxError struct {
 	Path         string
+	Line, Column int
+	Msg          string
+	// Rest is the further failures from the same parse, in the order the
+	// parser reported them. It is empty for a parse that failed once, which
+	// is every plain syntax error.
+	Rest []Fault
+}
+
+// Fault is one parse failure, without the file it was found in: the
+// *SyntaxError carrying it already names that.
+type Fault struct {
 	Line, Column int
 	Msg          string
 }
 
 func (e *SyntaxError) Error() string {
-	p := diag.Position{File: e.Path, Line: e.Line, Column: e.Column}
-
-	return p.String() + ": " + e.Msg
-}
-
-// Diagnostic renders the syntax error as a linter finding.
-func (e *SyntaxError) Diagnostic() diag.Diagnostic {
-	return diag.Diagnostic{
-		Rule:     "yaml-syntax",
-		Severity: diag.Error,
-		Message:  e.Msg,
-		Position: diag.Position{File: e.Path, Line: e.Line, Column: e.Column},
+	msgs := make([]string, 0, len(e.Rest)+1)
+	for _, f := range e.faults() {
+		p := diag.Position{File: e.Path, Line: f.Line, Column: f.Column}
+		msgs = append(msgs, p.String()+": "+f.Msg)
 	}
+
+	return strings.Join(msgs, "; ")
 }
 
-// syntaxError converts a yaml.v3 error into a *SyntaxError, recovering the line
-// number that yaml.v3 only reports inside the message text.
+// Diagnostic renders the first failure as a linter finding.
+func (e *SyntaxError) Diagnostic() diag.Diagnostic {
+	return e.Diagnostics()[0]
+}
+
+// Diagnostics renders every failure the parse reported as a linter finding.
+func (e *SyntaxError) Diagnostics() diag.Diagnostics {
+	out := make(diag.Diagnostics, 0, len(e.Rest)+1)
+	for _, f := range e.faults() {
+		out = append(out, diag.Diagnostic{
+			Rule:     "yaml-syntax",
+			Severity: diag.Error,
+			Message:  f.Msg,
+			Position: diag.Position{File: e.Path, Line: f.Line, Column: f.Column},
+		})
+	}
+
+	return out
+}
+
+// faults is the error as the flat list it stands for, first failure included.
+func (e *SyntaxError) faults() []Fault {
+	return append([]Fault{{Line: e.Line, Column: e.Column, Msg: e.Msg}}, e.Rest...)
+}
+
+// unlocated is added to a message the parser reported no line for, so a
+// diagnostic that lands at the top of the file says why it is there rather
+// than reading as a finding about the first line.
+const unlocated = " (the parser reported no line for this)"
+
+// syntaxError converts a yaml.v3 error into a *SyntaxError, keeping every
+// failure it reported and recovering the line numbers that yaml.v3 only
+// reports inside the message text.
 func syntaxError(path string, err error) error {
 	var te *yaml.TypeError
 
-	msg := err.Error()
+	msgs := []string{err.Error()}
 	if errors.As(err, &te) && len(te.Errors) > 0 {
-		msg = te.Errors[0]
+		msgs = te.Errors
 	}
 
+	first := fault(msgs[0])
+
+	out := &SyntaxError{Path: path, Line: first.Line, Column: first.Column, Msg: first.Msg}
+	for _, msg := range msgs[1:] {
+		out.Rest = append(out.Rest, fault(msg))
+	}
+
+	return out
+}
+
+// fault splits one yaml.v3 message into the position it names and the rest of
+// what it says.
+func fault(msg string) Fault {
 	msg = strings.TrimPrefix(msg, "yaml: ")
-	line := 0
 
-	if rest, ok := strings.CutPrefix(msg, "line "); ok {
-		num, tail, found := strings.Cut(rest, ":")
-		if found {
-			_, convErr := fmt.Sscanf(num, "%d", &line)
-			if convErr == nil {
-				msg = strings.TrimSpace(tail)
-			}
-		}
+	rest, ok := strings.CutPrefix(msg, "line ")
+	if !ok {
+		return Fault{Msg: msg + unlocated}
 	}
 
-	return &SyntaxError{Path: path, Line: line, Msg: msg}
+	num, tail, found := strings.Cut(rest, ":")
+	if !found {
+		return Fault{Msg: msg + unlocated}
+	}
+
+	line, convErr := strconv.Atoi(strings.TrimSpace(num))
+	if convErr != nil {
+		return Fault{Msg: msg + unlocated}
+	}
+
+	return Fault{Line: line, Msg: strings.TrimSpace(tail)}
 }
