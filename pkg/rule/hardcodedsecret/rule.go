@@ -40,6 +40,12 @@ func New() rule.Rule {
 type hardcodedSecret struct{ rule.Base }
 
 func (r hardcodedSecret) Check(ctx *rule.Context) {
+	// A value written once behind an anchor and used by several components is
+	// one node, reached once per use. It is one credential in one place to
+	// edit, so it is reported once: repeating it under each component would
+	// put the same line in the report as many times as the config aliases it.
+	reported := map[*yaml.Node]bool{}
+
 	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
 		if sec == nil {
@@ -48,6 +54,12 @@ func (r hardcodedSecret) Check(ctx *rule.Context) {
 
 		for _, c := range sec.Components {
 			for _, hit := range findSecrets(c.ValueNode, kind.Section()+"."+c.ID.String(), "", false) {
+				if reported[hit.node] {
+					continue
+				}
+
+				reported[hit.node] = true
+
 				ctx.Report(rule.Finding{
 					Node: hit.node, Path: hit.path,
 					// The value is never quoted back. Printing it would copy the
@@ -102,10 +114,9 @@ func findSecrets(n *yaml.Node, path, key string, inHeaders bool) []secretHit {
 			out = append(out, secretHit{node: n, path: path})
 		}
 	default:
-		// An alias is a value written once and used twice, and the anchor is
-		// reported where it is written whenever that is somewhere this walk
-		// reaches. Following it here would report the same credential at every
-		// use, and only one of them is somewhere to edit.
+		// Aliases are resolved at parse time, so the only node left here is one
+		// that could not be: an anchor that contains itself, which the
+		// collector refuses to load at all.
 	}
 
 	return out

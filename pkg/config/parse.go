@@ -214,7 +214,14 @@ func Parse(path string, src []byte) (*File, error) {
 
 	f.Root = root
 
+	// Duplicates are collected from the document as written, before anything
+	// is merged into it: a key the config writes itself replaces one a merge
+	// supplies, and that is the merge key's purpose rather than a key declared
+	// twice.
 	f.DuplicateKeys = collectDuplicates(root, "")
+
+	resolve(root)
+
 	for _, e := range entries(root, "") {
 		kind, isSection := SectionKind(e.Key)
 

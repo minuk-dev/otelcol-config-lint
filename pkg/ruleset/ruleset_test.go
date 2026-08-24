@@ -829,3 +829,125 @@ func TestNoBuiltInRuleTakesSettingsYet(t *testing.T) {
 		}
 	}
 }
+
+// mergedClean is ruletest.Clean with the memory limiter's settings moved into
+// an anchor and merged back in -- the shape #66 opens with, and one the
+// collector accepts as written, because confmap resolves the merge before it
+// reads a setting.
+const mergedClean = `
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter/base: &shared
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  memory_limiter:
+    <<: *shared
+    spike_limit_mib: 64
+  batch:
+exporters:
+  otlp:
+    endpoint: backend:4317
+extensions:
+  zpages:
+service:
+  extensions: [zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]
+    traces/base:
+      receivers: [otlp]
+      processors: [memory_limiter/base, batch]
+      exporters: [otlp]
+`
+
+// TestAMergedConfigIsAsQuietAsTheOneItWasWrittenFrom is the whole point of
+// resolving merges: a false error on a config that starts fine teaches people
+// to stop believing the tool.
+func TestAMergedConfigIsAsQuietAsTheOneItWasWrittenFrom(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, check(t, mergedClean))
+}
+
+// TestAnAliasedComponentBodyIsAsQuietToo pins the shape #66 calls worse,
+// because the old report named settings that are plainly in the file and
+// nothing in it hinted at the alias.
+func TestAnAliasedComponentBodyIsAsQuietToo(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(mergedClean,
+		"  memory_limiter:\n    <<: *shared\n    spike_limit_mib: 64\n",
+		"  memory_limiter: *shared\n", 1)
+	require.NotEqual(t, mergedClean, src, "the fixture should still hold the merged limiter")
+
+	assert.Empty(t, check(t, src))
+}
+
+// mergedExporter merges an exporter's settings out of an anchor, which is what
+// puts the merge in front of the rules that read a field schema. The processors
+// in ruletest.Schema have no fields, so the limiter above cannot exercise them.
+const mergedExporter = `
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+exporters:
+  otlp/base: &base
+    endpoint: backend:4317
+    timeout: 30s
+  otlp:
+    <<: *base
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp, otlp/base]
+`
+
+// TestTheFieldRulesReadWhatTheMergeSupplies pins the three rules that read a
+// field schema. Before the merge was resolved, "<<" was an unknown setting,
+// the required endpoint it supplies read as absent, and the values it carries
+// were never checked at all.
+func TestTheFieldRulesReadWhatTheMergeSupplies(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"unknown-field", "required-field", "invalid-value"} {
+		assert.Emptyf(t, checkRule(t, name, mergedExporter), "%s should be quiet on a merged config", name)
+	}
+}
+
+// TestAMergedValueIsStillChecked pins the other direction: resolving the merge
+// is what puts the value in front of the rule, so a bad one supplied by an
+// anchor is reported rather than skipped.
+func TestAMergedValueIsStillChecked(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(mergedExporter, "timeout: 30s", "timeout: soon", 1)
+
+	found := checkRule(t, "invalid-value", src)
+	require.Len(t, found, 2, "the anchor and the exporter that merges it both carry the value")
+
+	paths := []string{found[0].Path, found[1].Path}
+	assert.Contains(t, paths, "exporters.otlp.timeout",
+		"the exporter that merges the value should be reported, not only the anchor it came from")
+}
+
+// TestWrongNodeTypeReportsWhatAnAliasResolvesTo pins that resolution does not
+// quiet the shape rules: an alias standing in for a scalar where a mapping
+// belongs is still an error, reported for what it resolves to rather than for
+// being an alias.
+func TestWrongNodeTypeReportsWhatAnAliasResolvesTo(t *testing.T) {
+	t.Parallel()
+
+	found := checkRule(t, "wrong-node-type", "_base: &base not-a-mapping\nreceivers: *base\n")
+	require.Len(t, found, 1)
+	assert.Contains(t, found[0].Message, "got a scalar")
+}

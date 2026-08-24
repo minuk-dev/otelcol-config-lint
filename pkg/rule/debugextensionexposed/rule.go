@@ -104,46 +104,10 @@ func endpointNode(settings *yaml.Node) mo.Option[*yaml.Node] {
 		return mo.None[*yaml.Node]()
 	}
 
-	var merges []*yaml.Node
-
-	for _, e := range rule.MapEntries(settings, "") {
-		switch e.Key {
-		case rule.EndpointKey:
-			// A key the component writes itself replaces a merged one
-			// outright, so there is nothing further to look at.
-			return rule.EndpointScalar(e.Node)
-		case rule.MergeKey:
-			merges = append(merges, e.Node)
-		default:
-			// Every other setting is another rule's business.
-		}
+	node, held := rule.ChildNode(settings, rule.EndpointKey).Get()
+	if !held {
+		return mo.None[*yaml.Node]()
 	}
 
-	return mergedEndpoint(merges)
-}
-
-// mergedEndpoint reads the endpoint a merge key supplies to a component that
-// wrote none of its own. The value of a merge is one mapping or a list of
-// them, and the first that holds the key wins, which is what the merge does at
-// load time.
-func mergedEndpoint(merges []*yaml.Node) mo.Option[*yaml.Node] {
-	for _, merge := range merges {
-		merge = rule.ResolveAlias(merge)
-		if merge == nil {
-			continue
-		}
-
-		targets := []*yaml.Node{merge}
-		if merge.Kind == yaml.SequenceNode {
-			targets = merge.Content
-		}
-
-		for _, target := range targets {
-			if node, held := rule.ChildNode(target, rule.EndpointKey).Get(); held {
-				return rule.EndpointScalar(node)
-			}
-		}
-	}
-
-	return mo.None[*yaml.Node]()
+	return rule.EndpointScalar(node)
 }
