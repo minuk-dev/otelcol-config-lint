@@ -1292,11 +1292,14 @@ func TestSharedFlagsAgreeAcrossCommands(t *testing.T) {
 		"no-config":       {{"run"}, {"list", "rules"}, {"list", "versions"}},
 	}
 
-	root := otelcolconfiglint.NewCommand(nil)
-
 	for name, paths := range shared {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			// A command tree of its own per subtest. cobra merges a parent's
+			// persistent flags into a child the first time either is looked
+			// at, so subtests sharing one root write to it as they read it.
+			root := otelcolconfiglint.NewCommand(nil)
 
 			var first []string
 
