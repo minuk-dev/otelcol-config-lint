@@ -105,6 +105,13 @@ func runSchema() object {
 				"this is what picks up a correction to one already read.",
 			"type": "boolean",
 		},
+		"allowNearestFallback": object{
+			"description": "Check against the nearest older release when the registry has no schema " +
+				"for collectorVersion, instead of ending the run. Without it a release nobody " +
+				"published is a usage error, because the config would otherwise be checked against " +
+				"a component set nobody asked for.",
+			"type": "boolean",
+		},
 		"strict": object{
 			"description": "Report unknown component settings as errors instead of warnings.",
 			"type":        "boolean",

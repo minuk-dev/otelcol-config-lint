@@ -37,6 +37,34 @@ var (
 	ErrFilesInvalid = errors.New("at least one file is invalid")
 )
 
+// NoExactSchemaError reports that no location carries the requested release.
+// It ends the run rather than standing in for the release, and it is a usage
+// error because what has to change is the request: either the version asked
+// for, or the flag that says an older schema will do.
+type NoExactSchemaError struct {
+	// Err is what the store reported, which names what it did find.
+	Err *schema.UnknownVersionError
+	// Nearest is the newest release that is not newer than the request, and
+	// HasNearest says whether there is one to name.
+	Nearest    string
+	HasNearest bool
+}
+
+func (e *NoExactSchemaError) Error() string {
+	if !e.HasNearest {
+		return e.Err.Error()
+	}
+
+	return fmt.Sprintf("%s; the nearest release available is %s"+
+		"\npass --collector-version %s to check against it, or --allow-nearest-fallback"+
+		" to keep asking for %s and be checked against %s",
+		e.Err.Error(), e.Nearest, e.Nearest, e.Err.Version, e.Nearest)
+}
+
+// Unwrap keeps the store's error readable through errors.As, so a caller can
+// still ask what the registry had.
+func (e *NoExactSchemaError) Unwrap() error { return e.Err }
+
 // maxDefaultWorkers caps the default parallelism; beyond this the run is bound
 // by reading files, not by checking them.
 const maxDefaultWorkers = 8
@@ -58,6 +86,7 @@ type options struct {
 	schemaLocations        []string
 	insecureSchemaLocation bool
 	noCache                bool
+	allowNearestFallback   bool
 	// Which rules run, and at what level.
 	ruleDefault string
 	enable      []string
@@ -163,6 +192,8 @@ func (o *options) declareFlags(cmd *cobra.Command) {
 		"allow a plain http:// schema location, for a registry served on localhost")
 	flags.BoolVar(&o.noCache, "no-cache", false,
 		"fetch schemas again instead of reading the ones kept from earlier runs")
+	flags.BoolVar(&o.allowNearestFallback, "allow-nearest-fallback", false,
+		"check against the nearest older release when the registry has no schema for the one asked for")
 	flags.StringVar(&o.ruleDefault, "default", "",
 		"rule set to start from: "+ruleset.DefaultAll+" (the default) or "+ruleset.DefaultNone)
 	flags.StringSliceVarP(&o.enable, "enable", "E", nil, "rules to turn on, on top of --default")
@@ -206,6 +237,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	fold.List("schema-location", &o.schemaLocations, file.Run.SchemaLocations)
 	fold.Bool("insecure-schema-location", &o.insecureSchemaLocation, file.Run.InsecureSchemaLocation)
 	fold.Bool("no-cache", &o.noCache, file.Run.NoCache)
+	fold.Bool("allow-nearest-fallback", &o.allowNearestFallback, file.Run.AllowNearestFallback)
 	fold.Str("memory-request", &o.memoryRequest, file.Run.Kubernetes.MemoryRequest)
 	fold.Str("memory-limit", &o.memoryLimit, file.Run.Kubernetes.MemoryLimit)
 
@@ -428,8 +460,14 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	}), nil
 }
 
-// loadSchema resolves the targeted release, falling back to the newest
-// schema that is not newer than the request when there is no exact match.
+// loadSchema resolves the targeted release.
+//
+// A release the registry does not carry ends the run: the exit code is the
+// only thing CI reads, and a run that silently checked the config against some
+// other release passed green while saying nothing an annotation would carry.
+// The nearest release is named instead, so the fix is one edit away, and
+// --allow-nearest-fallback checks against it for a run that is deliberately
+// tracking ahead of the registry.
 func (o *options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
 	cat, err := o.store.Load(cmd.Context(), o.collectorVersion)
 	if err == nil {
@@ -442,8 +480,8 @@ func (o *options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
 	}
 
 	near, hasNear := unknown.Nearest()
-	if !hasNear {
-		return nil, fmt.Errorf("load schema: %w", err)
+	if !hasNear || !o.allowNearestFallback {
+		return nil, &NoExactSchemaError{Err: unknown, Nearest: near, HasNearest: hasNear}
 	}
 
 	cmd.PrintErrf("otelcol-config-lint: no schema for %s, falling back to %s\n", unknown.Version, near)

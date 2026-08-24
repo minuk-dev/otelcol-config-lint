@@ -300,17 +300,60 @@ func TestTheDistributionIsNamedInDiagnostics(t *testing.T) {
 	}
 }
 
-func TestUnknownVersionFallsBackToTheNearestOlder(t *testing.T) {
+// TestUnknownVersionEndsTheRun pins that a release the registry does not carry
+// is a usage error rather than a green run against some other release. The
+// exit code is the only thing CI reads.
+func TestUnknownVersionEndsTheRun(t *testing.T) {
 	t.Parallel()
 
 	code, _, errOut := lint(t, "", "--collector-version", "v0.155.0", "--min-severity", "error", validConfig)
-	if code != 0 {
-		t.Fatalf("want a fallback, got exit %d: %s", code, errOut)
-	}
+	require.Equal(t, 2, code, "an unavailable release should be a usage error: %s", errOut)
 
-	if !strings.Contains(errOut, "falling back to") {
-		t.Errorf("the fallback should be announced: %q", errOut)
-	}
+	assert.Contains(t, errOut, "v0.155.0", "the error should name what was asked for")
+	assert.Contains(t, errOut, "the nearest release available is v0.110.0",
+		"the error should name the nearest release, so the fix is one edit away")
+	assert.Contains(t, errOut, "--allow-nearest-fallback",
+		"the error should name the flag that accepts the older schema")
+}
+
+// TestAllowNearestFallbackChecksAgainstTheOlderRelease pins the opt-in, for a
+// repository deliberately tracking ahead of the registry.
+func TestAllowNearestFallbackChecksAgainstTheOlderRelease(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := lint(t, "", "--collector-version", "v0.155.0", "--allow-nearest-fallback",
+		"--min-severity", "error", validConfig)
+	require.Equal(t, 0, code, "want a fallback, got exit %d: %s", code, errOut)
+
+	assert.Contains(t, errOut, "falling back to", "the fallback should still be announced")
+}
+
+// TestAllowNearestFallbackIsAlsoASettingsKey pins that the opt-in can be
+// committed, since a repository tracking ahead of the registry does so for
+// every run rather than one.
+func TestAllowNearestFallbackIsAlsoASettingsKey(t *testing.T) {
+	t.Parallel()
+
+	path := writeSettings(t, "run:\n  allowNearestFallback: true\n  collectorVersion: v0.155.0\n")
+
+	code, _, errOut := lint(t, "", "--config", path, "--min-severity", "error", validConfig)
+	require.Equal(t, 0, code, "the key should permit the fallback: %s", errOut)
+
+	assert.Contains(t, errOut, "falling back to", "the fallback should still be announced")
+}
+
+// TestNoNearestReleaseIsStillAUsageError pins the case with nothing older to
+// name: the store's own error is what a reader gets, rather than a hint that
+// would name no release.
+func TestNoNearestReleaseIsStillAUsageError(t *testing.T) {
+	t.Parallel()
+
+	code, _, errOut := lint(t, "", "--collector-version", "v0.1.0", "--allow-nearest-fallback",
+		"--min-severity", "error", validConfig)
+	require.Equal(t, 2, code, "a release older than every schema should not resolve: %s", errOut)
+
+	assert.Contains(t, errOut, "no schema for collector version v0.1.0")
+	assert.NotContains(t, errOut, "the nearest release available")
 }
 
 func TestSchemaLocationOverridesTheBuiltins(t *testing.T) {
