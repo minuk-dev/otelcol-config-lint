@@ -62,7 +62,7 @@ func Context(src string, opts Options) (rule.Context, error) {
 	return rule.Context{
 		File:   f,
 		Schema: sch,
-		Index:  rule.NewIndex(f),
+		Index:  rule.NewIndex(f, sch),
 		Strict: opts.Strict,
 		Env:    opts.Env,
 	}, nil

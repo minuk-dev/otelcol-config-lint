@@ -6,9 +6,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/undefinedextensionreference"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // check runs the rule over src, which every test in this package starts from.
@@ -265,4 +267,102 @@ service:
 
 	found := check(t, src)
 	require.Len(t, found, 2, "each exporter names the extension")
+}
+
+// The schema is what lets the rule find a reference nobody taught it about.
+// "checkpoint.store" is not a pair the rule carries; the marker on the field is
+// the whole reason it is checked, which is what stops the check falling behind
+// upstream one setting at a time.
+func TestUndefinedExtensionReferenceFollowsASchemaMarker(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers:
+  filelog:
+    checkpoint:
+      store: file_storage
+exporters: {debug: }
+service:
+  pipelines:
+    logs: {receivers: [filelog], exporters: [debug]}
+`
+
+	found := marked(t, src)
+	require.Len(t, found, 1)
+	assert.Equal(t,
+		`receiver "filelog" references storage extension "file_storage" `+
+			`which is not declared under extensions`,
+		found[0].Message)
+	assert.Equal(t, "receivers.filelog.checkpoint.store", found[0].Path)
+	assert.Equal(t, 5, found[0].Position.Line)
+}
+
+// A marker that only says the value has to resolve still reports, and reads as
+// a plain extension rather than as a role the schema never named.
+func TestUndefinedExtensionReferenceWithoutARole(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers:
+  filelog:
+    helper: my_helper
+exporters: {debug: }
+service:
+  pipelines:
+    logs: {receivers: [filelog], exporters: [debug]}
+`
+
+	found := marked(t, src)
+	require.Len(t, found, 1)
+	assert.Equal(t,
+		`receiver "filelog" references extension "my_helper" which is not declared under extensions`,
+		found[0].Message)
+}
+
+// The built-in pair and the marker reach the same scalar from different
+// levels, and a config checked against a schema carrying both must not be told
+// about it twice.
+func TestUndefinedExtensionReferenceReportsAMarkedQueueOnce(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+exporters:
+  otlphttp:
+    endpoint: https://backend:4318
+    sending_queue:
+      storage: file_storage
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlphttp]}
+`
+
+	found := marked(t, src)
+	require.Len(t, found, 1)
+	assert.Equal(t, "exporters.otlphttp.sending_queue.storage", found[0].Path)
+	assert.Contains(t, found[0].Docs, "exporter/exporterhelper/README.md")
+}
+
+// marked runs the rule against a schema whose markers stand in for the ones a
+// generated schema carries, since the fixture schema is otherwise unmarked.
+func marked(t *testing.T, src string) diag.Diagnostics {
+	t.Helper()
+
+	sch := ruletest.Schema()
+	sch.Components[config.KindReceiver]["filelog"].Fields = &schema.Field{
+		Type: "map",
+		Children: map[string]*schema.Field{
+			"checkpoint": {Type: "map", Children: map[string]*schema.Field{
+				"store": {Type: "string", ExtensionRef: schema.RoleStorage},
+			}},
+			"helper": {Type: "string", ExtensionRef: schema.RoleExtension},
+		},
+	}
+	sch.Components[config.KindExporter]["otlphttp"].
+		Fields.Children["sending_queue"].Children["storage"].ExtensionRef = schema.RoleStorage
+
+	found, err := ruletest.RunWith(undefinedextensionreference.New(), src, ruletest.Options{Schema: sch})
+	require.NoError(t, err, "parse")
+
+	return found
 }

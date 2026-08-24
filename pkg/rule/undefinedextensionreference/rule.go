@@ -25,7 +25,7 @@ type undefinedExtensionReference struct{ rule.Base }
 func (r undefinedExtensionReference) Check(ctx *rule.Context) {
 	for _, ref := range ctx.Index.ExtensionRefs() {
 		subject := string(ref.Component.Kind) + " " + rule.Quote(ref.Component.ID.String()) +
-			" references " + ref.Role + " extension " + rule.Quote(ref.ID.String())
+			" references " + ref.Subject() + " " + rule.Quote(ref.ID.String())
 
 		if _, declared := ctx.Index.Declared(config.KindExtension, ref.ID); !declared {
 			// A name declared under another section lands here too; the hint

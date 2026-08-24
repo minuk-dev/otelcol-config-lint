@@ -188,7 +188,7 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 	ruleCtx := rule.Context{
 		File:   f,
 		Schema: l.opts.Schema,
-		Index:  rule.NewIndex(f),
+		Index:  rule.NewIndex(f, l.opts.Schema),
 		Avail:  nil,
 		Dists:  nil,
 		Strict: l.opts.Strict,

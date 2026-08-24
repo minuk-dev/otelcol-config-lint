@@ -365,7 +365,9 @@ There is deliberately no flag form of the overrides.
 extension a component's own settings name — an exporter's
 `sending_queue.storage`, an `auth.authenticator` — that nothing declares, or
 that is declared and then left out of `service.extensions`, which the collector
-refuses to start on), `unused-component`, `duplicate-reference`,
+refuses to start on; the field schema is what says which settings hold one, so
+a setting upstream adds is checked as soon as its schema lands),
+`unused-component`, `duplicate-reference`,
 `connector-wiring` (a connector must export from one pipeline and receive into
 another, and must not close a loop).
 
@@ -921,6 +923,24 @@ References between those schemas are followed across modules, so a component's
 shared settings — `sending_queue`, `retry_on_failure`, TLS, gRPC client options
 — are expanded in full. What cannot be resolved stays open rather than being
 reported, so partial coverage never produces false positives.
+
+A setting that decodes into a `component.ID` is marked, since nothing in the
+value says so — a storage id and a directory path are both strings:
+
+```yaml
+sending_queue:
+  type: map
+  children:
+    storage: {type: string, extensionRef: storage}
+```
+
+That marker is what `undefined-extension-reference` reads, so which settings
+name an extension is derived from the sources rather than maintained as a list
+in the linter. The role — `storage`, `auth`, or a plain `extension` for a key
+the generator has no name for — is only what the diagnostic calls it. Schemas
+generated before the marker existed keep working: the rule still knows
+`sending_queue.storage` and `auth.authenticator` on its own, and that fallback
+falls away as the registry is regenerated.
 
 ## Layout
 
