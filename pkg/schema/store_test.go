@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -51,6 +52,19 @@ func TestCompare(t *testing.T) {
 		{"v0.110.1", "v0.110.0", 1},
 		{"v1.0.0", "v0.999.0", 1},
 		{"v0.157.0-rc.1", "v0.157.0", -1},
+		// A pre-release suffix is compared field by field, and a field of
+		// digits as a number: byte order would put rc.10 below rc.2.
+		{"v0.130.0-rc.2", "v0.130.0-rc.10", -1},
+		{"v0.130.0-rc.9", "v0.130.0-rc.10", -1},
+		{"v0.130.0-rc.10", "v0.130.0-rc.2", 1},
+		{"v0.130.0-alpha", "v0.130.0-beta", -1},
+		{"v0.130.0-rc", "v0.130.0-rc.1", -1},
+		{"v0.130.0-rc.1", "v0.130.0-rc.1.1", -1},
+		{"v0.130.0-rc.1", "v0.130.0-rc.1", 0},
+		// A numeric field sorts below an alphanumeric one.
+		{"v0.130.0-1", "v0.130.0-alpha", -1},
+		// Padding a number does not change which number it is.
+		{"v0.130.0-rc.02", "v0.130.0-rc.10", -1},
 	} {
 		got := schema.Compare(tt.a, tt.b)
 		if sign(got) != tt.want {
@@ -67,6 +81,63 @@ func sign(n int) int {
 		return -1
 	default:
 		return 0
+	}
+}
+
+// TestCompareSortsPrereleasesInSemverOrder pins the whole chain rather than
+// each neighbouring pair, because Latest and Nearest read a sorted list: an
+// ordering that is right pairwise and wrong overall still hands the wrong
+// release to --collector-version.
+func TestCompareSortsPrereleasesInSemverOrder(t *testing.T) {
+	t.Parallel()
+
+	want := []string{
+		"v0.130.0-alpha",
+		"v0.130.0-alpha.1",
+		"v0.130.0-beta",
+		"v0.130.0-rc",
+		"v0.130.0-rc.1",
+		"v0.130.0-rc.1.1",
+		"v0.130.0-rc.2",
+		"v0.130.0-rc.9",
+		"v0.130.0-rc.10",
+		"v0.130.0",
+		"v0.130.1-rc.1",
+	}
+
+	shuffled := []string{
+		"v0.130.0-rc.10", "v0.130.0", "v0.130.0-rc.2", "v0.130.0-alpha.1",
+		"v0.130.1-rc.1", "v0.130.0-rc", "v0.130.0-beta", "v0.130.0-rc.9",
+		"v0.130.0-rc.1.1", "v0.130.0-alpha", "v0.130.0-rc.1",
+	}
+
+	sort.Slice(shuffled, func(i, j int) bool { return schema.Compare(shuffled[i], shuffled[j]) < 0 })
+
+	if !slices.Equal(shuffled, want) {
+		t.Errorf("sorted to %v, want %v", shuffled, want)
+	}
+}
+
+// TestNearestSkipsNewerPrereleases pins that the fallback reads the ordering:
+// asking for a release the registry does not have should land on the newest
+// pre-release below it, not on whichever one sorts last as text.
+func TestNearestSkipsNewerPrereleases(t *testing.T) {
+	t.Parallel()
+
+	unknown := &schema.UnknownVersionError{
+		Version: "v0.130.0-rc.9",
+		// Available is sorted newest first, the way Versions returns it.
+		Available: []string{"v0.130.0-rc.10", "v0.130.0-rc.2", "v0.130.0-rc.1"},
+		Tried:     nil,
+	}
+
+	near, found := unknown.Nearest()
+	if !found {
+		t.Fatal("want a nearest version")
+	}
+
+	if near != "v0.130.0-rc.2" {
+		t.Errorf("nearest = %q, want v0.130.0-rc.2", near)
 	}
 }
 
