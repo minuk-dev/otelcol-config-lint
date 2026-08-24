@@ -63,20 +63,26 @@ func ChildNode(n *yaml.Node, key string) mo.Option[*yaml.Node] {
 }
 
 // ScalarChild returns the named scalar of a mapping, when it holds a name
-// worth resolving. An empty value is not a reference, and one built from a
-// confmap expansion is only known once the collector starts.
+// worth resolving.
 func ScalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
 	val, written := ChildNode(n, key).Get()
 	if !written {
 		return mo.None[*yaml.Node]()
 	}
 
-	val = ResolveAlias(val)
-	if val == nil || val.Kind != yaml.ScalarNode || val.Value == "" || HasExpansion(val.Value) {
+	return ScalarName(val)
+}
+
+// ScalarName returns the node when it holds a name worth resolving. An empty
+// value is not a reference, and one built from a confmap expansion is only
+// known once the collector starts.
+func ScalarName(n *yaml.Node) mo.Option[*yaml.Node] {
+	n = ResolveAlias(n)
+	if n == nil || n.Kind != yaml.ScalarNode || n.Value == "" || HasExpansion(n.Value) {
 		return mo.None[*yaml.Node]()
 	}
 
-	return mo.Some(val)
+	return mo.Some(n)
 }
 
 // WalkSettings visits every mapping inside a component's settings, together

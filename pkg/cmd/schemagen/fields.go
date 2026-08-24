@@ -254,6 +254,10 @@ func (s *schemaSet) merge(into, from *schema.Field) *schema.Field {
 		into.Enum = from.Enum
 	}
 
+	if into.ExtensionRef == "" {
+		into.ExtensionRef = from.ExtensionRef
+	}
+
 	if from.Open {
 		into.Open = true
 	}
@@ -401,6 +405,10 @@ func enrich(primary, secondary *schema.Field) {
 
 	if len(primary.Enum) == 0 {
 		primary.Enum = secondary.Enum
+	}
+
+	if primary.ExtensionRef == "" {
+		primary.ExtensionRef = secondary.ExtensionRef
 	}
 
 	if secondary.Open {

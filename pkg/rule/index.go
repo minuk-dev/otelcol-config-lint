@@ -5,6 +5,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // Index resolves references from the service block to component declarations,
@@ -29,14 +30,16 @@ type Index struct {
 	asExporter map[config.ID][]config.Pipeline
 }
 
-// NewIndex builds an index over a parsed config.
-func NewIndex(f *config.File) *Index {
+// NewIndex builds an index over a parsed config. The schema, which may be nil,
+// is what says which settings hold an extension reference; without one the
+// built-in list is all there is.
+func NewIndex(f *config.File, sch *schema.Schema) *Index {
 	idx := &Index{
 		File:       f,
 		declared:   map[config.Kind]map[config.ID]config.Component{},
 		used:       map[config.Kind]map[config.ID]bool{},
 		enabled:    map[config.ID]bool{},
-		extRefs:    extensionRefs(f),
+		extRefs:    extensionRefs(f, sch),
 		asReceiver: map[config.ID][]config.Pipeline{},
 		asExporter: map[config.ID][]config.Pipeline{},
 	}
@@ -173,18 +176,26 @@ type ExtensionRef struct {
 	Docs string
 }
 
-// extensionField is a settings key whose value names an extension. The list is
-// hardcoded because nothing in the field schema marks a string as an extension
-// id: neither configauth.Config nor the queue config says so, so a schema walk
-// cannot find these on its own.
+// Subject names the reference for a message: "storage extension", or a plain
+// "extension" when all the schema said is that the value has to resolve.
+func (r ExtensionRef) Subject() string {
+	if r.Role == "" || r.Role == schema.RoleExtension {
+		return "extension"
+	}
+
+	return r.Role + " extension"
+}
+
+// extensionField is a settings key whose value names an extension, for the
+// releases whose published schemas predate the extensionRef marker. A schema
+// that carries markers finds these on its own, and finds the ones this list
+// never had.
 type extensionField struct {
 	// parent is the key holding the reference, e.g. "sending_queue", and key
 	// is the field inside it that carries the id.
 	parent, key string
 	// role says what the extension is used for, for the message.
 	role string
-	// docs is the upstream page describing the setting.
-	docs string
 }
 
 // extensionFields lists the settings that name an extension. They are matched
@@ -195,14 +206,28 @@ type extensionField struct {
 // It returns a fresh slice so callers cannot alter what everyone else sees.
 func extensionFields() []extensionField {
 	return []extensionField{
-		{parent: SendingQueueKey, key: StorageKey, role: "storage", docs: ExporterQueueDocs},
-		{parent: "auth", key: "authenticator", role: "auth", docs: AuthDocs},
+		{parent: SendingQueueKey, key: StorageKey, role: schema.RoleStorage},
+		{parent: "auth", key: "authenticator", role: schema.RoleAuth},
+	}
+}
+
+// extensionRefDocs is the upstream page a reference of the given role is
+// described on. It is derived from the role rather than carried in the schema,
+// which would put a URL beside every marked field to say one of two things.
+func extensionRefDocs(role string) string {
+	switch role {
+	case schema.RoleStorage:
+		return ExporterQueueDocs
+	case schema.RoleAuth:
+		return AuthDocs
+	default:
+		return ""
 	}
 }
 
 // extensionRefs collects every extension reference in the file's component
 // settings, in declaration order.
-func extensionRefs(f *config.File) []ExtensionRef {
+func extensionRefs(f *config.File, sch *schema.Schema) []ExtensionRef {
 	return lo.FlatMap(config.Kinds(), func(kind config.Kind, _ int) []ExtensionRef {
 		sec := f.Sections[kind]
 		if sec == nil {
@@ -210,35 +235,117 @@ func extensionRefs(f *config.File) []ExtensionRef {
 		}
 
 		return lo.FlatMap(sec.Components, func(c config.Component, _ int) []ExtensionRef {
-			return componentExtensionRefs(c)
+			return componentExtensionRefs(c, settingsSchema(sch, kind, c))
 		})
 	})
 }
 
-func componentExtensionRefs(c config.Component) []ExtensionRef {
-	var out []ExtensionRef
+// settingsSchema is the field schema describing a component's settings, or nil
+// when the release being targeted has nothing to say about the component.
+func settingsSchema(sch *schema.Schema, kind config.Kind, c config.Component) *schema.Field {
+	if sch == nil {
+		return nil
+	}
 
+	comp, found := sch.Lookup(kind, c.ID.Type)
+	if !found {
+		return nil
+	}
+
+	return comp.Fields
+}
+
+// componentExtensionRefs collects the extension references in one component's
+// settings, in document order.
+//
+// The schema is what finds them: a field marked extensionRef says the scalar
+// written under it names an extension, whatever the key is called and wherever
+// it sits, so a setting upstream adds is checked as soon as its schema lands.
+// The built-in pairs are the fallback, for a component the schema does not
+// describe and for the published schemas generated before the marker existed.
+func componentExtensionRefs(c config.Component, fields *schema.Field) []ExtensionRef {
+	w := &refWalker{comp: c, out: nil}
+	w.walk(fields, c.ValueNode, c.Kind.Section()+"."+c.ID.String(), 0)
+
+	return w.out
+}
+
+// refWalker descends a component's settings alongside the schema describing
+// them, collecting the extension references it finds.
+type refWalker struct {
+	comp config.Component
+	out  []ExtensionRef
+}
+
+func (w *refWalker) walk(field *schema.Field, n *yaml.Node, path string, depth int) {
+	n = ResolveAlias(n)
+	if n == nil || depth > MaxSettingsDepth {
+		return
+	}
+
+	switch n.Kind {
+	case yaml.MappingNode:
+		w.walkMap(field, n, path, depth)
+	case yaml.SequenceNode:
+		item := childSchema(field, "item")
+		for i, el := range n.Content {
+			w.walk(item, el, IndexPath(path, i), depth+1)
+		}
+	default:
+		// A scalar the schema did not mark is just a value.
+	}
+}
+
+func (w *refWalker) walkMap(field *schema.Field, n *yaml.Node, path string, depth int) {
 	fields := extensionFields()
 
-	WalkSettings(c.ValueNode, c.Kind.Section()+"."+c.ID.String(), 0, func(n *yaml.Node, path string) {
-		for _, e := range MapEntries(n, path) {
-			field, held := lo.Find(fields, func(f extensionField) bool { return f.parent == e.Key })
-			if !held {
-				continue
+	for _, e := range MapEntries(n, path) {
+		child := childSchema(field, e.Key)
+
+		if child != nil && child.ExtensionRef != "" {
+			if name, named := ScalarName(e.Node).Get(); named {
+				w.record(name, e.Path, child.ExtensionRef)
 			}
 
-			name, named := ScalarChild(e.Node, field.key).Get()
-			if !named {
-				continue
-			}
-
-			out = append(out, ExtensionRef{
-				ID: config.ParseID(name.Value), Node: name,
-				Path: JoinPath(e.Path, field.key), Component: c,
-				Role: field.role, Docs: field.docs,
-			})
+			continue
 		}
-	})
 
-	return out
+		// The built-in pair reaches a level further down than the marker does,
+		// so it is skipped where the schema marks the leaf itself; taking both
+		// would report the same name twice.
+		builtin, held := lo.Find(fields, func(f extensionField) bool { return f.parent == e.Key })
+		if held && !marked(child, builtin.key) {
+			if name, named := ScalarChild(e.Node, builtin.key).Get(); named {
+				w.record(name, JoinPath(e.Path, builtin.key), builtin.role)
+			}
+		}
+
+		w.walk(child, e.Node, e.Path, depth+1)
+	}
+}
+
+func (w *refWalker) record(name *yaml.Node, path, role string) {
+	w.out = append(w.out, ExtensionRef{
+		ID: config.ParseID(name.Value), Node: name, Path: path,
+		Component: w.comp, Role: role, Docs: extensionRefDocs(role),
+	})
+}
+
+// childSchema is what the schema says about one key, or nil where it says
+// nothing -- an unknown component, an open map, a release generated before the
+// key existed.
+func childSchema(field *schema.Field, key string) *schema.Field {
+	if field == nil {
+		return nil
+	}
+
+	return field.Children[key]
+}
+
+// marked reports whether the schema already says the named child is an
+// extension reference.
+func marked(field *schema.Field, key string) bool {
+	child := childSchema(field, key)
+
+	return child != nil && child.ExtensionRef != ""
 }
