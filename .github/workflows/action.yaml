@@ -84,6 +84,24 @@ jobs:
           test "${{ steps.invalid.outputs.invalid }}" = "2"
           test "${{ steps.invalid.outputs.valid }}" = "0"
 
+      # The json output is the one path that reads the report file back out
+      # rather than re-running the linter, so it is what covers the temporary
+      # file the entrypoint draws per run and removes on the way out.
+      - name: A JSON run prints the report and still reports the counts
+        id: json
+        uses: ./
+        with:
+          files: testdata/valid
+          collector-version: v0.157.0
+          schema-location: testdata/schemas
+          output: json
+
+      - name: The counts are the same whichever format was asked for
+        run: |
+          test "${{ steps.json.outputs.exit-code }}" = "0"
+          test "${{ steps.json.outputs.valid }}" = "1"
+          test "${{ steps.json.outputs.invalid }}" = "0"
+
       - name: A rule that is turned off is not reported
         id: disabled
         uses: ./

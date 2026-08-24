@@ -14,7 +14,11 @@ branding:
 # are left out; a runner has nothing to gain from either.
 inputs:
   files:
-    description: Files, directories or globs to check, separated by spaces or newlines.
+    description: >-
+      Files, directories or globs to check, separated by spaces or newlines. A
+      path cannot contain a space: the list is split on whitespace, which is
+      also what lets a glob such as configs/*.yaml be expanded against the
+      workspace. Point the input at the containing directory instead.
     required: false
     default: "."
   collector-version:
