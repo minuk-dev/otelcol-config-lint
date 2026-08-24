@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +18,8 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
+
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
 // Extensions returns the schema file suffixes, in preference order. The
@@ -143,6 +146,37 @@ func (s Store) Versions(ctx context.Context) []string {
 	return out
 }
 
+// Availability returns which releases ship each component type in the store's
+// distribution, oldest first, and nil when no location publishes the component
+// index that says so.
+//
+// It is the whole registry's answer for one fetch. Working it out from the
+// schemas instead means loading every release the registry serves -- a
+// multi-megabyte document each, against a rate limit that counts requests --
+// to learn which releases one component type appears in.
+//
+// The answer is read against the releases that location serves now, so a
+// registry that has since dropped an old release is not quoted as still
+// serving it.
+func (s Store) Availability(ctx context.Context) map[config.Kind]map[string][]string {
+	for _, loc := range s.locations() {
+		comps := s.componentsAt(ctx, loc)
+		if comps == nil || !comps.Has(s.distribution()) {
+			continue
+		}
+
+		return comps.Expand(s.distribution(), s.versionsAt(ctx, loc))
+	}
+
+	return nil
+}
+
+// Remote reports whether any location is fetched over the network, where
+// reading a schema costs a request rather than a file read.
+func (s Store) Remote() bool {
+	return slices.ContainsFunc(s.locations(), isRemote)
+}
+
 // Distributions lists the distributions the store can serve, sorted. Only a
 // registry says what it carries, so other location kinds report none.
 func (s Store) Distributions(ctx context.Context) []string {
@@ -253,6 +287,30 @@ func (s Store) indexAt(ctx context.Context, loc string) *Index {
 		}
 
 		return idx
+	default:
+		return nil
+	}
+}
+
+// componentsAt reads a location's component availability index, or nil when it
+// publishes none. A registry written before the index existed is one of those,
+// and so is every location that is not a registry at all.
+func (s Store) componentsAt(ctx context.Context, loc string) *Components {
+	switch kindOf(loc) {
+	case locRemote:
+		comps, err := s.fetchComponents(ctx, loc)
+		if err != nil {
+			return nil
+		}
+
+		return comps
+	case locDir:
+		comps, err := readComponentsFile(s.fs(), filepath.Join(loc, ComponentsFile))
+		if err != nil {
+			return nil
+		}
+
+		return comps
 	default:
 		return nil
 	}
@@ -474,39 +532,73 @@ func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
 		return nil, err
 	}
 
-	cached, ok := indexMemo.Load(root)
+	return indexMemo.do(root, func() (*Index, error) {
+		// The index grows a line per release, so what is cached from a previous
+		// run is offered back with its validator rather than trusted outright.
+		body, err := s.get(ctx, join(root, IndexFile), revalidated)
+		if err != nil {
+			return nil, err
+		}
+
+		return ReadIndex(bytes.NewReader(body))
+	})
+}
+
+// fetchComponents reads a remote registry's component availability index, once
+// per registry and on the same terms as its index: a registry publishing none
+// answers 404, and remembering that is what keeps the next unknown component
+// from asking again.
+func (s Store) fetchComponents(ctx context.Context, root string) (*Components, error) {
+	err := s.refuseInsecure(root)
+	if err != nil {
+		return nil, err
+	}
+
+	return componentsMemo.do(root, func() (*Components, error) {
+		// It gains an entry per component added or dropped, so it is
+		// revalidated rather than kept, the way the index is.
+		body, err := s.get(ctx, join(root, ComponentsFile), revalidated)
+		if err != nil {
+			return nil, err
+		}
+
+		return ReadComponents(bytes.NewReader(body))
+	})
+}
+
+// docMemo holds what reading one registry document came to, keyed by the root
+// it was read from and kept for the life of the process.
+type docMemo[T any] struct{ m sync.Map }
+
+// docResult is one read, kept whether it succeeded or not.
+type docResult[T any] struct {
+	doc T
+	err error
+}
+
+// do returns what the root was read as, reading it only the first time it is
+// asked for.
+func (d *docMemo[T]) do(root string, read func() (T, error)) (T, error) {
+	cached, ok := d.m.Load(root)
 	if ok {
-		result, _ := cached.(indexResult)
+		result, _ := cached.(docResult[T])
 
-		return result.index, result.err
+		return result.doc, result.err
 	}
 
-	result := indexResult{index: nil, err: nil}
+	doc, err := read()
+	d.m.Store(root, docResult[T]{doc: doc, err: err})
 
-	body, err := s.get(ctx, join(root, IndexFile), revalidated)
-	if err == nil {
-		result.index, result.err = ReadIndex(bytes.NewReader(body))
-	} else {
-		result.err = err
-	}
-
-	indexMemo.Store(root, result)
-
-	return result.index, result.err
+	return doc, err
 }
 
-// indexResult is what one registry's index fetch came to, kept whether it
-// succeeded or not.
-type indexResult struct {
-	index *Index
-	err   error
-}
-
-// indexMemo holds each remote registry's index for the life of the process,
-// keyed by the root it was read from.
+// The documents a registry publishes beside its schemas, each read once.
 //
-//nolint:gochecknoglobals // a registry has one index, and the point is to fetch it once
-var indexMemo sync.Map
+//nolint:gochecknoglobals // a registry has one of each, and the point is to fetch them once
+var (
+	indexMemo      docMemo[*Index]
+	componentsMemo docMemo[*Components]
+)
 
 // join appends path segments to a registry root, which is a URL or a local
 // directory. Slashes are right for both: filepath.Join would break URLs on

@@ -736,11 +736,12 @@ otelcol-config-lint run --schema-location ../otelcol-config-schemas config.yaml
 ```
 
 A location is a registry directory or URL (one holding `index.json`, laid out
-as `<distribution>/<version>.<ext>`), a `{{.Version}}`/`{{.Distribution}}`
-template naming a single file, or `default` for the published registry. Repeat
-the flag to search several in order, so a private distribution's schema can take
-precedence over the public ones, or so a vendored copy answers before the
-network is tried.
+as `<distribution>/<version>.<ext>`, optionally with the `components.json`
+described [below](#which-releases-have-a-component)), a
+`{{.Version}}`/`{{.Distribution}}` template naming a single file, or `default`
+for the published registry. Repeat the flag to search several in order, so a
+private distribution's schema can take precedence over the public ones, or so a
+vendored copy answers before the network is tried.
 
 A remote location must be `https://`. The schema is what every rule reasons
 from — which components exist, which settings they take — so anyone able to
@@ -749,6 +750,28 @@ location is refused unless `--insecure-schema-location` says otherwise, which
 is there for a registry served on localhost. One download is capped at 32 MiB,
 so a registry that is hostile or merely broken cannot stream the linter out of
 memory.
+
+### Which releases have a component
+
+An unknown component is worth explaining — `"logging" exists in v0.110.0 but
+not in v0.157.0` says something a "did you mean" cannot — but the question is
+about every release at once, and a schema describes one. Answering it by
+reading them is a multi-megabyte download per release, tens of them, to produce
+a single line of hint, and against a rate limit that counts requests it is the
+shape most likely to be throttled.
+
+So the registry publishes `components.json` beside the index: the releases each
+component type is shipped in, per distribution, as one document read in one
+request. It is only read by a run that actually meets an unknown component, and
+it is written as spans (`from`, and `to` once the component is gone), so a new
+release does not rewrite the entry of everything it left alone.
+
+A registry publishing none is still read the old way, one schema per release —
+without limit for a directory on disk, and no further back than the twelve
+newest releases over the network, which are the ones a hint is usually about. A
+walk that lost half its releases to a throttled registry reports nothing rather
+than naming whichever release happened to answer: a hint that is quietly wrong
+is worse than no hint at all.
 
 ### Caching
 
@@ -799,9 +822,13 @@ repository, along with the `index.json` listing them. The index also records
 the extension each distribution's schemas should be fetched with, so reading
 one over the network costs a single request instead of probing `.yaml`, `.yml`
 and `.json` in turn; a distribution whose releases do not agree on one form
-names none, and is probed as before. The download goes through
-the `go` command, so `GOPROXY`, `GOPRIVATE` and whatever credentials this
-machine builds with apply unchanged: a **private component resolves exactly as
+names none, and is probed as before. `components.json` is written beside it,
+from the schemas the registry is left holding, so that
+[an unknown component can be placed](#which-releases-have-a-component) without
+downloading the registry; a distribution whose releases could not all be read is
+left out of it rather than described from half of them. The download goes
+through the `go` command, so `GOPROXY`, `GOPRIVATE` and whatever credentials
+this machine builds with apply unchanged: a **private component resolves exactly as
 it does for the build that consumes it**, and a `replaces:` entry pointing at a
 checkout is read from there. A component that ships no `metadata.yaml` is still
 recorded, from what the manifest says, so a config naming it is not reported as

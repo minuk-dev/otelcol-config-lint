@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmd/schemagen"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -439,6 +440,74 @@ func TestIndexNamesTheExtensionPublished(t *testing.T) {
 
 	_, named = regenerated.Extension("custom")
 	assert.False(t, named, "releases that disagree on a form should name none")
+}
+
+// TestPublishesComponentAvailability covers the document that answers "exists
+// in v0.110.0 but not in v0.157.0". Without it the only way to know is to read
+// every schema the registry serves, which against the published one is a
+// multi-megabyte download per release to produce a single hint.
+func TestPublishesComponentAvailability(t *testing.T) {
+	t.Parallel()
+
+	modules, out := t.TempDir(), t.TempDir()
+	manifest := singleComponentManifest(t, modules)
+
+	// An older release the registry already held, carrying a component this
+	// one no longer ships.
+	require.NoError(t, os.MkdirAll(filepath.Join(out, "custom"), 0o750))
+	writeFile(t, filepath.Join(out, "custom", "v0.150.0.yaml"),
+		"collectorVersion: v0.150.0\ndistribution: custom\ncomponents:\n"+
+			"  receiver:\n    otlp:\n      type: otlp\n    logging:\n      type: logging\n")
+
+	code, _, stderr := run(t, "--builder", "custom="+manifest, "--registry", out,
+		"--formats", "yaml", "--cache", t.TempDir())
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+
+	var comps schema.Components
+
+	require.NoError(t, json.Unmarshal(
+		[]byte(readFile(t, filepath.Join(out, schema.ComponentsFile))), &comps))
+
+	spans := comps.Distributions["custom"][config.KindReceiver]
+
+	// A component the newest release still ships ends its span open, so adding
+	// a release does not rewrite the entry of everything it left alone.
+	assert.Equal(t, []schema.Span{{From: "v0.150.0", To: ""}}, spans["otlp"])
+	assert.Equal(t, []schema.Span{{From: "v0.150.0", To: "v0.150.0"}}, spans["logging"],
+		"a dropped component should be named as ending where it ended")
+
+	// Read back the way a linter reads it: the releases each component is in,
+	// oldest first.
+	avail := comps.Expand("custom", []string{"v0.157.0", "v0.150.0"})
+	assert.Equal(t, []string{"v0.150.0", "v0.157.0"}, avail[config.KindReceiver]["otlp"])
+	assert.Equal(t, []string{"v0.150.0"}, avail[config.KindReceiver]["logging"])
+}
+
+// TestAvailabilityLeavesOutWhatItCouldNotRead pins that a distribution is
+// described from every release it serves or not at all: a release missing from
+// the walk would read as a component dropped and added back, and a reader that
+// finds no entry falls back to the schemas instead.
+func TestAvailabilityLeavesOutWhatItCouldNotRead(t *testing.T) {
+	t.Parallel()
+
+	modules, out := t.TempDir(), t.TempDir()
+	manifest := singleComponentManifest(t, modules)
+
+	// A release the index will list and no schema can be read from.
+	require.NoError(t, os.MkdirAll(filepath.Join(out, "custom"), 0o750))
+	writeFile(t, filepath.Join(out, "custom", "v0.150.0.yaml"), "collectorVersion: v0.150.0\ncomponents: [\n")
+
+	code, _, stderr := run(t, "--builder", "custom="+manifest, "--registry", out,
+		"--formats", "yaml", "--cache", t.TempDir())
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stderr, "no availability published",
+		"a distribution left out of the document should say so")
+
+	var comps schema.Components
+
+	require.NoError(t, json.Unmarshal(
+		[]byte(readFile(t, filepath.Join(out, schema.ComponentsFile))), &comps))
+	assert.False(t, comps.Has("custom"), "a half-read distribution should not be described")
 }
 
 // TestWritesOneFile covers the single-manifest form: the schema goes where
