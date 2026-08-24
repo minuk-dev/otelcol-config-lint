@@ -66,12 +66,13 @@ is invalid, and reports a usage error — a rule that does not exist, an unreada
 settings file — distinctly, with exit code 2.
 
 Every input is the `run` flag of the same name, so the flag table below is the
-whole reference: `files` (default `.`, whitespace-separated, globs allowed),
-`collector-version`, `distribution`, `schema-location` (one per line to search
-several in order), `strict`, `ignore-missing-schemas`, `min-severity`,
-`fail-on`, `default`, `enable`, `disable`, `severity`, `exclude`, `output`
-(default `github`), `config`, `no-config`, `summary` (default `true`),
-`verbose` and `exit-on-error`. `--concurrency`, `--no-color`, `--no-cache` and
+whole reference: `files` (default `.`, whitespace-separated and so unable to
+carry a path with a space in it, globs allowed), `collector-version`,
+`distribution`, `schema-location` (one per line to search several in order),
+`strict`, `ignore-missing-schemas`, `min-severity`, `fail-on`, `default`,
+`enable`, `disable`, `severity`, `exclude`, `output` (default `github`),
+`config`, `no-config`, `summary` (default `true`), `verbose` and
+`exit-on-error`. `--concurrency`, `--no-color`, `--no-cache` and
 `--insecure-schema-location` are left out: a runner gains nothing from the
 first two, a fresh container has no cache to read, and a workflow that reads
 its schemas over plain HTTP is one whose findings anyone on the path can
