@@ -82,11 +82,10 @@ type sendingQueue struct {
 	// counts: it resolves to an extension the linter cannot see, not to
 	// nothing. Only an empty or null value is nobody naming anything.
 	persisted bool
-	// unresolved reports that the document does not settle the question here: a
-	// merge key that may be what supplies storage, or an enabled the collector
-	// only learns once an expansion resolves. Either way the queue read here is
-	// not necessarily the queue that runs, and a finding would be about a
-	// config nobody wrote.
+	// unresolved reports that the document does not settle the question here:
+	// an enabled the collector only learns once an expansion resolves. The
+	// queue read here is then not necessarily the queue that runs, and a
+	// finding would be about a config nobody wrote.
 	unresolved bool
 }
 
@@ -116,14 +115,8 @@ func readSendingQueue(c config.Component) sendingQueue {
 	var block *yaml.Node
 
 	for _, e := range rule.MapEntries(settings, "") {
-		switch e.Key {
-		case rule.SendingQueueKey:
+		if e.Key == rule.SendingQueueKey {
 			queue.node, queue.written, block = e.Node, true, rule.ResolveAlias(e.Node)
-		case rule.MergeKey:
-			// The merge may be what supplies the whole block.
-			queue.unresolved = true
-		default:
-			// Every other setting is another rule's business.
 		}
 	}
 
@@ -131,10 +124,6 @@ func readSendingQueue(c config.Component) sendingQueue {
 		return queue
 	}
 
-	// A merge outside the block cannot reach into one the exporter writes
-	// itself: a key present locally replaces the merged value outright. Only
-	// what is inside the block can still leave the queue unsettled.
-	queue.unresolved = false
 	readQueueBlock(block, &queue)
 
 	return queue
@@ -166,8 +155,6 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 			// Whether what was written is a name the collector can resolve is
 			// invalid-value's and undefined-extension-reference's to say.
 			queue.persisted = !rule.IsNull(val) && (val.Kind != yaml.ScalarNode || val.Value != "")
-		case rule.MergeKey:
-			queue.unresolved = true
 		default:
 			// Every other queue setting is the field schema's business.
 		}

@@ -50,10 +50,6 @@ type batchProcessor struct {
 	// written. The entries are read where the duplicates are reported, since
 	// each finding names the entry it found.
 	metadataKeys *yaml.Node
-	// merged reports a YAML merge key among the settings. The document is read
-	// as written, so a key the merge supplies looks absent here, and a check
-	// that would otherwise fill in a default has to say nothing instead.
-	merged bool
 }
 
 // New builds the rule.
@@ -85,7 +81,6 @@ func readBatch(c config.Component) batchProcessor {
 		sendBatchMaxSize: rule.Absent(),
 		timeout:          rule.Absent(),
 		metadataKeys:     nil,
-		merged:           false,
 	}
 
 	if c.ValueNode == nil || c.ValueNode.Kind != yaml.MappingNode {
@@ -102,8 +97,6 @@ func readBatch(c config.Component) batchProcessor {
 			proc.timeout = rule.ReadDuration(e.Node)
 		case "metadata_keys":
 			proc.metadataKeys = e.Node
-		case rule.MergeKey:
-			proc.merged = true
 		default:
 			// Every other setting is the field schema's business.
 		}
@@ -143,15 +136,8 @@ func (r batchSizeBounds) checkSizes(ctx *rule.Context, proc batchProcessor) {
 	}
 
 	size := int64(defaultSendBatchSize)
-
-	switch {
-	case proc.sendBatchSize.Known:
+	if proc.sendBatchSize.Known {
 		size = proc.sendBatchSize.Num
-	case proc.merged:
-		// The merge key may be what sets send_batch_size, and the collector
-		// resolves it before either number is read. Filling in the default
-		// here would report a figure the config overrides.
-		return
 	}
 
 	if proc.sendBatchMaxSize.Num >= size {

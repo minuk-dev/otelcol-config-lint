@@ -403,6 +403,17 @@ data, the queue sizes and `otelcol_exporter_send_failed_*` among them.
 **Security** — `insecure-tls`, `receiver-binds-all-interfaces`,
 `debug-extension-exposed`, `hardcoded-secret`.
 
+Every rule reads the config the collector will read, not the one on the page.
+YAML anchors, aliases and `<<` merge keys are resolved when the file is parsed,
+the way confmap resolves them through yaml.v3 before the collector sees a single
+setting — so a component whose settings come from a shared base is checked
+against what it will actually run with, and `<<` is never reported as a setting,
+because it is not one. A key a component writes itself still wins over the one
+its merge supplies, which is the merge key's purpose, so `duplicate-key` reads
+the document as written and stays quiet about the override. Findings keep the
+line they were written on: a setting a merge supplies is reported against the
+line in the anchor, which is the line to edit.
+
 Every practice, telemetry and security rule cites the upstream page it rests on
 — the `memorylimiterprocessor`, `batchprocessor`, `exporterhelper`,
 `debugexporter`, `tailsamplingprocessor` and `probabilisticsamplerprocessor`
@@ -487,10 +498,11 @@ its own. Where only some of them do, the pipeline is under-batched on the legs
 that do not, so the finding names the exporter and sits on the line that wires
 it in — that exporter's settings are where the fix is written. A connector in
 the exporter slot is not a leg out of the collector and is not counted; it feeds
-another pipeline, which has exporters of its own. An exporter whose settings
-come from a merge key or an expansion counts as unknown rather than as not
-batching, for the same reason the field rules leave what they cannot resolve
-alone.
+another pipeline, which has exporters of its own. An exporter whose queue is built from
+an expansion counts as unknown rather than as not batching, for the same reason
+the field rules leave what they cannot resolve alone. A merge key is not one of
+those: it is resolved when the file is parsed, the way the collector resolves
+it, so what an anchor supplies is read like anything written in place.
 
 What the document writes decides whether there is a finding; what the field
 schema describes decides only which fix the hint may name. The queue batcher is
@@ -666,8 +678,9 @@ default in `v0.110`. So is a hostname other than `localhost`, since what a name
 resolves to is a property of the network rather than of the file, and an
 address supplied by `${env:...}`. An expansion standing in for only the *port*
 is still reported — `0.0.0.0:${env:PPROF_PORT}` says plainly who can reach it —
-and an endpoint a `<<` merge supplies is read from the mapping it merges, so
-sharing one debugging block between extensions does not hide it.
+and an endpoint a `<<` merge supplies is read like one written in place, since
+merges are resolved when the file is parsed, so sharing one debugging block
+between extensions does not hide it.
 
 `hardcoded-secret` is the one rule about the file rather than the collector.
 Configs live in git, and exporter credentials are written in the same file as

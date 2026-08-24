@@ -107,8 +107,15 @@ func TestMissingBatch(t *testing.T) {
 			settings: "    sending_queue: ${env:QUEUE}",
 			want:     false,
 		},
-		"a queue built from a merge key": {
+		// A merge key is resolved before a rule sees it, so what it supplies is
+		// read like anything else: this queue is sized and persisted and does
+		// not batch, which is the finding.
+		"a queue a merge key fills in with no batcher": {
 			settings: "    sending_queue:\n      <<: &queue {queue_size: 5000}\n      storage: file_storage",
+			want:     true,
+		},
+		"a queue a merge key gives a batcher": {
+			settings: "    sending_queue:\n      <<: &queue {batch: {min_size: 100}}\n      storage: file_storage",
 			want:     false,
 		},
 	}

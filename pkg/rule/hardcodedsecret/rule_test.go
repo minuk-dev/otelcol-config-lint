@@ -281,9 +281,9 @@ service:
 	assert.Equal(t, "exporters.otlp.backends[0].token", found[1].Path)
 }
 
-// An alias is the anchor it points at, written once and used twice. Following
-// it would report the same credential in two places, and only one of them is
-// somewhere to edit.
+// An alias is the anchor it points at, written once and used twice. The parser
+// resolves it, so both exporters carry the same node, and reporting it per use
+// would put the same line in the report twice with only one place to edit.
 func TestHardcodedSecretReportsAnAnchorOnce(t *testing.T) {
 	t.Parallel()
 

@@ -246,33 +246,21 @@ const (
 func readQueueBatching(c config.Component) batching {
 	var block *yaml.Node
 
-	merged := false
-
 	settings := rule.ResolveAlias(c.ValueNode)
 	if settings != nil && settings.Kind == yaml.MappingNode {
 		for _, e := range rule.MapEntries(settings, "") {
-			switch e.Key {
-			case rule.SendingQueueKey:
+			if e.Key == rule.SendingQueueKey {
 				block = rule.ResolveAlias(e.Node)
-			case rule.MergeKey:
-				// The merge may be what supplies the whole block.
-				merged = true
-			default:
-				// Every other setting is another rule's business.
 			}
 		}
 	}
 
 	switch {
 	case block != nil && block.Kind == yaml.MappingNode:
-		// A merge outside the block cannot reach into one the exporter writes
-		// itself: a key present locally replaces the merged value outright.
 		return readBatchBlock(block)
 	case block != nil && !rule.IsNull(block):
 		// A queue the collector builds from an expansion may well be one that
 		// batches, and nothing here can see what it holds.
-		return batchUnknown
-	case merged:
 		return batchUnknown
 	}
 
@@ -289,21 +277,10 @@ func readQueueBatching(c config.Component) batching {
 // an exporter that names a batcher has said what it wants, and telling it to
 // batch would be advising the setting it already writes.
 func readBatchBlock(block *yaml.Node) batching {
-	merged := false
-
 	for _, e := range rule.MapEntries(block, "") {
-		switch e.Key {
-		case rule.BatchKey:
+		if e.Key == rule.BatchKey {
 			return batchQueue
-		case rule.MergeKey:
-			merged = true
-		default:
-			// Every other queue setting is another rule's business.
 		}
-	}
-
-	if merged {
-		return batchUnknown
 	}
 
 	return batchNone

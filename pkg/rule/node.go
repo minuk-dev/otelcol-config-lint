@@ -13,11 +13,6 @@ import (
 // "false" is not mistaken for the value.
 const BoolTag = "!!bool"
 
-// MergeKey is the YAML merge key. A key it supplies looks absent to a rule
-// reading the document as written, so a check that would otherwise fill in a
-// default has to say nothing instead.
-const MergeKey = "<<"
-
 // mappingStride is the step between keys in a yaml.Node mapping, whose Content
 // alternates key, value, key, value.
 const mappingStride = 2
@@ -109,6 +104,11 @@ func WalkSettings(n *yaml.Node, path string, depth int, visit func(*yaml.Node, s
 }
 
 // ResolveAlias follows an anchor reference to the node it stands for.
+//
+// The parser resolves every alias it can, so what is left for this to follow
+// is the one it cannot: an anchor that contains itself, which yaml.v3 refuses
+// to decode and the collector therefore never loads. The depth bound is what
+// makes that safe to walk.
 func ResolveAlias(n *yaml.Node) *yaml.Node {
 	for i := 0; n != nil && n.Kind == yaml.AliasNode && i < MaxSettingsDepth; i++ {
 		n = n.Alias
