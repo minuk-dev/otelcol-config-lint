@@ -395,7 +395,8 @@ func (o *Options) registerBuilderFlag(cmd *cobra.Command) {
 //
 // Pruning runs before the index so the index is written from what the registry
 // is left holding, which is the whole point of rebuilding it by listing the
-// directory rather than editing it.
+// directory rather than editing it. The availability index follows the index,
+// so both describe the same releases.
 func (o *Options) publishRegistry() error {
 	if o.registryDir == "" {
 		return nil
@@ -406,7 +407,12 @@ func (o *Options) publishRegistry() error {
 		return err
 	}
 
-	return o.writeIndex()
+	idx, err := o.writeIndex()
+	if err != nil {
+		return err
+	}
+
+	return o.writeComponents(idx)
 }
 
 // checkDestination settles where the schemas are written. A run either writes
