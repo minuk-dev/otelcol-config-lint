@@ -322,6 +322,60 @@ replaces:
 	assert.NotContains(t, stdout, "type: int", "a text-decoded type was read as its underlying number")
 }
 
+// A setting that decodes into a component.ID names an extension, and that is
+// the only thing that says so: a storage id and a directory path are both
+// strings by the time they reach the schema. Marking it here is what lets
+// undefined-extension-reference find a reference without carrying a list of
+// the settings that hold one.
+func TestExtensionReferencesAreMarked(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	component := module(t, root, "go.opentelemetry.io/collector/component", map[string]string{
+		"identifiable.go": "package component\n\ntype ID struct{}\n\n" +
+			"func (id *ID) UnmarshalText(text []byte) error { return nil }\n",
+	})
+	exporter := module(t, root, "example.com/collector/exporter/otlpexporter", map[string]string{
+		"metadata.yaml": "type: otlp\nstatus:\n  class: exporter\n" +
+			"  stability:\n    beta: [traces]\n",
+		"config.go": "package otlpexporter\n\n" +
+			"import \"go.opentelemetry.io/collector/component\"\n\n" +
+			"type Config struct {\n" +
+			"\tEndpoint string `mapstructure:\"endpoint\"`\n" +
+			"\tQueue QueueConfig `mapstructure:\"sending_queue\"`\n" +
+			"\tAuth AuthConfig `mapstructure:\"auth\"`\n}\n\n" +
+			"type QueueConfig struct {\n" +
+			"\tStorageID *component.ID `mapstructure:\"storage\"`\n}\n\n" +
+			"type AuthConfig struct {\n" +
+			"\tAuthenticatorID component.ID `mapstructure:\"authenticator\"`\n" +
+			"\tWatcherID component.ID `mapstructure:\"watcher\"`\n}\n",
+	})
+
+	path := filepath.Join(root, "manifest.yaml")
+	writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.157.0
+exporters:
+  - gomod: example.com/collector/exporter/otlpexporter v0.0.0
+replaces:
+  - example.com/collector/exporter/otlpexporter => %s
+  - go.opentelemetry.io/collector/component => %s
+`, exporter, component))
+
+	code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stdout, "extensionRef: storage")
+	assert.Contains(t, stdout, "extensionRef: auth")
+	// A key the generator has no name for is still a reference. Saying so is
+	// what keeps a setting upstream adds from going unchecked until someone
+	// here notices it.
+	assert.Contains(t, stdout, "extensionRef: extension")
+	assert.Equal(t, 3, strings.Count(stdout, "extensionRef:"),
+		"a plain string setting was marked as an extension reference")
+}
+
 // TestGenerate runs the whole pipeline against modules on disk: the manifest
 // replaces every component with a local checkout, which is both what a
 // distribution under development does and what keeps this test off the network.

@@ -23,6 +23,13 @@ import (
 // maxAliasHops bounds how far an alias chain is followed.
 const maxAliasHops = 8
 
+// componentIDType is the type a setting that names another component decodes
+// into. Inside a component's own config the component it names is an
+// extension: nothing else is addressable from there. It is what makes an
+// extension reference something the sources state rather than something this
+// generator has to be told about one setting at a time.
+const componentIDType = coreModuleRoot + "/component.ID"
+
 // goType is a type declaration found in the sources, kept with the imports of
 // the file that declared it so its own field types can be resolved.
 type goType struct {
@@ -187,7 +194,28 @@ func (g *goIndex) addStructField(out *schema.Field, decl *goType, f *ast.Field, 
 		out.Children = map[string]*schema.Field{}
 	}
 
-	out.Children[name] = g.field(decl, f.Type, firstLine(docText(f)), seen, depth)
+	child := g.field(decl, f.Type, firstLine(docText(f)), seen, depth)
+	if g.resolve(decl, f.Type) == componentIDType {
+		child.ExtensionRef = extensionRole(name)
+	}
+
+	out.Children[name] = child
+}
+
+// extensionRole says what the extension a setting names is used for. The type
+// is what identifies the reference, and it is component.ID either way, so
+// which kind of extension it is comes from the key it is written under. A key
+// this does not recognise is still a reference; it just reads as a plain
+// extension in a diagnostic instead of a storage or an auth one.
+func extensionRole(key string) string {
+	switch key {
+	case "storage":
+		return schema.RoleStorage
+	case "authenticator":
+		return schema.RoleAuth
+	default:
+		return schema.RoleExtension
+	}
 }
 
 // field maps a Go type onto a schema field, resolving named types through the
