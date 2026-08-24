@@ -105,7 +105,27 @@ type Field struct {
 	Deprecated string `json:"deprecated,omitempty" yaml:"deprecated,omitempty"`
 	// Doc is a one-line description used in diagnostics hints.
 	Doc string `json:"doc,omitempty" yaml:"doc,omitempty"`
+	// ExtensionRef marks a setting whose value names an extension, and says
+	// what the extension is used for: RoleStorage, RoleAuth, or RoleExtension
+	// when nothing narrower is known. Nothing in the YAML tells the two apart
+	// -- a storage id and a directory path are both strings -- so this is the
+	// only thing that says a name has to resolve to a declared extension.
+	ExtensionRef string `json:"extensionRef,omitempty" yaml:"extensionRef,omitempty"`
 }
+
+// The roles an ExtensionRef can carry. The role is what a diagnostic calls the
+// reference, so it names the job the extension does rather than the setting it
+// is written under.
+const (
+	// RoleStorage marks a reference to a storage extension, such as the one a
+	// persistent queue writes through.
+	RoleStorage = "storage"
+	// RoleAuth marks a reference to an authenticator extension.
+	RoleAuth = "auth"
+	// RoleExtension marks a reference whose purpose the generator could not
+	// name. It is still a reference, and still has to resolve.
+	RoleExtension = "extension"
+)
 
 // Lookup returns the component of the given kind and type.
 func (c *Schema) Lookup(k config.Kind, typ string) (*Component, bool) {
