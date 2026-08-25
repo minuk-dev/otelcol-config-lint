@@ -25,7 +25,7 @@ const stdoutMarker = "-"
 // writeFile writes one distribution's schema where the command line asked for
 // it, which is where a single run's output belongs: the registry layout below
 // is derived from the manifest, so it can only name one place.
-func (o *Options) writeFile(cat *schema.Schema, formats []schema.Format) error {
+func (o *options) writeFile(cat *schema.Schema, formats []schema.Format) error {
 	if o.outFile == stdoutMarker || o.outFile == "" {
 		return writeTo(o.out, cat, formatFor(o.outFile, formats))
 	}
@@ -53,7 +53,7 @@ func formatFor(path string, formats []schema.Format) schema.Format {
 // writeRegistry files one distribution's schema under
 // "<registry>/<distribution>/<version>.<format>", which is the layout the
 // registry is read back in.
-func (o *Options) writeRegistry(cat *schema.Schema, formats []schema.Format) error {
+func (o *options) writeRegistry(cat *schema.Schema, formats []schema.Format) error {
 	dir := filepath.Join(o.registryDir, cat.Distribution)
 
 	err := os.MkdirAll(dir, dirPerm)
@@ -79,7 +79,7 @@ func (o *Options) writeRegistry(cat *schema.Schema, formats []schema.Format) err
 // is published beside it describes the same releases. It is rebuilt by listing
 // the registry directory, not from the manifests generated in this run, so
 // regenerating one distribution leaves the others listed.
-func (o *Options) writeIndex() (*schema.Index, error) {
+func (o *options) writeIndex() (*schema.Index, error) {
 	entries, err := os.ReadDir(o.registryDir)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", o.registryDir, err)
@@ -127,7 +127,7 @@ func (o *Options) writeIndex() (*schema.Index, error) {
 // It is rebuilt from the schemas the registry is left holding, for the same
 // reason the index is: a run that regenerated one distribution must not
 // republish the others from what this run happens to have in hand.
-func (o *Options) writeComponents(idx *schema.Index) error {
+func (o *options) writeComponents(idx *schema.Index) error {
 	comps := &schema.Components{Distributions: map[string]schema.ComponentSpans{}}
 
 	for _, dist := range idx.Names() {
@@ -162,7 +162,7 @@ func (o *Options) writeComponents(idx *schema.Index) error {
 
 // spansIn works out which of a distribution's releases ship each component
 // type, by reading every schema the registry holds for it.
-func (o *Options) spansIn(dist string, versions []string) (schema.ComponentSpans, error) {
+func (o *options) spansIn(dist string, versions []string) (schema.ComponentSpans, error) {
 	// kind -> type -> the releases shipping it.
 	present := map[config.Kind]map[string]map[string]bool{}
 

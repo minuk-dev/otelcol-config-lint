@@ -34,7 +34,7 @@ func runCommand(t *testing.T, args ...string) (int, string, string) {
 
 	var stdout, stderr bytes.Buffer
 
-	cmd := schemagen.NewCommand(nil)
+	cmd := schemagen.NewCommand()
 	cmd.SetArgs(args)
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
@@ -119,21 +119,6 @@ func TestUnknownFormat(t *testing.T) {
 	entries, err := os.ReadDir(out)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "a refused format still wrote to the registry")
-}
-
-// TestRunWithoutPrepare covers composing the options directly: the run falls
-// back to the defaults instead of writing to a nil stream.
-func TestRunWithoutPrepare(t *testing.T) {
-	t.Parallel()
-
-	var stdout, stderr bytes.Buffer
-
-	opts := &schemagen.Options{}
-	cmd := schemagen.NewCommand(opts)
-	cmd.SetOut(&stdout)
-	cmd.SetErr(&stderr)
-
-	require.ErrorIs(t, opts.Run(cmd), schemagen.ErrNoManifests)
 }
 
 // TestIncompleteManifest covers the manifest checks, and what a run that

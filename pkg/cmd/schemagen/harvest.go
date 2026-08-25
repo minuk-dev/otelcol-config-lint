@@ -35,7 +35,7 @@ const metadataFile = "metadata.yaml"
 var errModuleMissing = errors.New("module could not be resolved")
 
 // build reads one distribution out of the modules its manifest names.
-func (o *Options) build(man *manifest) (*schema.Schema, error) {
+func (o *options) build(man *manifest) (*schema.Schema, error) {
 	mods, err := o.resolveModules(man)
 	if err != nil {
 		return nil, err

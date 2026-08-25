@@ -53,7 +53,9 @@ func ExitCode(err error) int {
 type GlobalCmdOptions = cmdutil.GlobalOptions
 
 // NewCommand builds the root command. A nil opts is allowed, in which case a
-// zero value is used.
+// zero value is used, which is what the binary passes: opts is there for an
+// embedder that wants the command to read a filesystem of its own, and every
+// other input is a flag or an argument.
 func NewCommand(opts *GlobalCmdOptions) *cobra.Command {
 	if opts == nil {
 		//nolint:exhaustruct // the flags fill themselves in, and a nil Fs is the real filesystem

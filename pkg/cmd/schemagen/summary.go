@@ -16,7 +16,7 @@ import (
 // registry served up to now even when a release is regenerated in place. A
 // distribution with nothing to compare against still gets an entry, saying how
 // large its first schema is.
-func (o *Options) summarise(cat *schema.Schema) {
+func (o *options) summarise(cat *schema.Schema) {
 	if o.summaryFile == "" || o.registryDir == "" {
 		return
 	}
@@ -62,7 +62,7 @@ func previousIn(dir, version string) *schema.Schema {
 // a reviewer reading "no component changes" learns something, and a caller
 // pasting the file into a pull request body should not have to handle a missing
 // one.
-func (o *Options) writeSummary() error {
+func (o *options) writeSummary() error {
 	if o.summaryFile == "" {
 		return nil
 	}

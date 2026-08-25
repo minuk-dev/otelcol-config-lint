@@ -61,7 +61,7 @@ func (s *moduleSet) lookup(module string) (resolvedModule, bool) {
 // that GOPROXY, GOPRIVATE, GONOSUMDB, netrc and any credential helper already
 // configured for this machine apply unchanged. A private component resolves
 // exactly as it does for the build that consumes it.
-func (o *Options) resolveModules(man *manifest) (*moduleSet, error) {
+func (o *options) resolveModules(man *manifest) (*moduleSet, error) {
 	work, err := o.workspace(man)
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (o *Options) resolveModules(man *manifest) (*moduleSet, error) {
 // workspace writes the synthetic module the go command resolves in: the
 // manifest's components as requirements, its replacements as replacements, and
 // a file importing every component so tidy keeps them all.
-func (o *Options) workspace(man *manifest) (string, error) {
+func (o *options) workspace(man *manifest) (string, error) {
 	dir := filepath.Join(o.cacheDir, "workspace", man.Dist.Name)
 
 	err := os.MkdirAll(dir, dirPerm)
@@ -188,7 +188,7 @@ func (o *Options) workspace(man *manifest) (string, error) {
 // goCommand runs the go tool in the workspace and returns its stdout. The
 // environment is inherited: whatever GOPROXY, GOPRIVATE or credentials this
 // machine builds with are what a private module needs.
-func (o *Options) goCommand(dir string, args ...string) (string, error) {
+func (o *options) goCommand(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), o.timeout)
 	defer cancel()
 

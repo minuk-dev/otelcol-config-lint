@@ -24,7 +24,7 @@ import (
 // Pruning bounds what the registry serves and what a checkout costs, not the
 // history of the repository holding it; the files stay in every commit that had
 // them.
-func (o *Options) prune() error {
+func (o *options) prune() error {
 	if o.retain <= 0 {
 		return nil
 	}
@@ -52,7 +52,7 @@ func (o *Options) prune() error {
 
 // pruneDistribution removes the schema files of one distribution's dropped
 // releases, in every format they were written in.
-func (o *Options) pruneDistribution(dir string) error {
+func (o *options) pruneDistribution(dir string) error {
 	dropped := drop(versionsIn(dir), o.retain, o.retainEvery)
 
 	for _, v := range dropped {
