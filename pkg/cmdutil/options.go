@@ -21,6 +21,11 @@ import (
 // own resolved state in its own package, and folds in only the blocks it is
 // about; this is the part all of them honour, so the file is read once however
 // the commands are nested.
+//
+// Fs is the one field an embedder sets, and the only one that could be: the
+// rest are flags, which RegisterFlags overwrites with their defaults the
+// moment it declares them, or state Prepare resolves. An embedder that wants
+// a different settings file passes --config the way the command line does.
 type GlobalOptions struct {
 	// Fs is the filesystem the settings file, the config files and any local
 	// schema location are read from. A nil Fs means the real one, which is

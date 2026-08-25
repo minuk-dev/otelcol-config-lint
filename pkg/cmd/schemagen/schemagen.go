@@ -102,9 +102,15 @@ func ExitCode(err error) int {
 // downloads a few hundred modules, so it is generous.
 const commandTimeout = 10 * time.Minute
 
-// Options holds everything the command was asked to do. The fields are filled
-// in by RegisterFlags and then by Prepare, in that order.
-type Options struct {
+// options holds everything the command was asked to do. The fields are filled
+// in by registerFlags and then by prepare, in that order.
+//
+// It is unexported, and so is every field: each one is either a flag, which
+// registerFlags overwrites with its default the moment it is declared, or
+// state the run resolves for itself. There is nothing an embedder could set
+// that the command would honour, which is why NewCommand takes no options and
+// this type is the package's own.
+type options struct {
 	// flags
 	builders    []string
 	outFile     string
@@ -125,12 +131,11 @@ type Options struct {
 	diffs []*schema.Diff
 }
 
-// NewCommand builds the schemagen command. A nil opts is allowed, in which case
-// a zero value is used.
-func NewCommand(opts *Options) *cobra.Command {
-	if opts == nil {
-		opts = &Options{} //nolint:exhaustruct // every field is filled in by RegisterFlags and Prepare
-	}
+// NewCommand builds the schemagen command. It is configured through its flags
+// alone: schemagen is a build-time tool driven from the command line, so the
+// options it fills in are its own.
+func NewCommand() *cobra.Command {
+	opts := &options{} //nolint:exhaustruct // every field is filled in by registerFlags and prepare
 
 	// The root carries no work of its own: every mode is a subcommand, so a
 	// bare invocation prints the help that lists them.
@@ -172,7 +177,7 @@ func noArgs(cmd *cobra.Command, args []string) error {
 
 // newGenerateCommand builds "generate", which reads the manifests and writes
 // the schemas. It is where every flag describing an output lives.
-func newGenerateCommand(opts *Options) *cobra.Command {
+func newGenerateCommand(opts *options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate [flags]",
 		Short: "Build component schemas from the upstream collector sources",
@@ -182,16 +187,16 @@ func newGenerateCommand(opts *Options) *cobra.Command {
 		Args:         noArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := opts.Prepare(cmd)
+			err := opts.prepare(cmd)
 			if err != nil {
 				return err
 			}
 
-			return opts.Run(cmd)
+			return opts.run(cmd)
 		},
 	}
 
-	opts.RegisterFlags(cmd)
+	opts.registerFlags(cmd)
 
 	return cmd
 }
@@ -203,7 +208,7 @@ func newGenerateCommand(opts *Options) *cobra.Command {
 // different question: it takes only --builder, and none of the flags saying
 // where a schema goes, in what format, or how much of a registry to keep mean
 // anything to it.
-func newPrintVersionCommand(opts *Options) *cobra.Command {
+func newPrintVersionCommand(opts *options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "print-version [flags]",
 		Short: "Print the release each manifest resolves to",
@@ -212,12 +217,12 @@ func newPrintVersionCommand(opts *Options) *cobra.Command {
 		Args:         noArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := opts.Prepare(cmd)
+			err := opts.prepare(cmd)
 			if err != nil {
 				return err
 			}
 
-			return opts.PrintVersions(cmd)
+			return opts.printVersions(cmd)
 		},
 	}
 
@@ -226,8 +231,8 @@ func newPrintVersionCommand(opts *Options) *cobra.Command {
 	return cmd
 }
 
-// RegisterFlags declares every flag the generator takes.
-func (o *Options) RegisterFlags(cmd *cobra.Command) {
+// registerFlags declares every flag the generator takes.
+func (o *options) registerFlags(cmd *cobra.Command) {
 	o.registerBuilderFlag(cmd)
 
 	flags := cmd.Flags()
@@ -251,9 +256,9 @@ func (o *Options) RegisterFlags(cmd *cobra.Command) {
 	flags.DurationVar(&o.timeout, "timeout", commandTimeout, "timeout for one go command")
 }
 
-// Prepare wires up what the run needs beyond the flags: where the schema is
+// prepare wires up what the run needs beyond the flags: where the schema is
 // written and where progress is reported.
-func (o *Options) Prepare(cmd *cobra.Command) error {
+func (o *options) prepare(cmd *cobra.Command) error {
 	o.out = cmd.OutOrStdout()
 	o.progress = cmd.ErrOrStderr()
 
@@ -264,12 +269,12 @@ func (o *Options) Prepare(cmd *cobra.Command) error {
 	return nil
 }
 
-// Run generates a schema for every distribution it was given a manifest for.
-// Prepare is expected to have run first; a caller that composed the options
-// itself gets the defaults instead of a half-built run.
-func (o *Options) Run(cmd *cobra.Command) error {
+// run generates a schema for every distribution it was given a manifest for.
+// prepare is expected to have run first; the options built directly in a test
+// get the defaults instead of a half-built run writing to a nil stream.
+func (o *options) run(cmd *cobra.Command) error {
 	if o.out == nil || o.progress == nil {
-		err := o.Prepare(cmd)
+		err := o.prepare(cmd)
 		if err != nil {
 			return err
 		}
@@ -332,10 +337,9 @@ func (o *Options) Run(cmd *cobra.Command) error {
 	return nil
 }
 
-// PrintVersions writes the release each manifest resolves to and returns.
+// printVersions writes the release each manifest resolves to and returns.
 //
-// Prepare is expected to have run first; a caller that composed the options
-// itself gets the defaults instead of a half-built run.
+// prepare is expected to have run first, the way run expects it.
 //
 // It exists so that a caller filling a registry can ask what a manifest would
 // be filed under without generating it, which is not something that can be
@@ -350,9 +354,9 @@ func (o *Options) Run(cmd *cobra.Command) error {
 // file it under the name it already had.
 //
 // Only the manifest is read, so this answers without resolving a module graph.
-func (o *Options) PrintVersions(cmd *cobra.Command) error {
+func (o *options) printVersions(cmd *cobra.Command) error {
 	if o.out == nil || o.progress == nil {
-		err := o.Prepare(cmd)
+		err := o.prepare(cmd)
 		if err != nil {
 			return err
 		}
@@ -384,7 +388,7 @@ func (o *Options) PrintVersions(cmd *cobra.Command) error {
 // registerBuilderFlag declares the one input every mode takes: which manifests
 // to read. It is registered on its own because print-version takes this and
 // nothing else.
-func (o *Options) registerBuilderFlag(cmd *cobra.Command) {
+func (o *options) registerBuilderFlag(cmd *cobra.Command) {
 	cmd.Flags().StringSliceVar(&o.builders, "builder", nil,
 		"OCB builder manifest describing a distribution, as \"[name=]path\";\n"+
 			"name overrides what the registry files it under; repeat for several")
@@ -397,7 +401,7 @@ func (o *Options) registerBuilderFlag(cmd *cobra.Command) {
 // is left holding, which is the whole point of rebuilding it by listing the
 // directory rather than editing it. The availability index follows the index,
 // so both describe the same releases.
-func (o *Options) publishRegistry() error {
+func (o *options) publishRegistry() error {
 	if o.registryDir == "" {
 		return nil
 	}
@@ -418,7 +422,7 @@ func (o *Options) publishRegistry() error {
 // checkDestination settles where the schemas are written. A run either writes
 // one distribution, to a file or to stdout, or fills a registry with as many as
 // it was given manifests; asking for both says two different things.
-func (o *Options) checkDestination(manifests []string) error {
+func (o *options) checkDestination(manifests []string) error {
 	switch {
 	case o.registryDir != "" && o.outFile != "" && o.outFile != stdoutMarker:
 		return ErrTwoOutputs
@@ -443,7 +447,7 @@ func (o *Options) checkDestination(manifests []string) error {
 }
 
 // generate reads one manifest and writes the distribution it describes.
-func (o *Options) generate(builder string, formats []schema.Format) error {
+func (o *options) generate(builder string, formats []schema.Format) error {
 	name, path := splitBuilder(builder)
 
 	man, err := readManifest(path, name)
@@ -472,7 +476,7 @@ func (o *Options) generate(builder string, formats []schema.Format) error {
 // parseFormats resolves --formats. An unknown name is refused rather than
 // written: Schema.Write treats anything that is not JSON as YAML, so a typo
 // would otherwise put YAML under a file name the registry never reads back.
-func (o *Options) parseFormats() ([]schema.Format, error) {
+func (o *options) parseFormats() ([]schema.Format, error) {
 	names := splitList(o.formats)
 	if len(names) == 0 {
 		return nil, ErrNoFormats
@@ -494,7 +498,7 @@ func (o *Options) parseFormats() ([]schema.Format, error) {
 
 // logf reports progress, on the error stream: the schema is what this command
 // outputs, and "--out -" is meant to be piped.
-func (o *Options) logf(format string, args ...any) {
+func (o *options) logf(format string, args ...any) {
 	_, _ = fmt.Fprintf(o.progress, format, args...)
 }
 

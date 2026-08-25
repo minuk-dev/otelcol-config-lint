@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	cmd := schemagen.NewCommand(nil)
+	cmd := schemagen.NewCommand()
 	cmd.SetArgs(os.Args[1:])
 	cmd.SetIn(os.Stdin)
 	cmd.SetOut(os.Stdout)
