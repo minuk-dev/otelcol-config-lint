@@ -53,7 +53,7 @@ arm64, plus a multi-arch image on ghcr.io.
 In a workflow it is one `uses:` line — no Go toolchain, no install step:
 
 ```yaml
-- uses: minuk-dev/otelcol-config-lint@v1
+- uses: minuk-dev/otelcol-config-lint@v0
   with:
     files: ./configs
     collector-version: v0.157.0
@@ -83,7 +83,7 @@ The counts come back as outputs — `exit-code`, `valid`, `invalid`, `errors`,
 them:
 
 ```yaml
-- uses: minuk-dev/otelcol-config-lint@v1
+- uses: minuk-dev/otelcol-config-lint@v0
   id: lint
   continue-on-error: true
   with:
@@ -92,13 +92,15 @@ them:
 - run: echo "${{ steps.lint.outputs.invalid }} file(s) failed"
 ```
 
-`@v1` follows the newest v1 release, and runs exactly that release's linter: the
+`@v0` follows the newest v0 release, and runs exactly that release's linter: the
 action wraps `ghcr.io/minuk-dev/otelcol-config-lint:<release>`, pinned at a tag
 and never `latest`, so a step is two small image pulls rather than a Go
-toolchain and a compile. Pin a full tag such as `@v1.2.3` to hold a workflow to
-one revision. The schemas are a separate registry that tracks its own main, so
-pin `schema-location` as well — at a vendored directory, or at a tagged URL —
-for a run that cannot change underneath a workflow.
+toolchain and a compile. The major tag is whatever the release's own major is —
+the release workflow moves it — so it becomes `@v1` when 1.0.0 ships, and until
+then `@v1` resolves to nothing. Pin a full tag such as `@v0.1.1` to hold a
+workflow to one revision. The schemas are a separate registry that tracks its
+own main, so pin `schema-location` as well — at a vendored directory, or at a
+tagged URL — for a run that cannot change underneath a workflow.
 
 ## Usage
 
