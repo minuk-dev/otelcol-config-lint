@@ -25,7 +25,7 @@
 # .github/workflows/action.yaml builds this image from source and rewrites the
 # pin to it before using the action -- the source build stays reachable, it is
 # just no longer what consumers run.
-FROM ghcr.io/minuk-dev/otelcol-config-lint:1.0.0 AS bin
+FROM ghcr.io/minuk-dev/otelcol-config-lint:0.1.1 AS bin
 
 FROM alpine:3.22
 

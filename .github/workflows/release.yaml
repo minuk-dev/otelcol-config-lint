@@ -70,6 +70,30 @@ jobs:
           name: goreleaser-assets
           path: dist/*
 
+      # The guard before the build checks that the pin names this release. This
+      # checks the other half: that the release actually published the image the
+      # pin names. The two are not the same failure. v0.1.0 passed nothing --
+      # the guard refused the tag, goreleaser never ran, and the repository was
+      # left advertising an action whose `FROM` line pulls a tag that does not
+      # exist. Nothing downstream noticed, because .github/workflows/action.yaml
+      # rewrites the pin to a locally built image before exercising the action,
+      # so CI stayed green while every consumer's workflow failed on `manifest
+      # unknown`. A release that cannot serve its own action is not a release.
+      - name: The release has to have published the image the action is pinned to
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pinned="$(sed -nE 's|^FROM ghcr\.io/minuk-dev/otelcol-config-lint:([^ ]+).*|\1|p' Dockerfile)"
+          image="ghcr.io/minuk-dev/otelcol-config-lint:${pinned}"
+
+          if ! docker manifest inspect "${image}" > /dev/null 2>&1; then
+            echo "::error title=release::${GITHUB_REF_NAME} published no ${image}." \
+              "The action's Dockerfile pulls that tag on every consumer's runner," \
+              "so the action is broken until it exists."
+            exit 1
+          fi
+
+          echo "${image} is published; the action resolves"
+
       # A snapshot build does not publish, so push its images by hand to keep
       # ghcr.io tracking main between releases.
       - name: Extract version
@@ -93,8 +117,11 @@ jobs:
           docker buildx imagetools create -t "${MANIFEST_TAG}" "${AMD64_IMAGE}" "${ARM64_IMAGE}"
 
   major-tag:
-    # Actions convention: `uses: minuk-dev/otelcol-config-lint@v1` has to follow
-    # the newest v1.x.y, so the major tag is moved once the release succeeded.
+    # Actions convention: `uses: minuk-dev/otelcol-config-lint@v<major>` has to
+    # follow the newest release with that major, so the tag is moved once the
+    # release succeeded. It is whatever the tag's own major is -- v0 while the
+    # releases are 0.x, and v1 from 1.0.0 on -- so the README documents the one
+    # that currently exists rather than the one it would like to.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: goreleaser
     runs-on: ubuntu-latest
