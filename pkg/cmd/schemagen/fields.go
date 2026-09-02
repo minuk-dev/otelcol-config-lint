@@ -216,23 +216,45 @@ func (s *schemaSet) field(doc *jsonSchema, dir string, seen []string, depth int)
 		out.Children[name] = child
 	}
 
+	settleShape(out, doc)
+
+	return out
+}
+
+// settleShape decides what an object turned out to be, once its children are
+// known.
+//
+// An object with no keys of its own is two different things, and only one of
+// them is a mapping. With additionalProperties it is a map of arbitrary keys:
+// free-form, but still a mapping, so it keeps the type and stays worth
+// checking.
+//
+// Without, it states nothing at all. That is what upstream's config schema
+// renders a Go `any` as, and the resource processor's attributes[].value is one
+// -- it takes a plain string. Typing that as a map made the linter demand a
+// mapping and report `value: "log"`, which is how the processor is ordinarily
+// used, as an error. So it is left unconstrained, which is what the empty type
+// already means everywhere else: nothing is known, so nothing is checked.
+//
+// Either way the keys under it stay open, or a map whose children were never
+// expanded -- from a cycle, or a module publishing no schema -- has every key
+// below it read as unknown.
+func settleShape(out *schema.Field, doc *jsonSchema) {
 	if len(out.Children) > 0 && out.Type == "" {
 		out.Type = typeMap
 	}
 
-	// A map that accepts arbitrary keys must not have them reported as unknown.
 	if doc.AdditionalProperties != nil {
 		out.Open = true
 	}
 
-	// A map whose keys were not expanded, because of a cycle or a reference
-	// into something not published, has to stay open or every key under it
-	// reads as unknown.
 	if out.Type == typeMap && len(out.Children) == 0 {
 		out.Open = true
-	}
 
-	return out
+		if doc.AdditionalProperties == nil {
+			out.Type = ""
+		}
+	}
 }
 
 // merge folds a referenced or composed schema into the one referring to it.

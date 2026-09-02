@@ -68,3 +68,85 @@ func aliasChain(t *testing.T) (*yaml.Node, *yaml.Node) {
 
 	return second, cyclic
 }
+
+// TestAFieldStatingNoShapeIsNotReported covers the schema that describes a Go
+// `any` as a bare object: the resource processor's attributes[].value takes a
+// plain string, and typing it as a map made the linter report the ordinary way
+// of writing it as an error.
+//
+// The distinction is what the schema knows, not what the value is. A map that
+// lists its keys still has to be a mapping; one that lists none and accepts any
+// key is stating nothing, and nothing is what it should be checked against.
+func TestAFieldStatingNoShapeIsNotReported(t *testing.T) {
+	t.Parallel()
+
+	scalar := scalarNode(t, "log")
+
+	tests := map[string]struct {
+		field *schema.Field
+		want  bool // whether a scalar should be reported against it
+	}{
+		"an open map with no children states nothing": {
+			field: &schema.Field{Type: typeMap, Open: true},
+			want:  false,
+		},
+		"a map that lists its keys is still a mapping": {
+			field: &schema.Field{Type: typeMap, Children: map[string]*schema.Field{
+				"storage": {Type: "string"},
+			}},
+			want: true,
+		},
+		"an open map that lists keys is still a mapping": {
+			field: &schema.Field{Type: typeMap, Open: true, Children: map[string]*schema.Field{
+				"storage": {Type: "string"},
+			}},
+			want: true,
+		},
+		"no type at all was already unconstrained": {
+			field: &schema.Field{},
+			want:  false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var got []string
+
+			w := FieldWalker{
+				Ctx:        nil,
+				OnUnknown:  nil,
+				OnRequired: nil,
+				OnInvalid: func(_ *yaml.Node, path, want string) {
+					got = append(got, path+": "+want)
+				},
+				OnDeprecated: nil,
+			}
+			w.walk(tt.field, scalar, "processors.resource.attributes[0].value")
+
+			if tt.want {
+				assert.NotEmpty(t, got, "a schema that says the value is a mapping should report a scalar")
+
+				return
+			}
+
+			assert.Empty(t, got, "a schema that says nothing about the value should not report it")
+		})
+	}
+}
+
+// scalarNode returns the value node of `v: <value>`, which is how a scalar
+// reaches the walker.
+func scalarNode(t *testing.T, value string) *yaml.Node {
+	t.Helper()
+
+	var doc yaml.Node
+
+	require.NoError(t, yaml.Unmarshal([]byte("v: "+value+"\n"), &doc))
+
+	node := doc.Content[0].Content[1]
+	require.Equal(t, yaml.ScalarNode, node.Kind)
+
+	return node
+}
