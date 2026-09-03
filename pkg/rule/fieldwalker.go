@@ -155,7 +155,7 @@ func (w FieldWalker) checkRequired(field *schema.Field, present map[string]bool,
 
 // checkType reports a type mismatch and returns whether it is safe to descend.
 func (w FieldWalker) checkType(field *schema.Field, node *yaml.Node, path string) bool {
-	if field.Type == "" {
+	if field.Type == "" || statesNoShape(field) {
 		return true
 	}
 
@@ -180,6 +180,28 @@ func (w FieldWalker) checkType(field *schema.Field, node *yaml.Node, path string
 	}
 
 	return true
+}
+
+// statesNoShape reports a schema that says nothing about the value: a map with
+// no children of its own that accepts any key.
+//
+// Two unrelated things are written that way, and the published schema cannot
+// tell them apart. One is a Go `any`, which upstream's config schema renders as
+// a bare object -- the resource processor's attributes[].value, which takes a
+// plain string, is one of those. The other is a map whose keys could not be
+// expanded, from a reference cycle or a module that publishes no schema.
+//
+// Reporting the first as "must be a mapping" fails a config that is correct,
+// which is worse than not checking the second, so neither is checked. It is the
+// same reasoning the field rules already follow: what cannot be resolved is left
+// open rather than reported, so partial coverage never produces a false
+// positive.
+//
+// Schemas generated after schemagen learned the difference state a Go `any`
+// with no type at all, which the caller already lets through. This is what
+// keeps the schemas published before that from failing valid configs.
+func statesNoShape(field *schema.Field) bool {
+	return field.Type == typeMap && field.Open && len(field.Children) == 0
 }
 
 func matchesType(field *schema.Field, node *yaml.Node) bool {

@@ -16,6 +16,16 @@ import (
 // is what is under test, not how long it holds for.
 const testRetryDelay = time.Millisecond
 
+// Every store below fetches with its own server's client rather than the
+// package-level default. A store with no client of its own shares one
+// connection pool with every other store in the process, and these tests run
+// in parallel: a retry leaves the connection idle in that shared pool between
+// attempts, which is exactly where another server shutting down can close it
+// underneath the attempt about to reuse it. It surfaced as "transport
+// connection broken: http: CloseIdleConnections called" on a change that
+// touched neither this package nor the network. srv.Client() is per-server, so
+// nothing else can reach into its pool.
+
 // TestGetRetriesAThrottledRegistry pins that a 429 is a pause rather than the
 // end of the run. The default registry is served from GitHub, which throttles;
 // failing the whole lint on the first one would make a large run a coin toss.
@@ -36,7 +46,7 @@ func TestGetRetriesAThrottledRegistry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true}
+	store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true, HTTPClient: srv.Client()}
 
 	body, err := store.get(t.Context(), srv.URL, immutable)
 	require.NoError(t, err)
@@ -58,7 +68,7 @@ func TestGetGivesUpAfterTheLastAttempt(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true}
+	store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true, HTTPClient: srv.Client()}
 
 	_, err := store.get(t.Context(), srv.URL, immutable)
 	require.ErrorIs(t, err, errBadStatus)
@@ -93,7 +103,7 @@ func TestGetDoesNotRetryWhatWillNotChange(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true}
+			store := Store{AllowInsecure: true, retryDelay: testRetryDelay, NoCache: true, HTTPClient: srv.Client()}
 
 			_, err := store.get(t.Context(), srv.URL, immutable)
 			require.Error(t, err)
@@ -117,7 +127,7 @@ func TestGetStopsRetryingWhenTheRunIsCancelled(t *testing.T) {
 
 	// A minute of backoff, which the cancellation has to cut short for this to
 	// return at all.
-	store := Store{AllowInsecure: true, retryDelay: time.Minute, NoCache: true}
+	store := Store{AllowInsecure: true, retryDelay: time.Minute, NoCache: true, HTTPClient: srv.Client()}
 
 	_, err := store.get(ctx, srv.URL, immutable)
 	require.ErrorIs(t, err, context.Canceled)
