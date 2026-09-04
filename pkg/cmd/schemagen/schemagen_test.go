@@ -307,6 +307,95 @@ replaces:
 	assert.NotContains(t, stdout, "type: int", "a text-decoded type was read as its underlying number")
 }
 
+// A component that decodes itself accepts settings its mapstructure tags do not
+// name. The hostmetrics receiver is the one that forced this: `scrapers` is
+// declared `mapstructure:"-"` and read by the receiver's own Unmarshal, so on
+// every release generated from the Go sources the schema listed four settings
+// and the config wrote five, and the receiver's central setting was reported as
+// unknown. The four that were resolved are still worth having; presenting them
+// as all of them is what turns the gap into a false positive.
+func TestAConfigThatDecodesItselfIsLeftOpen(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	confmap := module(t, root, "go.opentelemetry.io/collector/confmap", map[string]string{
+		"confmap.go": "package confmap\n\ntype Conf struct{}\n",
+	})
+	receiver := module(t, root, "example.com/collector/receiver/hostmetricsreceiver", map[string]string{
+		"metadata.yaml": "type: hostmetrics\nstatus:\n  class: receiver\n" +
+			"  stability:\n    beta: [metrics]\n",
+		"config.go": "package hostmetricsreceiver\n\n" +
+			"import \"go.opentelemetry.io/collector/confmap\"\n\n" +
+			"type Config struct {\n" +
+			"\tScrapers map[string]any `mapstructure:\"-\"`\n" +
+			"\tRootPath string `mapstructure:\"root_path\"`\n}\n\n" +
+			"func (cfg *Config) Unmarshal(componentParser *confmap.Conf) error { return nil }\n",
+	})
+
+	path := filepath.Join(root, "manifest.yaml")
+	writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.100.0
+receivers:
+  - gomod: example.com/collector/receiver/hostmetricsreceiver v0.0.0
+replaces:
+  - example.com/collector/receiver/hostmetricsreceiver => %s
+  - go.opentelemetry.io/collector/confmap => %s
+`, receiver, confmap))
+
+	code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stdout, "root_path:", "the settings that did resolve were dropped")
+	assert.Contains(t, stdout, "open: true", "a partly resolved component was closed over half its settings")
+}
+
+// Where upstream publishes a config schema it states the sections its Unmarshal
+// reads, so it settles the question the Go sources could only leave open. A
+// release that has one keeps the full check.
+func TestAPublishedSchemaClosesWhatItDescribes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	confmap := module(t, root, "go.opentelemetry.io/collector/confmap", map[string]string{
+		"confmap.go": "package confmap\n\ntype Conf struct{}\n",
+	})
+	receiver := module(t, root, "example.com/collector/receiver/hostmetricsreceiver", map[string]string{
+		"metadata.yaml": "type: hostmetrics\nstatus:\n  class: receiver\n" +
+			"  stability:\n    beta: [metrics]\n",
+		"config.schema.yaml": "type: object\nproperties:\n" +
+			"  root_path:\n    type: string\n" +
+			"  scrapers:\n    type: object\n    properties:\n" +
+			"      cpu:\n        type: object\n        properties:\n" +
+			"          collection_interval:\n            type: string\n",
+		"config.go": "package hostmetricsreceiver\n\n" +
+			"import \"go.opentelemetry.io/collector/confmap\"\n\n" +
+			"type Config struct {\n" +
+			"\tScrapers map[string]any `mapstructure:\"-\"`\n" +
+			"\tRootPath string `mapstructure:\"root_path\"`\n}\n\n" +
+			"func (cfg *Config) Unmarshal(componentParser *confmap.Conf) error { return nil }\n",
+	})
+
+	path := filepath.Join(root, "manifest.yaml")
+	writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.157.0
+receivers:
+  - gomod: example.com/collector/receiver/hostmetricsreceiver v0.0.0
+replaces:
+  - example.com/collector/receiver/hostmetricsreceiver => %s
+  - go.opentelemetry.io/collector/confmap => %s
+`, receiver, confmap))
+
+	code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stdout, "scrapers:", "the published schema was not read")
+	assert.NotContains(t, stdout, "open: true", "a fully described component was left open")
+}
+
 // A setting that decodes into a component.ID names an extension, and that is
 // the only thing that says so: a storage id and a directory path are both
 // strings by the time they reach the schema. Marking it here is what lets

@@ -433,8 +433,13 @@ func enrich(primary, secondary *schema.Field) {
 		primary.ExtensionRef = secondary.ExtensionRef
 	}
 
-	if secondary.Open {
-		primary.Open = true
+	// Openness is the one thing the secondary settles rather than only adds to.
+	// A published schema states a component's sections outright, the ones the
+	// Go sources can only decode by hand included, so where it lists a
+	// mapping's keys it is the better answer about whether that mapping is
+	// closed. A secondary that lists none says nothing either way.
+	if secondary.Open || len(secondary.Children) > 0 {
+		primary.Open = secondary.Open
 	}
 
 	for name, child := range secondary.Children {

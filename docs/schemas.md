@@ -219,6 +219,17 @@ shared settings — `sending_queue`, `retry_on_failure`, TLS, gRPC client option
 reported, so partial coverage never produces false positives. Coverage runs at
 92–96% of components on every release.
 
+That holds for a component resolved only in part, too. A `Config` that decodes
+itself — it has its own `Unmarshal(*confmap.Conf)` — and keeps a field
+mapstructure cannot fill accepts settings no tag names: the hostmetrics
+receiver declares `Scrapers` as `mapstructure:"-"` and reads the `scrapers`
+section by hand, and the receiver creator holds its `receivers` the same way.
+The settings that were resolved are still recorded and still checked; the
+mapping is left open, because presenting half of a component's settings as all
+of them is what turns a coverage gap into a false positive. Upstream began
+publishing `config.schema.yaml` widely at v0.145.0 and it states these sections
+outright, so this is what the releases before it rest on.
+
 This is what [`unknown-field`](rules/unknown-field.md),
 [`required-field`](rules/required-field.md),
 [`invalid-value`](rules/invalid-value.md) and

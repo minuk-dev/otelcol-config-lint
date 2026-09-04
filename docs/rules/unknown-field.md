@@ -39,6 +39,11 @@ partial coverage never produces false positives — a third-party config such as
 Prometheus's own is a map the generator cannot see into, and everything under it
 passes.
 
+The same holds for a component resolved only [in
+part](../schemas.md#field-schemas): where the settings that were read are known
+not to be all of them, the ones that were read are still checked and the rest
+are let through, rather than the component being closed over half of itself.
+
 `${env:...}` expansions are left alone, and `--ignore-missing-schemas` turns off
 reporting for components the schema does not describe at all, which is what a
 custom distribution needs.

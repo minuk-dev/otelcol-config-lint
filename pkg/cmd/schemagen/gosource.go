@@ -30,6 +30,11 @@ const maxAliasHops = 8
 // generator has to be told about one setting at a time.
 const componentIDType = coreModuleRoot + "/component.ID"
 
+// confmapConfType is what a config's own Unmarshal method takes when the
+// component decodes itself. It is what tells such a method apart from the many
+// other Unmarshal methods in the tree.
+const confmapConfType = coreModuleRoot + "/confmap.Conf"
+
 // goType is a type declaration found in the sources, kept with the imports of
 // the file that declared it so its own field types can be resolved.
 type goType struct {
@@ -52,14 +57,19 @@ type goIndex struct {
 	// UnmarshalText method is spelled as a word, the way the debug exporter's
 	// verbosity is "detailed" and not 2.
 	textual map[string]bool
-	fset    *token.FileSet
+	// selfDecoding holds the types that decode themselves from a confmap.
+	// Their mapstructure tags are not the whole of what they accept: a setting
+	// the method reads by hand is a setting no tag names.
+	selfDecoding map[string]bool
+	fset         *token.FileSet
 }
 
 func newGoIndex() *goIndex {
 	return &goIndex{
-		byName:  map[string]*goType{},
-		textual: map[string]bool{},
-		fset:    token.NewFileSet(),
+		byName:       map[string]*goType{},
+		textual:      map[string]bool{},
+		selfDecoding: map[string]bool{},
+		fset:         token.NewFileSet(),
 	}
 }
 
@@ -76,7 +86,7 @@ func (g *goIndex) add(importPath string, src []byte) {
 
 	for _, decl := range file.Decls {
 		if fn, isFunc := decl.(*ast.FuncDecl); isFunc {
-			g.addMethod(importPath, fn)
+			g.addMethod(importPath, imports, fn)
 
 			continue
 		}
@@ -105,16 +115,13 @@ func (g *goIndex) add(importPath string, src []byte) {
 	}
 }
 
-// addMethod records a type that decodes itself from text, which is what makes
-// it a string in a config however it is declared in Go.
-func (g *goIndex) addMethod(importPath string, method *ast.FuncDecl) {
+// addMethod records the two things a method says about the type it hangs off:
+// that it decodes itself from text, which is what makes it a string in a config
+// however it is declared in Go, and that it decodes itself from a confmap,
+// which is what makes its mapstructure tags an incomplete account of what it
+// accepts.
+func (g *goIndex) addMethod(importPath string, imports map[string]string, method *ast.FuncDecl) {
 	if method.Recv == nil || len(method.Recv.List) == 0 {
-		return
-	}
-
-	switch method.Name.Name {
-	case "UnmarshalText", "UnmarshalYAML", "UnmarshalJSON":
-	default:
 		return
 	}
 
@@ -123,7 +130,31 @@ func (g *goIndex) addMethod(importPath string, method *ast.FuncDecl) {
 		return
 	}
 
-	g.textual[importPath+"."+name] = true
+	switch method.Name.Name {
+	case "UnmarshalText", "UnmarshalYAML", "UnmarshalJSON":
+		g.textual[importPath+"."+name] = true
+	case "Unmarshal":
+		if takesConfmap(method, imports) {
+			g.selfDecoding[importPath+"."+name] = true
+		}
+	}
+}
+
+// takesConfmap reports whether a method is the confmap.Unmarshaler one, by the
+// single *confmap.Conf it takes. Plenty of other things in the tree are called
+// Unmarshal.
+func takesConfmap(method *ast.FuncDecl, imports map[string]string) bool {
+	params := method.Type.Params.List
+	if len(params) != 1 {
+		return false
+	}
+
+	pkg, name, found := strings.Cut(exprName(unwrap(params[0].Type)), ".")
+	if !found {
+		return false
+	}
+
+	return imports[pkg]+"."+name == confmapConfType
 }
 
 // fileImports maps the name a file refers to each import by onto its path.
@@ -149,36 +180,50 @@ func fileImports(file *ast.File) map[string]string {
 
 // fields builds the field schema for a config struct, following embedded and
 // referenced types through the index.
+//
+// A struct that decodes itself from a confmap and holds a field mapstructure
+// cannot fill is only partly resolved, and is left open rather than presented
+// as the complete accepted set. The hostmetrics receiver is the case that shows
+// why: its scrapers are declared `mapstructure:"-"` and read by its own
+// Unmarshal, so the tags name four settings and the config writes five. Closing
+// that over the four reports the receiver's central setting as unknown.
 func (g *goIndex) fields(key string, seen []string, depth int) *schema.Field {
 	if depth > maxFieldDepth || slices.Contains(seen, key) {
 		return nil
 	}
 
-	decl := g.deref(key)
+	decl, declaredAt := g.derefKey(key)
 	if decl == nil || decl.strukt == nil {
 		return nil
 	}
 
 	out := &schema.Field{Type: typeMap}
+	unfilled := false
 
 	for _, f := range decl.strukt.Fields.List {
-		g.addStructField(out, decl, f, append(seen, key), depth)
+		if !g.addStructField(out, decl, f, append(seen, key), depth) {
+			unfilled = true
+		}
 	}
 
 	if len(out.Children) == 0 {
 		return nil
 	}
 
+	// A squashed struct may already have opened this one; see mergeChildren.
+	out.Open = out.Open || (unfilled && g.selfDecoding[declaredAt])
+
 	return out
 }
 
-// addStructField folds one struct field into the schema being built. A squashed
-// field contributes its own children rather than a key of its own, which is how
-// the shared config structs are spliced in.
-func (g *goIndex) addStructField(out *schema.Field, decl *goType, f *ast.Field, seen []string, depth int) {
+// addStructField folds one struct field into the schema being built, and
+// reports whether mapstructure fills it. A squashed field contributes its own
+// children rather than a key of its own, which is how the shared config structs
+// are spliced in.
+func (g *goIndex) addStructField(out *schema.Field, decl *goType, f *ast.Field, seen []string, depth int) bool {
 	name, squash, ok := mapstructureName(f)
 	if !ok {
-		return
+		return false
 	}
 
 	if squash {
@@ -187,7 +232,7 @@ func (g *goIndex) addStructField(out *schema.Field, decl *goType, f *ast.Field, 
 			mergeChildren(out, nested)
 		}
 
-		return
+		return true
 	}
 
 	if out.Children == nil {
@@ -200,6 +245,8 @@ func (g *goIndex) addStructField(out *schema.Field, decl *goType, f *ast.Field, 
 	}
 
 	out.Children[name] = child
+
+	return true
 }
 
 // extensionRole says what the extension a setting names is used for. The type
@@ -286,31 +333,39 @@ func (g *goIndex) scalar(decl *goType, expr ast.Expr) string {
 // deref follows alias chains to the declaration that actually defines a type,
 // so "type QueueConfig = internal.QueueConfig" reaches the struct behind it.
 func (g *goIndex) deref(key string) *goType {
+	decl, _ := g.derefKey(key)
+
+	return decl
+}
+
+// derefKey is deref, and also reports the key the declaration it settles on is
+// stored under, which is where a method on that type was recorded.
+func (g *goIndex) derefKey(key string) (*goType, string) {
 	for range maxAliasHops {
 		decl, ok := g.byName[key]
 		if !ok {
-			return nil
+			return nil, key
 		}
 
 		if decl.strukt != nil || decl.under == nil {
-			return decl
+			return decl, key
 		}
 
 		next := g.resolve(decl, decl.under)
 		if next == "" || next == key {
-			return decl
+			return decl, key
 		}
 
 		// A chain ending at a builtin runs off the index; the last named type
 		// is what says the underlying kind, so stop on it rather than losing it.
 		if _, indexed := g.byName[next]; !indexed {
-			return decl
+			return decl, key
 		}
 
 		key = next
 	}
 
-	return nil
+	return nil, key
 }
 
 // resolve turns a type expression into the index key it is stored under.
@@ -425,6 +480,10 @@ func docText(f *ast.Field) string {
 // mergeChildren splices a squashed struct's keys into its parent, leaving any
 // the parent already declares alone.
 func mergeChildren(into, from *schema.Field) {
+	// A squashed struct contributes its openness along with its keys: settings
+	// it accepts without naming are settings the outer mapping accepts too.
+	into.Open = into.Open || from.Open
+
 	for name, child := range from.Children {
 		if into.Children == nil {
 			into.Children = map[string]*schema.Field{}
