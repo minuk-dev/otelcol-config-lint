@@ -417,6 +417,44 @@ func attachFields(cat *schema.Schema, set *schemaSet) int {
 	return n
 }
 
+// settleOpenness decides whether the secondary closes a mapping the primary
+// left open.
+//
+// A published schema states a component's sections outright, the ones the Go
+// sources can only decode by hand included, so where it describes a section no
+// tag names it is the better answer about whether that mapping is closed. But
+// only where it does. Upstream derives these files from the same mapstructure
+// tags, so a component that reads a section by hand is missing it from both:
+// hostmetrics has published a schema since v0.145.0 that lists root_path and
+// metadata_collection_interval and says nothing of scrapers until v0.154.0.
+// Closing on that puts the false positive back, and puts it back for exactly
+// the releases people are still running.
+//
+// So a secondary settles openness only where it says something the primary did
+// not already know. A key the sources never resolved is the evidence that this
+// schema describes more than the tags do; one that lists only keys they did
+// resolve has not looked into the hand-read section either, and the open
+// mapping stands.
+func settleOpenness(primary, secondary *schema.Field) {
+	if secondary.Open {
+		primary.Open = true
+
+		return
+	}
+
+	if !primary.Open || len(secondary.Children) == 0 {
+		return
+	}
+
+	for name := range secondary.Children {
+		if _, known := primary.Children[name]; !known {
+			primary.Open = false
+
+			return
+		}
+	}
+}
+
 // enrich adds to a field schema without ever taking away from it. The primary
 // states the shape; the secondary contributes what it knows and nothing else,
 // because a key dropped here becomes a false report against a valid config.
@@ -433,14 +471,7 @@ func enrich(primary, secondary *schema.Field) {
 		primary.ExtensionRef = secondary.ExtensionRef
 	}
 
-	// Openness is the one thing the secondary settles rather than only adds to.
-	// A published schema states a component's sections outright, the ones the
-	// Go sources can only decode by hand included, so where it lists a
-	// mapping's keys it is the better answer about whether that mapping is
-	// closed. A secondary that lists none says nothing either way.
-	if secondary.Open || len(secondary.Children) > 0 {
-		primary.Open = secondary.Open
-	}
+	settleOpenness(primary, secondary)
 
 	for name, child := range secondary.Children {
 		if primary.Children == nil {

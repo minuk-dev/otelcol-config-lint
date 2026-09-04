@@ -261,9 +261,17 @@ receiver declares `Scrapers` as `mapstructure:"-"` and reads the `scrapers`
 section by hand, and the receiver creator holds its `receivers` the same way.
 The settings that were resolved are still recorded and still checked; the
 mapping is left open, because presenting half of a component's settings as all
-of them is what turns a coverage gap into a false positive. Upstream began
-publishing `config.schema.yaml` widely at v0.145.0 and it states these sections
-outright, so this is what the releases before it rest on.
+of them is what turns a coverage gap into a false positive.
+
+A published `config.schema.yaml` can close such a mapping again, but only where
+it describes the hand-read section. Upstream derives those files from the same
+mapstructure tags, so a section read by hand is missing from both: hostmetrics
+has published one since v0.145.0 that lists `root_path` and
+`metadata_collection_interval`, and says nothing of `scrapers` until v0.154.0.
+A published schema settles openness only where it names a key the sources never
+resolved, which is the evidence that it describes more than the tags do; one
+that adds nothing has not looked into that section either, and the mapping
+stays open.
 
 An open component is a check that does not run: `unknown-field` lets every
 setting through for it, a typo in one the generator *did* resolve included. That
