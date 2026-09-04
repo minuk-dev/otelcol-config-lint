@@ -38,6 +38,20 @@ type Diff struct {
 	// direction. Below beta is what component-stability reports on, so these
 	// are the changes that alter what an unchanged config is told.
 	Restabilised []StabilityChange
+	// Open lists the components of the new release whose settings map is left
+	// open, so that unknown-field lets anything through for them.
+	//
+	// It is the one part of a schema that is a gap rather than a statement: a
+	// component the generator could only half resolve is left open instead of
+	// being closed over the half it did resolve, which trades a false positive
+	// for a check that quietly does not run. Counting it is what keeps that
+	// trade visible in the release it is made.
+	Open []Ref
+	// Opened and Closed are the components that changed side, among those both
+	// releases carry. A component that is new here is in neither: it is an
+	// addition, and its openness is already counted in Open.
+	Opened []Ref
+	Closed []Ref
 	// Total is how many components the new schema carries, which is the one
 	// number worth having when From is empty.
 	Total int
@@ -87,7 +101,18 @@ func DiffSchemas(previous, release *Schema) *Diff {
 		Removed:      nil,
 		Renamed:      nil,
 		Restabilised: nil,
+		Open:         nil,
+		Opened:       nil,
+		Closed:       nil,
 		Total:        release.Count(),
+	}
+
+	// The open components of a release stand on their own: they are what the
+	// schema does not describe, whether or not there is an earlier release to
+	// compare against, and the first schema of a distribution is exactly where
+	// the size of that gap is worth stating.
+	for _, kind := range config.Kinds() {
+		d.Open = append(d.Open, openIn(kind, release.Components[kind])...)
 	}
 
 	if previous == nil {
@@ -113,16 +138,23 @@ func DiffSchemas(previous, release *Schema) *Diff {
 		d.Added = append(d.Added, missingFrom(kind, old, current, skip)...)
 		d.Removed = append(d.Removed, missingFrom(kind, current, old, nil)...)
 		d.Restabilised = append(d.Restabilised, restabilisedIn(kind, old, current)...)
+
+		opened, closed := opennessChanges(kind, old, current)
+		d.Opened = append(d.Opened, opened...)
+		d.Closed = append(d.Closed, closed...)
 	}
 
 	return d
 }
 
 // Empty reports whether the two releases ship the same components, described
-// the same way.
+// the same way. A component that changed side on openness is described
+// differently, and what an unchanged config is told about it changes with it,
+// so it counts.
 func (d *Diff) Empty() bool {
 	return len(d.Added) == 0 && len(d.Removed) == 0 &&
-		len(d.Renamed) == 0 && len(d.Restabilised) == 0
+		len(d.Renamed) == 0 && len(d.Restabilised) == 0 &&
+		len(d.Opened) == 0 && len(d.Closed) == 0
 }
 
 // missingFrom lists the components of have that base does not, skipping the
@@ -138,9 +170,70 @@ func missingFrom(kind config.Kind, base, have map[string]*Component, skip map[st
 		out = append(out, Ref{Kind: kind, Type: typ})
 	}
 
-	sort.Slice(out, func(a, b int) bool { return out[a].Type < out[b].Type })
+	sortRefs(out)
 
 	return out
+}
+
+// openIn lists the components of a kind whose own settings map is open.
+//
+// Only that top map counts. A free-form map further down -- a headers block, a
+// set of resource attributes -- is open because the keys under it are the
+// config author's to name, which is the schema describing the component
+// correctly rather than a gap in what it knows.
+func openIn(kind config.Kind, byType map[string]*Component) []Ref {
+	var out []Ref
+
+	for typ, comp := range byType {
+		if isOpen(comp) {
+			out = append(out, Ref{Kind: kind, Type: typ})
+		}
+	}
+
+	sortRefs(out)
+
+	return out
+}
+
+// opennessChanges lists the components a release stopped describing in full,
+// and the ones it went back to describing in full, among those both releases
+// carry.
+func opennessChanges(kind config.Kind, old, current map[string]*Component) ([]Ref, []Ref) {
+	var opened, closed []Ref
+
+	for typ, comp := range current {
+		was, ok := old[typ]
+		if !ok {
+			continue // an addition, already reported as one
+		}
+
+		ref := Ref{Kind: kind, Type: typ}
+
+		switch before, after := isOpen(was), isOpen(comp); {
+		case !before && after:
+			opened = append(opened, ref)
+		case before && !after:
+			closed = append(closed, ref)
+		}
+	}
+
+	sortRefs(opened)
+	sortRefs(closed)
+
+	return opened, closed
+}
+
+// isOpen reports whether a component accepts settings its schema does not
+// name. A component with no field schema at all is not open: nothing about it
+// was resolved, so there is no half-description to warn about, and the rules
+// that read settings skip it outright.
+func isOpen(comp *Component) bool { return comp.Fields != nil && comp.Fields.Open }
+
+// sortRefs orders a list of components by type, so a report reads the same way
+// every run. Every list in one diff is of a single kind, which is why the kind
+// does not enter the ordering.
+func sortRefs(refs []Ref) {
+	sort.Slice(refs, func(a, b int) bool { return refs[a].Type < refs[b].Type })
 }
 
 // renamesIn finds the component types that gained a new name in this release.
@@ -262,11 +355,20 @@ func (d *Diff) Markdown() string {
 	if d.From == "" {
 		fmt.Fprintf(&b, "### %s: new at `%s`\n\n%d components.\n",
 			d.Distribution, d.To, d.Total)
+		b.WriteString(d.coverage())
 
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "### %s: `%s` → `%s`\n\n%s\n", d.Distribution, d.From, d.To, d.headline())
+	if d.From == d.To {
+		// The same release, generated again: the difference is what the
+		// generator now says about it, not what upstream changed.
+		fmt.Fprintf(&b, "### %s: `%s` regenerated\n\n%s\n", d.Distribution, d.To, d.headline())
+	} else {
+		fmt.Fprintf(&b, "### %s: `%s` → `%s`\n\n%s\n", d.Distribution, d.From, d.To, d.headline())
+	}
+
+	b.WriteString(d.coverage())
 
 	writeList(&b, "Added", len(d.Added), func(i int) string { return refLine(d.Added[i]) })
 	writeList(&b, "Removed", len(d.Removed), func(i int) string { return refLine(d.Removed[i]) })
@@ -280,8 +382,29 @@ func (d *Diff) Markdown() string {
 
 		return fmt.Sprintf("%s `%s` (%s): %s → %s", c.Kind, c.Type, c.Signal, c.From, c.To)
 	})
+	writeList(&b, "Left open", len(d.Opened), func(i int) string { return refLine(d.Opened[i]) })
+	writeList(&b, "Described in full again", len(d.Closed), func(i int) string { return refLine(d.Closed[i]) })
 
 	return b.String()
+}
+
+// coverage is the paragraph saying how much of the release the schema does not
+// describe. It is kept out of the headline because it is not a change between
+// the two releases: it is a standing gap, which is why it is also written for
+// a distribution's first schema, and why a release with none says nothing.
+func (d *Diff) coverage() string {
+	if len(d.Open) == 0 {
+		return ""
+	}
+
+	if len(d.Open) == 1 {
+		return "\n1 of them is left open: its settings are not fully described, " +
+			"so `unknown-field` does not check it.\n"
+	}
+
+	return fmt.Sprintf(
+		"\n%d of them are left open: their settings are not fully described, "+
+			"so `unknown-field` does not check them.\n", len(d.Open))
 }
 
 // headline is the one line a reviewer reads when nothing below needs attention.
@@ -298,6 +421,8 @@ func (d *Diff) headline() string {
 		{len(d.Removed), "removed"},
 		{len(d.Renamed), "renamed"},
 		{len(d.Restabilised), "across the beta line"},
+		{len(d.Opened), "left open"},
+		{len(d.Closed), "described in full again"},
 	}
 
 	var parts []string

@@ -116,9 +116,11 @@ by hand, present or not.
 
 The generated diff is several megabytes of YAML, so the pull request leads with
 what actually changed. `--summary` writes it: the components the release adds,
-drops and renames, and the ones that crossed the beta line, which is what
+drops and renames, the ones that crossed the beta line, which is what
 [`component-stability`](rules/component-stability.md) reports on and so what
-changes the findings an unchanged config gets.
+changes the findings an unchanged config gets, and how many are [left
+open](#field-schemas) — the components no unknown setting is reported for, which
+is the one part of a schema that is a gap rather than a statement.
 
 ```sh
 go run ./cmd/schemagen generate --builder acme=./builder.yaml --registry ./schemas \
@@ -130,11 +132,44 @@ go run ./cmd/schemagen generate --builder acme=./builder.yaml --registry ./schem
 
 4 added, 1 renamed, 2 across the beta line; 327 components in total.
 
+12 of them are left open: their settings are not fully described, so
+`unknown-field` does not check them.
+
 **Added**
 
 - receiver `faro`
 …
 ```
+
+## Regenerating a release the registry already has
+
+A schema is regenerated in place when the generator learns to describe
+something differently, which is a correction to every release already published
+rather than to the next one — the weekly run only ever looks forward, so it
+will not do this on its own. Dispatch the workflow with the versions to redo,
+oldest first; `base` stacks one batch on the last so a long backfill arrives as
+a few reviewable pull requests instead of one.
+
+The summary of such a run compares the release **against itself**, not against
+the release before it: what there is to review is what this run changed about
+it. So a backfill reads as the list of components that moved:
+
+```
+### contrib: `v0.153.0` regenerated
+
+1 left open; 284 components in total.
+
+1 of them is left open: its settings are not fully described, so
+`unknown-field` does not check it.
+
+**Left open**
+
+- receiver `hostmetrics`
+```
+
+Comparing against the previous release would answer the other question, and in
+a batch generating oldest first it would answer it against a file the same run
+had just rewritten, so the change being made would appear nowhere.
 
 ## Adding a release by hand
 
@@ -229,6 +264,12 @@ mapping is left open, because presenting half of a component's settings as all
 of them is what turns a coverage gap into a false positive. Upstream began
 publishing `config.schema.yaml` widely at v0.145.0 and it states these sections
 outright, so this is what the releases before it rest on.
+
+An open component is a check that does not run: `unknown-field` lets every
+setting through for it, a typo in one the generator *did* resolve included. That
+is the right trade against reporting a valid config as wrong, but it is silent,
+so `--summary` counts the components a release leaves open — see [keeping the
+registry current](#keeping-the-registry-current).
 
 This is what [`unknown-field`](rules/unknown-field.md),
 [`required-field`](rules/required-field.md),

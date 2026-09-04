@@ -41,8 +41,14 @@ passes.
 
 The same holds for a component resolved only [in
 part](../schemas.md#field-schemas): where the settings that were read are known
-not to be all of them, the ones that were read are still checked and the rest
-are let through, rather than the component being closed over half of itself.
+not to be all of them, the component is left open rather than closed over half
+of itself. That turns this rule off for the whole component — a misspelling of
+a setting the generator *did* resolve goes unreported too, since nothing
+distinguishes it from one of the settings that were never named. The other
+three readers of the schema still check what was resolved. How many components
+a release leaves this way is counted in the summary the registry is
+[regenerated](../schemas.md#regenerating-a-release-the-registry-already-has)
+with.
 
 `${env:...}` expansions are left alone, and `--ignore-missing-schemas` turns off
 reporting for components the schema does not describe at all, which is what a
