@@ -396,6 +396,53 @@ replaces:
 	assert.NotContains(t, stdout, "open: true", "a fully described component was left open")
 }
 
+// Upstream derives the published schema from the same mapstructure tags, so a
+// component that reads a section by hand is missing it from both. hostmetrics
+// published one from v0.145.0 that says nothing of "scrapers" until v0.154.0,
+// and a schema that describes no more than the sources did cannot be what
+// closes the component: doing so puts the false positive back for every
+// release in between.
+func TestAPublishedSchemaThatAddsNothingDoesNotClose(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	confmap := module(t, root, "go.opentelemetry.io/collector/confmap", map[string]string{
+		"confmap.go": "package confmap\n\ntype Conf struct{}\n",
+	})
+	receiver := module(t, root, "example.com/collector/receiver/hostmetricsreceiver", map[string]string{
+		"metadata.yaml": "type: hostmetrics\nstatus:\n  class: receiver\n" +
+			"  stability:\n    beta: [metrics]\n",
+		// Every property here is one the sources already resolved.
+		"config.schema.yaml": "type: object\nproperties:\n" +
+			"  root_path:\n    description: the host's root directory\n    type: string\n",
+		"config.go": "package hostmetricsreceiver\n\n" +
+			"import \"go.opentelemetry.io/collector/confmap\"\n\n" +
+			"type Config struct {\n" +
+			"\tScrapers map[string]any `mapstructure:\"-\"`\n" +
+			"\tRootPath string `mapstructure:\"root_path\"`\n}\n\n" +
+			"func (cfg *Config) Unmarshal(componentParser *confmap.Conf) error { return nil }\n",
+	})
+
+	path := filepath.Join(root, "manifest.yaml")
+	writeFile(t, path, fmt.Sprintf(`
+dist:
+  name: custom
+  otelcol_version: 0.153.0
+receivers:
+  - gomod: example.com/collector/receiver/hostmetricsreceiver v0.0.0
+replaces:
+  - example.com/collector/receiver/hostmetricsreceiver => %s
+  - go.opentelemetry.io/collector/confmap => %s
+`, receiver, confmap))
+
+	code, stdout, stderr := run(t, "--builder", path, "--cache", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+	assert.Contains(t, stdout, "the host's root directory", "the published schema was not read")
+	assert.Contains(t, stdout, "open: true",
+		"a published schema describing no more than the sources closed a hand-read section")
+}
+
 // A setting that decodes into a component.ID names an extension, and that is
 // the only thing that says so: a storage id and a directory path are both
 // strings by the time they reach the schema. Marking it here is what lets
