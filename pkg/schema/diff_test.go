@@ -228,3 +228,106 @@ func componentNames(n int) []string {
 
 	return out
 }
+
+// A component the generator could only half resolve is left open, which turns
+// unknown-field off for it. That is a gap rather than a mistake, but it is
+// silent in the schema, so the summary counts it.
+func TestDiffCountsTheComponentsLeftOpen(t *testing.T) {
+	t.Parallel()
+
+	next := release("v0.158.0", map[string]*schema.Component{
+		"hostmetrics": {Type: "hostmetrics", Fields: &schema.Field{Type: "map", Open: true}},
+		"otlp":        {Type: "otlp", Fields: &schema.Field{Type: "map"}},
+		"nofields":    {Type: "nofields"},
+	})
+
+	d := schema.DiffSchemas(nil, next)
+
+	assert.Equal(t, []schema.Ref{{Kind: config.KindReceiver, Type: "hostmetrics"}}, d.Open)
+
+	rendered := d.Markdown()
+	assert.Contains(t, rendered, "3 components.")
+	assert.Contains(t, rendered, "1 of them is left open")
+}
+
+// A free-form map inside a component -- headers, resource attributes -- is the
+// schema describing it correctly, not a gap, so it is not counted.
+func TestDiffDoesNotCountAnOpenMapInsideAComponent(t *testing.T) {
+	t.Parallel()
+
+	d := schema.DiffSchemas(nil, release("v0.158.0", map[string]*schema.Component{
+		"otlp": {Type: "otlp", Fields: &schema.Field{Type: "map", Children: map[string]*schema.Field{
+			"headers": {Type: "map", Open: true},
+		}}},
+	}))
+
+	assert.Empty(t, d.Open)
+	assert.NotContains(t, d.Markdown(), "left open")
+}
+
+// Regenerating a release with a changed generator moves components across the
+// line, which is what says how far a fix like #110 reaches.
+func TestDiffReportsComponentsThatChangedOpenness(t *testing.T) {
+	t.Parallel()
+
+	from := release("v0.157.0", map[string]*schema.Component{
+		"hostmetrics": {Type: "hostmetrics", Fields: &schema.Field{Type: "map"}},
+		"settled":     {Type: "settled", Fields: &schema.Field{Type: "map", Open: true}},
+		"steady":      {Type: "steady", Fields: &schema.Field{Type: "map", Open: true}},
+	})
+	next := release("v0.158.0", map[string]*schema.Component{
+		"hostmetrics": {Type: "hostmetrics", Fields: &schema.Field{Type: "map", Open: true}},
+		"settled":     {Type: "settled", Fields: &schema.Field{Type: "map"}},
+		"steady":      {Type: "steady", Fields: &schema.Field{Type: "map", Open: true}},
+		"arrived":     {Type: "arrived", Fields: &schema.Field{Type: "map", Open: true}},
+	})
+
+	d := schema.DiffSchemas(from, next)
+
+	assert.Equal(t, []schema.Ref{{Kind: config.KindReceiver, Type: "hostmetrics"}}, d.Opened)
+	assert.Equal(t, []schema.Ref{{Kind: config.KindReceiver, Type: "settled"}}, d.Closed)
+	assert.False(t, d.Empty())
+
+	rendered := d.Markdown()
+	assert.Contains(t, rendered, "1 added, 1 left open, 1 described in full again")
+	assert.Contains(t, rendered, "3 of them are left open")
+	assert.Contains(t, rendered, "**Left open**\n\n- receiver `hostmetrics`")
+	assert.Contains(t, rendered, "**Described in full again**\n\n- receiver `settled`")
+}
+
+// A component that arrives open is an addition, not something this release
+// stopped describing.
+func TestDiffDoesNotReportANewOpenComponentAsOpened(t *testing.T) {
+	t.Parallel()
+
+	d := schema.DiffSchemas(
+		release("v0.157.0", map[string]*schema.Component{}),
+		release("v0.158.0", map[string]*schema.Component{
+			"arrived": {Type: "arrived", Fields: &schema.Field{Type: "map", Open: true}},
+		}),
+	)
+
+	assert.Empty(t, d.Opened)
+	assert.Len(t, d.Open, 1)
+	assert.Equal(t, []schema.Ref{{Kind: config.KindReceiver, Type: "arrived"}}, d.Added)
+}
+
+// Regenerating a release the registry already holds compares it against
+// itself, so the heading says so rather than claiming an upgrade from a
+// version to the same version.
+func TestMarkdownNamesARegeneratedRelease(t *testing.T) {
+	t.Parallel()
+
+	before := release("v0.153.0", map[string]*schema.Component{
+		"hostmetrics": {Type: "hostmetrics", Fields: &schema.Field{Type: "map"}},
+	})
+	after := release("v0.153.0", map[string]*schema.Component{
+		"hostmetrics": {Type: "hostmetrics", Fields: &schema.Field{Type: "map", Open: true}},
+	})
+
+	rendered := schema.DiffSchemas(before, after).Markdown()
+
+	assert.Contains(t, rendered, "### contrib: `v0.153.0` regenerated")
+	assert.NotContains(t, rendered, "→ `v0.153.0`")
+	assert.Contains(t, rendered, "1 left open")
+}

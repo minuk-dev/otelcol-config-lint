@@ -71,6 +71,30 @@ func TestSummaryOfAFirstRelease(t *testing.T) {
 	assert.Contains(t, readFile(t, summary), "### custom: new at `v0.157.0`")
 }
 
+// A release the registry already holds is being generated again because the
+// generator changed, so the summary is what this run changes about that
+// release -- not what upstream changed a release earlier, which in a backfill
+// generating oldest first would be measured against a file the same run had
+// just rewritten.
+func TestSummaryOfARegeneratedReleaseComparesAgainstItself(t *testing.T) {
+	t.Parallel()
+
+	registry := t.TempDir()
+	seedRegistry(t, registry, "v0.150.0", "v0.157.0")
+
+	manifest := singleComponentManifest(t, t.TempDir())
+	summary := filepath.Join(t.TempDir(), "summary.md")
+
+	code, _, stderr := run(t, "--builder", "custom="+manifest,
+		"--registry", registry, "--summary", summary, "--cache", t.TempDir())
+
+	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
+
+	written := readFile(t, summary)
+	assert.Contains(t, written, "### custom: `v0.157.0` regenerated")
+	assert.NotContains(t, written, "`v0.150.0`", "compared against the release before it")
+}
+
 func TestSummaryNeedsARegistry(t *testing.T) {
 	t.Parallel()
 
