@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/spf13/afero"
+	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -81,6 +83,8 @@ type Options struct {
 	MinSeverity diag.Severity
 	// FailOn is the severity at which a file counts as invalid.
 	FailOn diag.Severity
+	// Embedded checks collector configs in Kubernetes ConfigMap data blocks.
+	Embedded bool
 }
 
 // Availability reports which releases ship a component type. It is what
@@ -171,6 +175,47 @@ func (l *Linter) LintReader(ctx context.Context, name string, r io.Reader) Resul
 // schema lookups a rule may make run under, so a run that is cancelled does
 // not leave one waiting on a registry.
 func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
+	if l.opts.Embedded {
+		return l.lintEmbedded(ctx, path, src)
+	}
+
+	return l.lintConfig(ctx, path, src)
+}
+
+// LintAll checks paths concurrently with up to n workers, sending results in
+// completion order. It closes the returned channel when every path is done.
+func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Result {
+	if n < 1 {
+		n = 1
+	}
+
+	out := make(chan Result, len(paths))
+	in := make(chan string)
+
+	var workers sync.WaitGroup
+
+	for range n {
+		workers.Go(func() {
+			for p := range in {
+				out <- l.LintFile(ctx, p)
+			}
+		})
+	}
+
+	go func() {
+		for _, p := range paths {
+			in <- p
+		}
+
+		close(in)
+		workers.Wait()
+		close(out)
+	}()
+
+	return out
+}
+
+func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result {
 	f, err := config.Parse(path, src)
 	if err != nil {
 		var syn *config.SyntaxError
@@ -234,37 +279,147 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 	return res
 }
 
-// LintAll checks paths concurrently with up to n workers, sending results in
-// completion order. It closes the returned channel when every path is done.
-func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Result {
-	if n < 1 {
-		n = 1
-	}
+// lintEmbedded keeps one result per input file, including files with several
+// ConfigMaps. The inner parser and rules remain the same as for a plain config.
+func (l *Linter) lintEmbedded(ctx context.Context, path string, src []byte) Result {
+	res := Result{Path: path, Status: Skipped}
+	lines := strings.Split(string(src), "\n")
+	dec := yaml.NewDecoder(strings.NewReader(string(src)))
 
-	out := make(chan Result, len(paths))
-	in := make(chan string)
+	for {
+		var doc yaml.Node
 
-	var workers sync.WaitGroup
-
-	for range n {
-		workers.Go(func() {
-			for p := range in {
-				out <- l.LintFile(ctx, p)
-			}
-		})
-	}
-
-	go func() {
-		for _, p := range paths {
-			in <- p
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			break
 		}
 
-		close(in)
-		workers.Wait()
-		close(out)
-	}()
+		if err != nil {
+			return Result{Path: path, Status: Error, Err: err}
+		}
 
-	return out
+		if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+			continue
+		}
+
+		root := doc.Content[0]
+		kind := mappingValue(root, "kind")
+
+		if kind == nil || kind.Value != "ConfigMap" {
+			continue
+		}
+
+		data := mappingValue(root, "data")
+
+		if data == nil || data.Kind != yaml.MappingNode {
+			continue
+		}
+
+		l.lintConfigMap(ctx, path, lines, root, data, &res)
+	}
+
+	res.Diagnostics.Sort()
+
+	return res
+}
+
+func (l *Linter) lintConfigMap(ctx context.Context, path string, lines []string, root, data *yaml.Node, res *Result) {
+	name := "<unnamed>"
+
+	if metadata := mappingValue(root, "metadata"); metadata != nil {
+		if n := mappingValue(metadata, "name"); n != nil && n.Value != "" {
+			name = n.Value
+		}
+	}
+
+	for i := 0; i+1 < len(data.Content); i += 2 {
+		key, block := data.Content[i], data.Content[i+1]
+
+		if block.Kind != yaml.ScalarNode || block.Style&yaml.LiteralStyle == 0 || !collectorBlock(block.Value) {
+			continue
+		}
+
+		baseline := blockIndent(lines, block)
+		checked := l.lintConfig(ctx, path, []byte(block.Value))
+
+		if res.Status == Skipped || checked.Status == Invalid {
+			res.Status = checked.Status
+		}
+
+		for _, d := range checked.Diagnostics {
+			if d.Position.Line > 0 {
+				d.Position.Line += block.Line
+				if d.Position.Column > 0 {
+					d.Position.Column += baseline
+				}
+			}
+
+			d.Message = "(" + name + "/" + key.Value + ") " + d.Message
+			res.Diagnostics = append(res.Diagnostics, d)
+		}
+	}
+}
+
+func collectorBlock(src string) bool {
+	var doc yaml.Node
+
+	err := yaml.Unmarshal([]byte(src), &doc)
+
+	if err == nil && len(doc.Content) > 0 {
+		root := doc.Content[0]
+
+		if root.Kind != yaml.MappingNode || mappingValue(root, "service") == nil {
+			return false
+		}
+
+		for _, key := range []string{"receivers", "exporters", "processors", "connectors", "extensions"} {
+			if mappingValue(root, key) != nil {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	// A broken collector config still needs its syntax finding. These key
+	// prefixes identify it without pretending the invalid YAML has a node tree.
+	service, section := false, false
+	for line := range strings.SplitSeq(src, "\n") {
+		service = service || strings.HasPrefix(line, "service:")
+		for _, key := range []string{"receivers:", "exporters:", "processors:", "connectors:", "extensions:"} {
+			section = section || strings.HasPrefix(line, key)
+		}
+	}
+
+	return service && section
+}
+
+func mappingValue(n *yaml.Node, key string) *yaml.Node {
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			return n.Content[i+1]
+		}
+	}
+
+	return nil
+}
+
+func blockIndent(lines []string, block *yaml.Node) int {
+	for i, line := range strings.Split(block.Value, "\n") {
+		if strings.TrimSpace(line) == "" || block.Line+i >= len(lines) {
+			continue
+		}
+
+		if offset := strings.Index(lines[block.Line+i], line); offset >= 0 {
+			return offset
+		}
+	}
+
+	return 0
 }
 
 // fs returns the filesystem to read, which is the real one unless the caller

@@ -13,6 +13,7 @@ in_collector_version=""
 in_distribution=""
 in_schema_location=""
 in_strict="false"
+in_embedded="false"
 in_ignore_missing_schemas="false"
 in_min_severity=""
 in_fail_on=""
@@ -46,6 +47,7 @@ for arg in "$@"; do
     --distribution) in_distribution="${value}" ;;
     --schema-location) in_schema_location="${value}" ;;
     --strict) in_strict="${value}" ;;
+    --embedded) in_embedded="${value}" ;;
     --ignore-missing-schemas) in_ignore_missing_schemas="${value}" ;;
     --min-severity) in_min_severity="${value}" ;;
     --fail-on) in_fail_on="${value}" ;;
@@ -97,6 +99,7 @@ value exclude "${in_exclude}"
 value config "${in_config}"
 toggle no-config "${in_no_config}"
 toggle strict "${in_strict}"
+toggle embedded "${in_embedded}"
 toggle ignore-missing-schemas "${in_ignore_missing_schemas}"
 toggle verbose "${in_verbose}"
 toggle exit-on-error "${in_exit_on_error}"

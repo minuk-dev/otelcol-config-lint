@@ -104,6 +104,86 @@ func TestSyntaxErrorIsADiagnosticNotAFailure(t *testing.T) {
 	}
 }
 
+func TestEmbeddedConfigMapsReportOuterPositions(t *testing.T) {
+	t.Parallel()
+
+	src := `apiVersion: apps/v1
+kind: Deployment
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent
+data:
+  notes: |
+    service: documentation
+  collector.yaml: |
+    receivers:
+      otlp:
+    service:
+      pipelines:
+        traces:
+          receivers: [missing]
+          exporters: [debug]
+---
+kind: ConfigMap
+metadata:
+  name: gateway
+data:
+  config: |2
+      exporters:
+        debug:
+      service:
+        pipelines:
+          traces:
+            receivers: [missing]
+            exporters: [debug]
+`
+	l := newLinter(t, lint.Options{Embedded: true, MinSeverity: diag.Error})
+	r := l.Lint(t.Context(), "manifest.yaml", []byte(src))
+	require.Equal(t, lint.Invalid, r.Status)
+
+	var positions []diag.Position
+
+	for _, d := range r.Diagnostics {
+		if d.Rule == "undefined-reference" && strings.Contains(d.Message, "receiver \"missing\"") {
+			positions = append(positions, d.Position)
+			if d.Position.Line == 17 {
+				assert.Contains(t, d.Message, "agent/collector.yaml")
+			} else {
+				assert.Contains(t, d.Message, "gateway/config")
+			}
+		}
+	}
+
+	assert.Equal(t, []diag.Position{
+		{File: "manifest.yaml", Line: 17, Column: 23},
+		{File: "manifest.yaml", Line: 30, Column: 25},
+	}, positions)
+
+	var out bytes.Buffer
+
+	f, err := lint.NewFormatter("github", &out, lint.FormatterOptions{})
+	require.NoError(t, err)
+	require.NoError(t, f.Result(r))
+	require.NoError(t, f.Finish(lint.Summary{}))
+	assert.Contains(t, out.String(), "file=manifest.yaml,line=17,col=23")
+	assert.Contains(t, out.String(), "agent/collector.yaml")
+}
+
+func TestEmbeddedConfigMapReportsInnerSyntaxError(t *testing.T) {
+	t.Parallel()
+
+	src := "kind: ConfigMap\nmetadata:\n  name: agent\ndata:\n  config: |\n    receivers:\n      otlp: [\n    service:\n"
+	r := newLinter(t, lint.Options{Embedded: true}).Lint(t.Context(), "manifest.yaml", []byte(src))
+	require.Equal(t, lint.Invalid, r.Status)
+	require.NotEmpty(t, r.Diagnostics)
+	assert.Equal(t, "yaml-syntax", r.Diagnostics[0].Rule)
+	assert.Equal(t, "manifest.yaml", r.Diagnostics[0].Position.File)
+	assert.GreaterOrEqual(t, r.Diagnostics[0].Position.Line, 6)
+	assert.Contains(t, r.Diagnostics[0].Message, "agent/config")
+}
+
 func TestMinSeverityFilters(t *testing.T) {
 	t.Parallel()
 

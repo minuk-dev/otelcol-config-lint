@@ -63,6 +63,11 @@ In a workflow it is one `uses:` line — no Go toolchain, no install step:
     file-summary: true
 ```
 
+For collector configs stored in Kubernetes ConfigMap `data` blocks, set
+`embedded: true` and point `files` at the manifests. Findings use the manifest's
+line and column and name the ConfigMap and data key. This also handles several
+YAML documents and ConfigMaps in one file.
+
 Findings land as inline pull-request annotations, because the action defaults to
 `--output github`. The step passes when everything is valid, fails when a file
 is invalid, and reports a usage error — a rule that does not exist, an unreadable
@@ -81,7 +86,7 @@ Except for `file-summary`, inputs match `run` flags, so the [flag table](#flags)
 covers: `files` (default `.`, whitespace-separated and so unable to
 carry a path with a space in it, globs allowed), `collector-version`,
 `distribution`, `schema-location` (one per line to search several in order),
-`strict`, `ignore-missing-schemas`, `min-severity`, `fail-on`, `default`,
+`strict`, `embedded`, `ignore-missing-schemas`, `min-severity`, `fail-on`, `default`,
 `enable`, `disable`, `severity`, `exclude`, `output` (default `github`),
 `config`, `no-config`, `summary` (default `true`), `verbose` and
 `exit-on-error`. `file-summary` defaults to `false`. `--concurrency`, `--no-color`, `--no-cache` and
@@ -137,6 +142,7 @@ otelcol-config-lint run --summary ./configs                       # walk a direc
 cat config.yaml | otelcol-config-lint run -                       # read stdin
 otelcol-config-lint run --output json ./configs > report.json     # machine-readable
 otelcol-config-lint run --output github ./configs                 # PR annotations
+otelcol-config-lint run --embedded --output github ./manifests    # ConfigMap annotations
 otelcol-config-lint run --collector-version v0.110.0 config.yaml  # target an older release
 otelcol-config-lint run --distribution core config.yaml           # target plain otelcol
 otelcol-config-lint run --default none -E invalid-value ./configs # run one rule and nothing else
@@ -160,6 +166,7 @@ repository commits, a flag is how one run departs from it.
 | `--no-cache` | `run.noCache` | fetch schemas again instead of reading the ones kept from earlier runs |
 | `--allow-nearest-fallback` | `run.allowNearestFallback` | check against the nearest older release when the registry has no schema for the one asked for. Without it, that is a usage error |
 | `--strict` | `run.strict` | unknown component settings become errors instead of warnings |
+| `--embedded` | `run.embedded` | check collector configs in ConfigMap literal `data` blocks; skip other documents and values |
 | `--ignore-missing-schemas` | `run.ignoreMissingSchemas` | do not fail on components absent from the schema (custom distributions) |
 | `--exclude` | `run.exclude` | glob patterns to skip when walking directories |
 | `-n`, `--concurrency` | `run.concurrency` | files checked in parallel |
