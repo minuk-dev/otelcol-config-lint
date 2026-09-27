@@ -27,7 +27,7 @@
 # just no longer what consumers run.
 FROM ghcr.io/minuk-dev/otelcol-config-lint:0.1.1 AS bin
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 # bash for the entrypoint's arrays, jq to read the summary out of the report,
 # and the CA bundle because schemas are fetched from the published registry
