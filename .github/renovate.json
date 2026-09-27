@@ -1,5 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "enabledManagers": ["github-actions"]
+  "enabledManagers": ["github-actions"],
+  "packageRules": [
+    {"matchManagers": ["github-actions"], "enabled": false},
+    {"matchManagers": ["github-actions"], "matchPackageNames": ["golangci/golangci-lint"], "enabled": true}
+  ]
 }
