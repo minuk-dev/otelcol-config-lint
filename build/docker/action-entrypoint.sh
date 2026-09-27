@@ -25,6 +25,7 @@ in_output="github"
 in_config=""
 in_no_config="false"
 in_summary="true"
+in_file_summary="false"
 in_verbose="false"
 in_exit_on_error="false"
 
@@ -57,6 +58,7 @@ for arg in "$@"; do
     --config) in_config="${value}" ;;
     --no-config) in_no_config="${value}" ;;
     --summary) in_summary="${value}" ;;
+    --file-summary) in_file_summary="${value}" ;;
     --verbose) in_verbose="${value}" ;;
     --exit-on-error) in_exit_on_error="${value}" ;;
     *)
@@ -135,7 +137,12 @@ report="$(mktemp "${TMPDIR:-/tmp}/otelcol-config-lint.XXXXXX")"
 trap 'rm -f "${report}"' EXIT
 
 code=0
-otelcol-config-lint run "${flags[@]}" --output json "${files[@]}" >"${report}" || code=$?
+report_flags=("${flags[@]}")
+if [ "${in_file_summary}" = "true" ]; then
+  # JSON normally omits passing files; the table needs every result.
+  report_flags+=(--verbose)
+fi
+otelcol-config-lint run "${report_flags[@]}" --output json "${files[@]}" >"${report}" || code=$?
 
 # A run that never produced a report -- a usage error -- still has to report a
 # number, so anything unreadable counts as zero.
@@ -166,6 +173,19 @@ emit_outputs() {
   } >>"${GITHUB_OUTPUT}"
 }
 
+emit_file_summary() {
+  if [ "${in_file_summary}" != "true" ] || [ -z "${GITHUB_STEP_SUMMARY:-}" ]; then
+    return
+  fi
+
+  {
+    echo '### otelcol-config-lint files'
+    echo '| File | Status |'
+    echo '| --- | --- |'
+    jq -r '.files[] | "| <code>\(.filename | @html | gsub("\\|"; "&#124;") | gsub("[\\r\\n]"; " "))</code> | \(.status) |"' "${report}"
+  } >>"${GITHUB_STEP_SUMMARY}"
+}
+
 # Exit code 2 means the run never happened -- the linter has already said why on
 # stderr, and rendering it a second time would only repeat the message.
 if [ "${code}" -eq 2 ]; then
@@ -176,6 +196,7 @@ fi
 
 if [ "${in_output}" = "json" ]; then
   emit_outputs "${code}"
+  emit_file_summary
   cat "${report}"
   exit "${code}"
 fi
@@ -197,5 +218,6 @@ if [ "${render}" -eq 2 ]; then
 fi
 
 emit_outputs "${code}"
+emit_file_summary
 
 exit "${code}"

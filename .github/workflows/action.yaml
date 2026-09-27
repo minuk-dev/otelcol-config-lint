@@ -50,6 +50,24 @@ jobs:
             Dockerfile
           git --no-pager diff -- Dockerfile
 
+      - name: File summary lists each result
+        run: |
+          summary_file=$(mktemp)
+          outputs_file=$(mktemp)
+          if PATH="$PWD/dist/action:$PATH" GITHUB_OUTPUT="$outputs_file" GITHUB_STEP_SUMMARY="$summary_file" \
+            bash build/docker/action-entrypoint.sh \
+              '--files=testdata/valid testdata/invalid' \
+              '--collector-version=v0.157.0' \
+              '--schema-location=testdata/schemas' \
+              '--output=text' '--file-summary=true' >/dev/null; then
+            exit 1
+          else
+            test "$?" -eq 1
+          fi
+          grep -Fqx '| <code>testdata/valid/agent.yaml</code> | valid |' "$summary_file"
+          grep -Fqx '| <code>testdata/invalid/pipeline.yaml</code> | invalid |' "$summary_file"
+          grep -Fqx 'invalid=2' "$outputs_file"
+
       - name: Lint the valid examples
         id: valid
         uses: ./
@@ -57,6 +75,7 @@ jobs:
           files: testdata/valid
           collector-version: v0.157.0
           schema-location: testdata/schemas
+          file-summary: true
 
       - name: A passing run reports zero failures
         run: |
@@ -73,6 +92,7 @@ jobs:
           files: testdata/invalid
           collector-version: v0.157.0
           schema-location: testdata/schemas
+          file-summary: true
           # Text, not annotations: these files are meant to be broken, and
           # annotating them would put red marks on every pull request.
           output: text
