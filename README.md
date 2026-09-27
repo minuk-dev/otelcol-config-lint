@@ -60,6 +60,7 @@ In a workflow it is one `uses:` line — no Go toolchain, no install step:
     files: ./configs
     collector-version: v0.157.0
     strict: true
+    file-summary: true
 ```
 
 Findings land as inline pull-request annotations, because the action defaults to
@@ -71,14 +72,19 @@ exceed either limit, the action selects across rules and files and reports how
 many were omitted. Use `output: text` or `output: json` to see every finding in
 the job log, or split files across steps for more inline annotations.
 
-Every input is the `run` flag of the same name, so the [flag table](#flags) is
-the whole reference: `files` (default `.`, whitespace-separated and so unable to
+With `file-summary: true`, the job summary lists every checked file as `valid`,
+`invalid`, `error` or `skipped`. This also includes passing files in `output: json`.
+If GitHub's 1 MiB summary limit is reached, failed files appear first and the
+summary reports how many remaining files were omitted.
+
+Except for `file-summary`, inputs match `run` flags, so the [flag table](#flags)
+covers: `files` (default `.`, whitespace-separated and so unable to
 carry a path with a space in it, globs allowed), `collector-version`,
 `distribution`, `schema-location` (one per line to search several in order),
 `strict`, `ignore-missing-schemas`, `min-severity`, `fail-on`, `default`,
 `enable`, `disable`, `severity`, `exclude`, `output` (default `github`),
 `config`, `no-config`, `summary` (default `true`), `verbose` and
-`exit-on-error`. `--concurrency`, `--no-color`, `--no-cache` and
+`exit-on-error`. `file-summary` defaults to `false`. `--concurrency`, `--no-color`, `--no-cache` and
 `--insecure-schema-location` are left out: a runner gains nothing from the first
 two, a fresh container has no cache to read, and a workflow that reads its
 schemas over plain HTTP is one whose findings anyone on the path can choose.

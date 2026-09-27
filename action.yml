@@ -10,10 +10,8 @@ branding:
   icon: check-square
   color: purple
 
-# Every input maps onto the "run" flag of the same name, which in turn mirrors a
-# key of the settings file, so there is nothing new to learn: the CLI
-# documentation is the action documentation. Only --concurrency and --no-color
-# are left out; a runner has nothing to gain from either.
+# Most inputs map onto the "run" flag of the same name, which in turn mirrors a
+# key of the settings file. file-summary is specific to GitHub Actions.
 inputs:
   files:
     description: >-
@@ -93,6 +91,10 @@ inputs:
     description: Append a count of the outcomes to the output.
     required: false
     default: "true"
+  file-summary:
+    description: List each checked file and its status in the job summary.
+    required: false
+    default: "false"
   verbose:
     description: Also report the files that passed.
     required: false
@@ -143,5 +145,6 @@ runs:
     - --config=${{ inputs.config }}
     - --no-config=${{ inputs.no-config }}
     - --summary=${{ inputs.summary }}
+    - --file-summary=${{ inputs.file-summary }}
     - --verbose=${{ inputs.verbose }}
     - --exit-on-error=${{ inputs.exit-on-error }}
