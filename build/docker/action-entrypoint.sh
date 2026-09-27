@@ -178,12 +178,26 @@ emit_file_summary() {
     return
   fi
 
+  local LC_ALL=C row bytes omitted=0
   {
     echo '### otelcol-config-lint files'
     echo '| File | Status |'
     echo '| --- | --- |'
-    jq -r '.files[] | "| <code>\(.filename | @html | gsub("\\|"; "&#124;") | gsub("[\\r\\n]"; " "))</code> | \(.status) |"' "${report}"
   } >>"${GITHUB_STEP_SUMMARY}"
+
+  bytes=$(wc -c <"${GITHUB_STEP_SUMMARY}")
+  while IFS= read -r row; do
+    if (( bytes + ${#row} + 1 <= 1048576 - 1024 )); then
+      printf '%s\n' "${row}" >>"${GITHUB_STEP_SUMMARY}"
+      (( bytes += ${#row} + 1 ))
+    else
+      (( omitted += 1 ))
+    fi
+  done < <(jq -r '.files | sort_by(.status == "valid" or .status == "skipped")[] | "| <code>\(.filename | @html | gsub("\\|"; "&#124;") | gsub("[\\r\\n]"; " "))</code> | \(.status) |"' "${report}")
+
+  if (( omitted > 0 )); then
+    printf '\n%d more file(s) omitted because GitHub limits step summaries to 1 MiB.\n' "${omitted}" >>"${GITHUB_STEP_SUMMARY}"
+  fi
 }
 
 # Exit code 2 means the run never happened -- the linter has already said why on

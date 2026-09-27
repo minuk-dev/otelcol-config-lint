@@ -69,6 +69,8 @@ is invalid, and reports a usage error — a rule that does not exist, an unreada
 settings file — distinctly, with exit code 2.
 With `file-summary: true`, the job summary lists every checked file as `valid`,
 `invalid`, `error` or `skipped`. This also includes passing files in `output: json`.
+If GitHub's 1 MiB summary limit is reached, failed files appear first and the
+summary reports how many remaining files were omitted.
 
 Except for `file-summary`, inputs match `run` flags, so the [flag table](#flags)
 covers: `files` (default `.`, whitespace-separated and so unable to

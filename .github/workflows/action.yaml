@@ -68,6 +68,20 @@ jobs:
           grep -Fqx '| <code>testdata/invalid/pipeline.yaml</code> | invalid |' "$summary_file"
           grep -Fqx 'invalid=2' "$outputs_file"
 
+          # A large report must still upload its summary, with failures first.
+          mock_dir=$(mktemp -d)
+          jq -n '{files: ([range(0; 15000) | {filename: ("configs/" + ("x" * 70) + tostring + ".yaml"), status: "valid"}] + [{filename: "configs/critical.yaml", status: "invalid"}]), summary: {valid: 15000, invalid: 1}}' >"$mock_dir/report.json"
+          printf '#!/bin/sh\ncat "$FAKE_REPORT"\nexit 1\n' >"$mock_dir/otelcol-config-lint"
+          chmod +x "$mock_dir/otelcol-config-lint"
+          PATH="$mock_dir:$PATH" FAKE_REPORT="$mock_dir/report.json" \
+            GITHUB_OUTPUT="$mock_dir/outputs" GITHUB_STEP_SUMMARY="$mock_dir/summary" \
+            bash build/docker/action-entrypoint.sh \
+              '--files=unused.yaml' '--collector-version=latest' \
+              '--output=json' '--file-summary=true' >/dev/null || test "$?" -eq 1
+          test "$(wc -c <"$mock_dir/summary")" -le 1048576
+          grep -Fqx '| <code>configs/critical.yaml</code> | invalid |' "$mock_dir/summary"
+          grep -q 'more file(s) omitted' "$mock_dir/summary"
+
       - name: Lint the valid examples
         id: valid
         uses: ./
