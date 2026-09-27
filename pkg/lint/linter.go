@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/samber/lo"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
@@ -361,6 +362,8 @@ func (l *Linter) lintConfigMap(ctx context.Context, path string, lines []string,
 }
 
 func collectorBlock(src string) bool {
+	sections := []string{"receivers", "exporters", "processors", "connectors", "extensions"}
+
 	var doc yaml.Node
 
 	err := yaml.Unmarshal([]byte(src), &doc)
@@ -368,30 +371,25 @@ func collectorBlock(src string) bool {
 	if err == nil && len(doc.Content) > 0 {
 		root := doc.Content[0]
 
-		if root.Kind != yaml.MappingNode || mappingValue(root, "service") == nil {
+		if root.Kind != yaml.MappingNode {
 			return false
 		}
 
-		for _, key := range []string{"receivers", "exporters", "processors", "connectors", "extensions"} {
-			if mappingValue(root, key) != nil {
-				return true
-			}
-		}
+		service := mappingValue(root, "service")
 
-		return false
+		return lo.SomeBy(sections, func(key string) bool { return mappingValue(root, key) != nil }) ||
+			mappingValue(service, "pipelines") != nil
 	}
 
 	// A broken collector config still needs its syntax finding. These key
 	// prefixes identify it without pretending the invalid YAML has a node tree.
-	service, section := false, false
 	for line := range strings.SplitSeq(src, "\n") {
-		service = service || strings.HasPrefix(line, "service:")
-		for _, key := range []string{"receivers:", "exporters:", "processors:", "connectors:", "extensions:"} {
-			section = section || strings.HasPrefix(line, key)
+		if lo.SomeBy(sections, func(key string) bool { return strings.HasPrefix(line, key+":") }) {
+			return true
 		}
 	}
 
-	return service && section
+	return false
 }
 
 func mappingValue(n *yaml.Node, key string) *yaml.Node {

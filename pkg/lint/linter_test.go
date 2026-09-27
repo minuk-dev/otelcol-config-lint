@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samber/lo"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,7 +175,7 @@ data:
 func TestEmbeddedConfigMapReportsInnerSyntaxError(t *testing.T) {
 	t.Parallel()
 
-	src := "kind: ConfigMap\nmetadata:\n  name: agent\ndata:\n  config: |\n    receivers:\n      otlp: [\n    service:\n"
+	src := "kind: ConfigMap\nmetadata:\n  name: agent\ndata:\n  config: |\n    receivers:\n      otlp: [\n"
 	r := newLinter(t, lint.Options{Embedded: true}).Lint(t.Context(), "manifest.yaml", []byte(src))
 	require.Equal(t, lint.Invalid, r.Status)
 	require.NotEmpty(t, r.Diagnostics)
@@ -182,6 +183,36 @@ func TestEmbeddedConfigMapReportsInnerSyntaxError(t *testing.T) {
 	assert.Equal(t, "manifest.yaml", r.Diagnostics[0].Position.File)
 	assert.GreaterOrEqual(t, r.Diagnostics[0].Position.Line, 6)
 	assert.Contains(t, r.Diagnostics[0].Message, "agent/config")
+}
+
+func TestEmbeddedConfigMapReportsMissingService(t *testing.T) {
+	t.Parallel()
+
+	src := "kind: ConfigMap\ndata:\n  config: |\n    receivers:\n      otlp:\n"
+	r := newLinter(t, lint.Options{Embedded: true}).Lint(t.Context(), "manifest.yaml", []byte(src))
+	require.Equal(t, lint.Invalid, r.Status)
+
+	for _, d := range r.Diagnostics {
+		if d.Rule == "service-required" {
+			assert.Equal(t, diag.Position{File: "manifest.yaml", Line: 4, Column: 5}, d.Position)
+
+			return
+		}
+	}
+
+	t.Fatal("missing service-required finding")
+}
+
+func TestEmbeddedConfigMapReportsEmptyPipeline(t *testing.T) {
+	t.Parallel()
+
+	src := "kind: ConfigMap\ndata:\n  config: |\n    service:\n      pipelines:\n        traces: {}\n"
+	r := newLinter(t, lint.Options{Embedded: true}).Lint(t.Context(), "manifest.yaml", []byte(src))
+	require.Equal(t, lint.Invalid, r.Status)
+
+	assert.True(t, lo.SomeBy(r.Diagnostics, func(d diag.Diagnostic) bool {
+		return d.Rule == "empty-pipeline" && d.Position.File == "manifest.yaml"
+	}))
 }
 
 func TestMinSeverityFilters(t *testing.T) {
