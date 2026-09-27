@@ -3,6 +3,8 @@ linters:
   default: all
   disable:
     - wsl # superseded by wsl_v5, which stays on
+    - exhaustruct # superseded by exhaustruct_v5
+    - gomodguard # superseded by gomodguard_v2
   settings:
     depguard:
       rules:
@@ -32,8 +34,8 @@ linters:
     exhaustive:
       # Switches over the internal enums end in a default case on purpose.
       default-signifies-exhaustive: true
-    exhaustruct:
-      exclude:
+    exhaustruct_v5:
+      ignore-patterns:
         # Diagnostics and findings carry optional Hint/Severity fields; filling
         # them in everywhere would say nothing.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/diag\.Diagnostic'
@@ -48,6 +50,12 @@ linters:
         # An environment nobody described is the zero value, and saying so is
         # the point: the rules that need one then report nothing.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Environment'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/(list|run)\.(rulesOptions|versionsOptions|options)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint\.GlobalCmdOptions'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/cmd/schemagen\.(goType|options)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/settings\.File'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/ruleset\.Selection'
+        - 'gopkg\.in/yaml\.v3\.Node'
         # cobra.Command has some forty fields and its zero values are the
         # defaults every command wants; each one sets only what it changes.
         - 'github\.com/spf13/cobra\.Command'
@@ -121,6 +129,7 @@ linters:
         linters:
           - dupl
           - funlen
+          - goconst # repeated fixture values describe different cases
           # A fake filesystem has to return afero's interfaces, and wrapping an
           # error a test is about to assert on only hides it.
           - ireturn
@@ -130,6 +139,9 @@ linters:
           # is exactly what the rules under test are meant to catch.
           - misspell
           - dupword
+      - path: pkg/(rule/ruletest/ruletest|settings/jsonschema)\.go
+        linters:
+          - goconst # schema keys and test fixtures are clearer as literals
 formatters:
   enable:
     - gci
