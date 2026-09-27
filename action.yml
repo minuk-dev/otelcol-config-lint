@@ -40,6 +40,10 @@ inputs:
     description: Report unknown component settings as errors.
     required: false
     default: "false"
+  embedded:
+    description: Lint collector configs in Kubernetes ConfigMap data blocks.
+    required: false
+    default: "false"
   ignore-missing-schemas:
     description: Do not fail on components missing from the schema.
     required: false
@@ -133,6 +137,7 @@ runs:
     - --distribution=${{ inputs.distribution }}
     - --schema-location=${{ inputs.schema-location }}
     - --strict=${{ inputs.strict }}
+    - --embedded=${{ inputs.embedded }}
     - --ignore-missing-schemas=${{ inputs.ignore-missing-schemas }}
     - --min-severity=${{ inputs.min-severity }}
     - --fail-on=${{ inputs.fail-on }}

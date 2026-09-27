@@ -105,6 +105,28 @@ func TestValidDirectoryPasses(t *testing.T) {
 	}
 }
 
+func TestEmbeddedFlagAnnotatesConfigMap(t *testing.T) {
+	t.Parallel()
+
+	src := `kind: ConfigMap
+metadata:
+  name: agent
+data:
+  config: |
+    receivers:
+      otlp:
+    service:
+      pipelines:
+        traces:
+          receivers: [missing]
+          exporters: [debug]
+`
+	code, out, errOut := lint(t, src, "--embedded", "--output", "github", "-")
+	require.Equal(t, 1, code, errOut)
+	assert.Contains(t, out, "file=stdin,line=11,col=23")
+	assert.Contains(t, out, "agent/config")
+}
+
 func TestInvalidFileFails(t *testing.T) {
 	t.Parallel()
 

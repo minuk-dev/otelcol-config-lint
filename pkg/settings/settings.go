@@ -100,6 +100,8 @@ type RunBlock struct {
 	AllowNearestFallback *bool `yaml:"allowNearestFallback"`
 	// Strict reports unknown component settings as errors.
 	Strict *bool `yaml:"strict"`
+	// Embedded checks collector configs in Kubernetes ConfigMap data blocks.
+	Embedded *bool `yaml:"embedded"`
 	// IgnoreMissingSchemas keeps components absent from the schema from
 	// failing the run, for a custom distribution.
 	IgnoreMissingSchemas *bool `yaml:"ignoreMissingSchemas"`

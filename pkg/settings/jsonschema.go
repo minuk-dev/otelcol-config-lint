@@ -116,6 +116,7 @@ func runSchema() object {
 			"description": "Report unknown component settings as errors instead of warnings.",
 			"type":        "boolean",
 		},
+		"embedded": object{"description": "Check collector configs in Kubernetes ConfigMap data blocks.", "type": "boolean"},
 		"ignoreMissingSchemas": object{
 			"description": "Do not fail on components the schema does not describe, for a custom distribution.",
 			"type":        "boolean",

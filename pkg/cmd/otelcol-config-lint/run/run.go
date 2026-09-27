@@ -104,6 +104,7 @@ type options struct {
 	failOn           string
 	concurrency      int
 	strict           bool
+	embedded         bool
 	ignoreMissing    bool
 	summary          bool
 	verbose          bool
@@ -213,6 +214,7 @@ func (o *options) declareFlags(cmd *cobra.Command) {
 	// shorthand: it is what the documentation and every existing workflow use.
 	flags.IntVarP(&o.concurrency, "concurrency", "n", defaultWorkers(), "number of files to check in parallel")
 	flags.BoolVar(&o.strict, "strict", false, "report unknown component settings as errors")
+	flags.BoolVar(&o.embedded, "embedded", false, "lint collector configs in Kubernetes ConfigMap data blocks")
 	flags.BoolVar(&o.ignoreMissing, "ignore-missing-schemas", false,
 		"do not fail on components missing from the schema")
 	flags.BoolVar(&o.summary, "summary", false, "print a summary of the results")
@@ -241,8 +243,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	fold.Str("memory-request", &o.memoryRequest, file.Run.Kubernetes.MemoryRequest)
 	fold.Str("memory-limit", &o.memoryLimit, file.Run.Kubernetes.MemoryLimit)
 
-	// The deployment environment is a tri-state: the flag wins, then the file,
-	// and with neither the memory numbers speak for themselves.
+	// The environment is a tri-state: flag, file, then memory numbers.
 	switch {
 	case fold.Changed("kubernetes"):
 		o.kubernetesEnabled = &o.kubernetes
@@ -314,6 +315,7 @@ func (o *options) run(cmd *cobra.Command, args []string) error {
 // environment groups fold their own, and the rule lists merge rather than
 // replace, which rulepolicy does.
 func (o *options) applySettings(s *settings.File, fold settings.Fold) {
+	fold.Bool("embedded", &o.embedded, s.Run.Embedded)
 	fold.Str("collector-version", &o.collectorVersion, s.Run.CollectorVersion)
 	fold.Str("output", &o.output, s.Output.Format)
 	fold.Str("min-severity", &o.minSeverity, s.Issues.MinSeverity)
@@ -454,6 +456,7 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 		Severities:           o.resolved.Severities,
 		Environment:          o.envPolicy.Resolve,
 		Strict:               o.strict,
+		Embedded:             o.embedded,
 		IgnoreMissingSchemas: o.ignoreMissing,
 		MinSeverity:          minSeverity,
 		FailOn:               failOn,

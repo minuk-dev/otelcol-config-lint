@@ -311,6 +311,10 @@
           ],
           "type": "string"
         },
+        "embedded": {
+          "description": "Check collector configs in Kubernetes ConfigMap data blocks.",
+          "type": "boolean"
+        },
         "exclude": {
           "description": "Glob patterns to skip when walking a directory. Matched against both the whole path and the base name; there is no \"**\".",
           "items": {
