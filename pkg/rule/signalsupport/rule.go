@@ -39,6 +39,10 @@ func (r signalSupport) Check(ctx *rule.Context) {
 					continue // unknown-component reports this
 				}
 
+				if !statesSignals(comp, decl.Kind) {
+					continue
+				}
+
 				if supports(comp, decl.Kind, slot, p.Signal) {
 					continue
 				}
@@ -52,6 +56,28 @@ func (r signalSupport) Check(ctx *rule.Context) {
 			}
 		}
 	}
+}
+
+// statesSignals reports whether the schema says anything at all about which
+// signals a component handles.
+//
+// Recording none is not the same as handling none. Signals come from the
+// metadata.yaml upstream ships beside each component, and components carried
+// none until upstream added them, so a schema generated from those sources
+// describes every component as supporting nothing -- v0.70.0 contrib says it
+// of all 284 of them. Read as an answer, that makes "receiver otlp does not
+// support traces" the verdict on a config that runs, at error severity, for
+// every release that far back.
+//
+// A connector is asked about its pairs rather than its signals: they are how it
+// states the conversions it does, and the two pipeline ends are checked against
+// them separately.
+func statesSignals(comp *schema.Component, declKind config.Kind) bool {
+	if declKind == config.KindConnector {
+		return len(comp.Pairs) > 0
+	}
+
+	return len(comp.Signals) > 0 || len(comp.Pairs) > 0
 }
 
 // supports reports whether a component can sit in a pipeline slot for a signal.
