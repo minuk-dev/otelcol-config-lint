@@ -26,7 +26,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: 1.25
+          go-version: 1.27
 
       # The action's image is assembled from the linter image of the release it
       # is pinned to, and a pull request predates that release -- on a tag the
