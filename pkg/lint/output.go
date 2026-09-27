@@ -254,7 +254,7 @@ type junitFailure struct {
 func (f *junitFormatter) Result(r Result) error {
 	c := junitCase{Name: r.Path, ClassName: "otelcol-config-lint", Failures: nil, Error: nil}
 	if r.Status == Error {
-		c.Error = &junitFailure{Message: r.Message(), Type: "error", Text: ""}
+		c.Error = &junitFailure{Message: r.Message(), Type: string(Error), Text: ""}
 	}
 
 	for _, d := range r.Diagnostics {
@@ -360,18 +360,18 @@ type githubAnnotation struct {
 func (f *githubFormatter) Result(r Result) error {
 	if r.Status == Error {
 		f.annotations = append(f.annotations, githubAnnotation{
-			level: "error", rule: "", file: r.Path, message: r.Message(), line: 0, column: 0,
+			level: string(Error), rule: "", file: r.Path, message: r.Message(), line: 0, column: 0,
 		})
 
 		return nil
 	}
 
 	for _, d := range r.Diagnostics {
-		level := "notice"
+		level := githubNotice
 
 		switch d.Severity {
 		case diag.Error:
-			level = "error"
+			level = string(Error)
 		case diag.Warning:
 			level = "warning"
 		case diag.Info, diag.Off:
@@ -397,7 +397,7 @@ func (f *githubFormatter) Result(r Result) error {
 }
 
 func (f *githubFormatter) Finish(s Summary) error {
-	for _, level := range []string{"error", "warning", "notice"} {
+	for _, level := range []string{string(Error), "warning", githubNotice} {
 		err := f.writeAnnotations(level)
 		if err != nil {
 			return err
@@ -411,7 +411,10 @@ func (f *githubFormatter) Finish(s Summary) error {
 	return nil
 }
 
-const githubAnnotationLimit = 10
+const (
+	githubAnnotationLimit = 10
+	githubNotice          = "notice"
+)
 
 func (f *githubFormatter) writeAnnotations(level string) error {
 	var candidates []githubAnnotation
@@ -440,7 +443,7 @@ func (f *githubFormatter) writeAnnotations(level string) error {
 	})
 
 	limit := len(candidates)
-	if level != "notice" && limit > githubAnnotationLimit {
+	if level != githubNotice && limit > githubAnnotationLimit {
 		limit = githubAnnotationLimit
 	}
 
