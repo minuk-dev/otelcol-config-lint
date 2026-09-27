@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
@@ -63,7 +64,7 @@ func NewFormatter(name string, w io.Writer, opts FormatterOptions) (Formatter, e
 	case "tap":
 		return &tapFormatter{w: w, opts: opts, lines: nil, n: 0}, nil
 	case "github":
-		return &githubFormatter{w: w, opts: opts}, nil
+		return &githubFormatter{w: w, opts: opts, annotations: nil}, nil
 	default:
 		return nil, fmt.Errorf("%w %q (want text, json, junit, tap or github)", ErrUnknownFormat, name)
 	}
@@ -253,7 +254,7 @@ type junitFailure struct {
 func (f *junitFormatter) Result(r Result) error {
 	c := junitCase{Name: r.Path, ClassName: "otelcol-config-lint", Failures: nil, Error: nil}
 	if r.Status == Error {
-		c.Error = &junitFailure{Message: r.Message(), Type: "error", Text: ""}
+		c.Error = &junitFailure{Message: r.Message(), Type: string(Error), Text: ""}
 	}
 
 	for _, d := range r.Diagnostics {
@@ -346,23 +347,31 @@ func (f *tapFormatter) Finish(Summary) error {
 // githubFormatter emits GitHub Actions workflow commands so findings show up as
 // inline annotations on a pull request.
 type githubFormatter struct {
-	w    io.Writer
-	opts FormatterOptions
+	w           io.Writer
+	opts        FormatterOptions
+	annotations []githubAnnotation
+}
+
+type githubAnnotation struct {
+	level, rule, file, message string
+	line, column               int
 }
 
 func (f *githubFormatter) Result(r Result) error {
 	if r.Status == Error {
-		err := writef(f.w, "::error file=%s::%s\n", r.Path, escapeGitHub(r.Message()))
+		f.annotations = append(f.annotations, githubAnnotation{
+			level: string(Error), rule: "", file: r.Path, message: r.Message(), line: 0, column: 0,
+		})
 
-		return err
+		return nil
 	}
 
 	for _, d := range r.Diagnostics {
-		level := "notice"
+		level := githubNotice
 
 		switch d.Severity {
 		case diag.Error:
-			level = "error"
+			level = string(Error)
 		case diag.Warning:
 			level = "warning"
 		case diag.Info, diag.Off:
@@ -378,24 +387,124 @@ func (f *githubFormatter) Result(r Result) error {
 			msg += "\ndocs: " + d.Docs
 		}
 
-		err := writef(f.w, "::%s file=%s,line=%d,col=%d::%s\n",
-			level, d.Position.File, d.Position.Line, d.Position.Column, escapeGitHub(msg))
-		if err != nil {
-			return err
-		}
+		f.annotations = append(f.annotations, githubAnnotation{
+			level: level, rule: d.Rule, file: d.Position.File,
+			line: d.Position.Line, column: d.Position.Column, message: msg,
+		})
 	}
 
 	return nil
 }
 
 func (f *githubFormatter) Finish(s Summary) error {
-	if !f.opts.Summary {
-		return nil
+	for _, level := range []string{string(Error), "warning", githubNotice} {
+		err := f.writeAnnotations(level)
+		if err != nil {
+			return err
+		}
 	}
 
-	err := writef(f.w, "::notice::%d valid, %d invalid, %d error(s)\n", s.Valid, s.Invalid, s.Errors)
+	if f.opts.Summary {
+		return writef(f.w, "::notice::%d valid, %d invalid, %d error(s)\n", s.Valid, s.Invalid, s.Errors)
+	}
 
-	return err
+	return nil
+}
+
+const (
+	githubAnnotationLimit = 10
+	githubNotice          = "notice"
+)
+
+func (f *githubFormatter) writeAnnotations(level string) error {
+	var candidates []githubAnnotation
+
+	for _, a := range f.annotations {
+		if a.level == level {
+			candidates = append(candidates, a)
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a, b := candidates[i], candidates[j]
+		if a.rule != b.rule {
+			return a.rule < b.rule
+		}
+
+		if a.file != b.file {
+			return a.file < b.file
+		}
+
+		if a.line != b.line {
+			return a.line < b.line
+		}
+
+		return a.column < b.column
+	})
+
+	limit := len(candidates)
+	if level != githubNotice && limit > githubAnnotationLimit {
+		limit = githubAnnotationLimit
+	}
+
+	selected := pickAnnotations(candidates, limit)
+
+	for _, a := range selected {
+		err := f.writeAnnotation(a)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(selected) < len(candidates) {
+		return writef(f.w, "::notice::%d of %d %ss shown; run with --output text or json for all findings\n",
+			len(selected), len(candidates), level)
+	}
+
+	return nil
+}
+
+// pickAnnotations gives each file a slot, then each rule in each file, before
+// filling remaining slots by position.
+func pickAnnotations(candidates []githubAnnotation, limit int) []githubAnnotation {
+	const (
+		distinctFiles = iota
+		distinctRulesPerFile
+		remainingAnnotations
+	)
+
+	selected := make([]githubAnnotation, 0, limit)
+	used := make([]bool, len(candidates))
+	files := map[string]bool{}
+	groups := map[string]bool{}
+
+	for pass := distinctFiles; pass <= remainingAnnotations; pass++ {
+		for i, a := range candidates {
+			if used[i] || len(selected) == limit {
+				continue
+			}
+
+			group := a.rule + "\x00" + a.file
+			if (pass == distinctFiles && files[a.file]) ||
+				(pass == distinctRulesPerFile && groups[group]) {
+				continue
+			}
+
+			selected = append(selected, a)
+			used[i], files[a.file], groups[group] = true, true, true
+		}
+	}
+
+	return selected
+}
+
+func (f *githubFormatter) writeAnnotation(a githubAnnotation) error {
+	if a.line == 0 {
+		return writef(f.w, "::%s file=%s::%s\n", a.level, a.file, escapeGitHub(a.message))
+	}
+
+	return writef(f.w, "::%s file=%s,line=%d,col=%d::%s\n",
+		a.level, a.file, a.line, a.column, escapeGitHub(a.message))
 }
 
 // escapeGitHub encodes the characters that would otherwise end a workflow

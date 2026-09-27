@@ -67,6 +67,11 @@ Findings land as inline pull-request annotations, because the action defaults to
 `--output github`. The step passes when everything is valid, fails when a file
 is invalid, and reports a usage error — a rule that does not exist, an unreadable
 settings file — distinctly, with exit code 2.
+GitHub shows at most 10 warning and 10 error annotations per step. When findings
+exceed either limit, the action selects across rules and files and reports how
+many were omitted. Use `output: text` or `output: json` to see every finding in
+the job log, or split files across steps for more inline annotations.
+
 With `file-summary: true`, the job summary lists every checked file as `valid`,
 `invalid`, `error` or `skipped`. This also includes passing files in `output: json`.
 If GitHub's 1 MiB summary limit is reached, failed files appear first and the
