@@ -467,19 +467,26 @@ func (f *githubFormatter) writeAnnotations(level string) error {
 // pickAnnotations gives each file a slot, then each rule in each file, before
 // filling remaining slots by position.
 func pickAnnotations(candidates []githubAnnotation, limit int) []githubAnnotation {
+	const (
+		distinctFiles = iota
+		distinctRulesPerFile
+		remainingAnnotations
+	)
+
 	selected := make([]githubAnnotation, 0, limit)
 	used := make([]bool, len(candidates))
 	files := map[string]bool{}
 	groups := map[string]bool{}
 
-	for pass := range 3 {
+	for pass := distinctFiles; pass <= remainingAnnotations; pass++ {
 		for i, a := range candidates {
 			if used[i] || len(selected) == limit {
 				continue
 			}
 
 			group := a.rule + "\x00" + a.file
-			if (pass == 0 && files[a.file]) || (pass == 1 && groups[group]) {
+			if (pass == distinctFiles && files[a.file]) ||
+				(pass == distinctRulesPerFile && groups[group]) {
 				continue
 			}
 

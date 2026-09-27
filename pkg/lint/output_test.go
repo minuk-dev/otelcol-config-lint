@@ -41,8 +41,10 @@ func TestGitHubOutputLimitsAndSpreadsAnnotations(t *testing.T) {
 	f, err := lint.NewFormatter("github", &buf, lint.FormatterOptions{})
 	require.NoError(t, err)
 
+	const firstFileWarnings = 12
+
 	var repeated diag.Diagnostics
-	for i := 1; i <= 12; i++ {
+	for i := 1; i <= firstFileWarnings; i++ {
 		repeated = append(repeated, diag.Diagnostic{
 			Rule: "binds", Severity: diag.Warning, Message: "binds all interfaces",
 			Position: diag.Position{File: "a.yaml", Line: i, Column: 1},
@@ -76,7 +78,9 @@ func TestGitHubOutputKeepsLaterFilesAndCapsErrors(t *testing.T) {
 	f, err := lint.NewFormatter("github", &buf, lint.FormatterOptions{})
 	require.NoError(t, err)
 
-	for i := range 11 {
+	const firstFileErrors = 11
+
+	for i := range firstFileErrors {
 		require.NoError(t, f.Result(lint.Result{Path: "a.yaml", Status: lint.Valid, Diagnostics: diag.Diagnostics{{
 			Rule: string(rune('a' + i)), Severity: diag.Error, Message: "invalid setting",
 			Position: diag.Position{File: "a.yaml", Line: i + 1, Column: 1},
