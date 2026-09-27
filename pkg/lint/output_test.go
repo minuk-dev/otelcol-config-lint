@@ -37,6 +37,7 @@ func TestGitHubOutputLimitsAndSpreadsAnnotations(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	f, err := lint.NewFormatter("github", &buf, lint.FormatterOptions{})
 	require.NoError(t, err)
 
@@ -47,10 +48,17 @@ func TestGitHubOutputLimitsAndSpreadsAnnotations(t *testing.T) {
 			Position: diag.Position{File: "a.yaml", Line: i, Column: 1},
 		})
 	}
+
 	require.NoError(t, f.Result(lint.Result{Path: "a.yaml", Status: lint.Valid, Diagnostics: repeated}))
 	require.NoError(t, f.Result(lint.Result{Path: "b.yaml", Status: lint.Valid, Diagnostics: diag.Diagnostics{
-		{Rule: "binds", Severity: diag.Warning, Message: "binds all interfaces", Position: diag.Position{File: "b.yaml", Line: 1, Column: 1}},
-		{Rule: "tls", Severity: diag.Warning, Message: "insecure TLS", Position: diag.Position{File: "b.yaml", Line: 2, Column: 1}},
+		{
+			Rule: "binds", Severity: diag.Warning, Message: "binds all interfaces",
+			Position: diag.Position{File: "b.yaml", Line: 1, Column: 1},
+		},
+		{
+			Rule: "tls", Severity: diag.Warning, Message: "insecure TLS",
+			Position: diag.Position{File: "b.yaml", Line: 2, Column: 1},
+		},
 	}}))
 	require.NoError(t, f.Finish(lint.Summary{}))
 
@@ -64,6 +72,7 @@ func TestGitHubOutputKeepsLaterFilesAndCapsErrors(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
+
 	f, err := lint.NewFormatter("github", &buf, lint.FormatterOptions{})
 	require.NoError(t, err)
 
@@ -73,6 +82,7 @@ func TestGitHubOutputKeepsLaterFilesAndCapsErrors(t *testing.T) {
 			Position: diag.Position{File: "a.yaml", Line: i + 1, Column: 1},
 		}}}))
 	}
+
 	require.NoError(t, f.Result(lint.Result{Path: "b.yaml", Status: lint.Error, Err: assert.AnError}))
 	require.NoError(t, f.Finish(lint.Summary{}))
 
