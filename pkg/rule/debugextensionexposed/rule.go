@@ -3,8 +3,6 @@
 package debugextensionexposed
 
 import (
-	"github.com/samber/lo"
-	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -36,9 +34,18 @@ func (r debugExtensionExposed) Check(ctx *rule.Context) {
 	}
 
 	for _, c := range sec.Components {
-		ext, isDebug := lo.Find(rule.DebugExtensions(), func(e rule.DebugExtension) bool {
-			return e.Type == c.ID.Type
-		})
+		var ext rule.DebugExtension
+
+		isDebug := false
+
+		for _, e := range rule.DebugExtensions() {
+			if e.Type == c.ID.Type {
+				ext, isDebug = e, true
+
+				break
+			}
+		}
+
 		if !isDebug {
 			continue
 		}
@@ -58,7 +65,7 @@ func (r debugExtensionExposed) Check(ctx *rule.Context) {
 		// right answer for any release worth targeting; against a release
 		// older than that, where the default was 0.0.0.0, this rule is quiet
 		// about an endpoint that is in fact exposed.
-		node, written := endpointNode(c.ValueNode).Get()
+		node, written := endpointNode(c.ValueNode)
 		if !written {
 			continue
 		}
@@ -98,15 +105,15 @@ func (r debugExtensionExposed) report(
 }
 
 // endpointNode returns the scalar holding a debugging extension's endpoint.
-func endpointNode(settings *yaml.Node) mo.Option[*yaml.Node] {
+func endpointNode(settings *yaml.Node) (*yaml.Node, bool) {
 	settings = rule.ResolveAlias(settings)
 	if settings == nil || settings.Kind != yaml.MappingNode {
-		return mo.None[*yaml.Node]()
+		return nil, false
 	}
 
-	node, held := rule.ChildNode(settings, rule.EndpointKey).Get()
+	node, held := rule.ChildNode(settings, rule.EndpointKey)
 	if !held {
-		return mo.None[*yaml.Node]()
+		return nil, false
 	}
 
 	return rule.EndpointScalar(node)

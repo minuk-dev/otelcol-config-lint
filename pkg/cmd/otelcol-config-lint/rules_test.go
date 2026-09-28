@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -63,7 +62,12 @@ type fixture struct {
 // args renders the fixture's run as the command line that produces it, so what
 // a test checks is a run anyone can repeat by hand.
 func (f fixture) args(path string) []string {
-	args := []string{"--output", "json", "--min-severity", lo.CoalesceOrEmpty(f.Run.MinSeverity, "info")}
+	severity := f.Run.MinSeverity
+	if severity == "" {
+		severity = "info"
+	}
+
+	args := []string{"--output", "json", "--min-severity", severity}
 
 	for _, loc := range f.Run.SchemaLocations {
 		args = append(args, "--schema-location", filepath.Join(rulesDir, loc))
@@ -154,7 +158,12 @@ func TestEveryRuleHasAFixture(t *testing.T) {
 		_, known := ruleset.Lookup(name)
 		assert.Truef(t, known, "fixture %q names no registered rule", name)
 
-		for _, r := range slices.Concat(f.Rules.Enable, f.Rules.Disable, lo.Keys(f.Rules.Settings)) {
+		for _, r := range slices.Concat(f.Rules.Enable, f.Rules.Disable) {
+			_, known := ruleset.Lookup(r)
+			assert.Truef(t, known, "%s.settings.yaml names the unknown rule %q", name, r)
+		}
+
+		for r := range f.Rules.Settings {
 			_, known := ruleset.Lookup(r)
 			assert.Truef(t, known, "%s.settings.yaml names the unknown rule %q", name, r)
 		}
@@ -212,10 +221,18 @@ func TestRuleFixturesCommentTheirMistake(t *testing.T) {
 			reported := reportedLines(t, out, name)
 			require.NotEmpty(t, reported, "the fixture reported nothing to comment on")
 
-			assert.Truef(t, lo.SomeBy(reported, func(line int) bool {
-				return marked[line] || marked[line-1]
-			}), "%s.yaml comments %s on lines %v, but reports it on lines %v",
-				name, name, lo.Keys(marked), reported)
+			matched := false
+
+			for _, line := range reported {
+				if marked[line] || marked[line-1] {
+					matched = true
+
+					break
+				}
+			}
+
+			assert.Truef(t, matched, "%s.yaml comments %s on lines %v, but reports it on lines %v",
+				name, name, marked, reported)
 		})
 	}
 }

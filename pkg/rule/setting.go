@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -87,7 +86,13 @@ func ProcessorsOfType[T any](f *config.File, typ string, read func(config.Compon
 		return nil
 	}
 
-	declared := lo.Filter(sec.Components, func(c config.Component, _ int) bool { return c.ID.Type == typ })
+	var out []T
 
-	return lo.Map(declared, func(c config.Component, _ int) T { return read(c) })
+	for _, c := range sec.Components {
+		if c.ID.Type == typ {
+			out = append(out, read(c))
+		}
+	}
+
+	return out
 }

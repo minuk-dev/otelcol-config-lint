@@ -1,7 +1,6 @@
 package rule
 
 import (
-	"github.com/samber/lo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -228,16 +227,20 @@ func extensionRefDocs(role string) string {
 // extensionRefs collects every extension reference in the file's component
 // settings, in declaration order.
 func extensionRefs(f *config.File, sch *schema.Schema) []ExtensionRef {
-	return lo.FlatMap(config.Kinds(), func(kind config.Kind, _ int) []ExtensionRef {
+	var refs []ExtensionRef
+
+	for _, kind := range config.Kinds() {
 		sec := f.Sections[kind]
 		if sec == nil {
-			return nil
+			continue
 		}
 
-		return lo.FlatMap(sec.Components, func(c config.Component, _ int) []ExtensionRef {
-			return componentExtensionRefs(c, settingsSchema(sch, kind, c))
-		})
-	})
+		for _, c := range sec.Components {
+			refs = append(refs, componentExtensionRefs(c, settingsSchema(sch, kind, c))...)
+		}
+	}
+
+	return refs
 }
 
 // settingsSchema is the field schema describing a component's settings, or nil
@@ -303,7 +306,7 @@ func (w *refWalker) walkMap(field *schema.Field, n *yaml.Node, path string, dept
 		child := childSchema(field, e.Key)
 
 		if child != nil && child.ExtensionRef != "" {
-			if name, named := ScalarName(e.Node).Get(); named {
+			if name, named := ScalarName(e.Node); named {
 				w.record(name, e.Path, child.ExtensionRef)
 			}
 
@@ -313,10 +316,15 @@ func (w *refWalker) walkMap(field *schema.Field, n *yaml.Node, path string, dept
 		// The built-in pair reaches a level further down than the marker does,
 		// so it is skipped where the schema marks the leaf itself; taking both
 		// would report the same name twice.
-		builtin, held := lo.Find(fields, func(f extensionField) bool { return f.parent == e.Key })
-		if held && !marked(child, builtin.key) {
-			if name, named := ScalarChild(e.Node, builtin.key).Get(); named {
-				w.record(name, JoinPath(e.Path, builtin.key), builtin.role)
+		for _, builtin := range fields {
+			if builtin.parent == e.Key {
+				if !marked(child, builtin.key) {
+					if name, named := ScalarChild(e.Node, builtin.key); named {
+						w.record(name, JoinPath(e.Path, builtin.key), builtin.role)
+					}
+				}
+
+				break
 			}
 		}
 
