@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -28,7 +27,20 @@ func absSchemas(t *testing.T) string {
 func firedRules(t *testing.T, out string) []string {
 	t.Helper()
 
-	return lo.Uniq(lo.Flatten(lo.Values(rulesFired(t, out))))
+	seen := make(map[string]bool)
+
+	var rules []string
+
+	for _, found := range rulesFired(t, out) {
+		for _, name := range found {
+			if !seen[name] {
+				seen[name] = true
+				rules = append(rules, name)
+			}
+		}
+	}
+
+	return rules
 }
 
 // v0110Config uses the logging exporter, which v0.110.0 ships and v0.157.0 does

@@ -105,7 +105,7 @@ func (r debugExporterVerbosity) finding(p config.Pipeline, ref config.Ref, detai
 // is true of a debug exporter at any verbosity; a warning quoting a verbosity
 // nobody wrote would not be.
 func detailedDebug(c config.Component) bool {
-	val, written := rule.ChildNode(c.ValueNode, verbosityKey).Get()
+	val, written := rule.ChildNode(c.ValueNode, verbosityKey)
 	if !written {
 		return false
 	}

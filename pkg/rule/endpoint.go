@@ -4,7 +4,6 @@ import (
 	"net"
 	"strings"
 
-	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,19 +66,19 @@ func DebugExtensions() []DebugExtension {
 // still worth reading: "0.0.0.0:${env:PPROF_PORT}" parameterises the port and
 // leaves the address written plainly, and the address is the whole question
 // these rules ask. ScalarChild is therefore the wrong reader for it.
-func EndpointScalar(n *yaml.Node) mo.Option[*yaml.Node] {
+func EndpointScalar(n *yaml.Node) (*yaml.Node, bool) {
 	n = ResolveAlias(n)
 	if n == nil || n.Kind != yaml.ScalarNode || n.Value == "" {
-		return mo.None[*yaml.Node]()
+		return nil, false
 	}
 
-	return mo.Some(n)
+	return n, true
 }
 
 // ClassifyEndpoint places the host part of an endpoint. The port does not
 // matter here; who can open a connection to it does.
 func ClassifyEndpoint(endpoint string) Exposure {
-	host, known := EndpointHost(endpoint).Get()
+	host, known := EndpointHost(endpoint)
 	if !known {
 		return ExposureUnknown
 	}
@@ -111,7 +110,7 @@ func ClassifyEndpoint(endpoint string) Exposure {
 // It returns nothing when the address is only known once the collector starts,
 // which is not the same as the port being: "0.0.0.0:${env:PPROF_PORT}" says
 // exactly who can reach it, and only the port is left open.
-func EndpointHost(endpoint string) mo.Option[string] {
+func EndpointHost(endpoint string) (string, bool) {
 	masked := MaskExpansions(bracketed(endpoint), expansionMask)
 
 	host, _, err := net.SplitHostPort(masked)
@@ -122,10 +121,10 @@ func EndpointHost(endpoint string) mo.Option[string] {
 	}
 
 	if strings.Contains(host, expansionMask) {
-		return mo.None[string]()
+		return "", false
 	}
 
-	return mo.Some(host)
+	return host, true
 }
 
 // EndpointPort returns the port an endpoint names, so a suggestion can keep it
@@ -133,15 +132,15 @@ func EndpointHost(endpoint string) mo.Option[string] {
 // endpoint names no port, or leaves it to an expansion: the port only ever ends
 // up in a hint, so one that cannot be read costs a little precision there and
 // nothing anywhere else.
-func EndpointPort(endpoint string) mo.Option[string] {
+func EndpointPort(endpoint string) (string, bool) {
 	masked := MaskExpansions(bracketed(endpoint), expansionMask)
 
 	_, port, err := net.SplitHostPort(masked)
 	if err != nil || strings.Contains(port, expansionMask) {
-		return mo.None[string]()
+		return "", false
 	}
 
-	return mo.Some(port)
+	return port, true
 }
 
 // bracketed rewrites the one endpoint spelling net.SplitHostPort refuses:

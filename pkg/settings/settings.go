@@ -10,7 +10,6 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/samber/mo"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 )
@@ -394,16 +393,16 @@ type Fold struct {
 
 // Str takes a written value, an empty one meaning the file said nothing.
 func (f Fold) Str(name string, dst *string, v string) {
-	if !f.Changed(name) {
-		*dst = mo.EmptyableToOption(v).OrElse(*dst)
+	if !f.Changed(name) && v != "" {
+		*dst = v
 	}
 }
 
 // Bool takes a set value, a nil one meaning the file said nothing: false is a
 // thing to say about a flag whose default is true.
 func (f Fold) Bool(name string, dst *bool, v *bool) {
-	if !f.Changed(name) {
-		*dst = mo.PointerToOption(v).OrElse(*dst)
+	if !f.Changed(name) && v != nil {
+		*dst = *v
 	}
 }
 
