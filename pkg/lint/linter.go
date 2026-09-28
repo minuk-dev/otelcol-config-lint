@@ -210,26 +210,21 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 		})
 	}
 
-	var found diag.Diagnostics
+	res := Result{Path: path, Status: Valid}
 
 	for _, r := range l.rules {
 		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
+			if d.Severity.AtLeast(l.opts.FailOn) {
+				res.Status = Invalid
+			}
+
 			if d.Severity.AtLeast(l.opts.MinSeverity) {
-				found = append(found, d)
+				res.Diagnostics = append(res.Diagnostics, d)
 			}
 		}
 	}
 
-	found.Sort()
-
-	res := Result{Path: path, Status: Valid, Diagnostics: found}
-	for _, d := range found {
-		if d.Severity.AtLeast(l.opts.FailOn) {
-			res.Status = Invalid
-
-			break
-		}
-	}
+	res.Diagnostics.Sort()
 
 	return res
 }

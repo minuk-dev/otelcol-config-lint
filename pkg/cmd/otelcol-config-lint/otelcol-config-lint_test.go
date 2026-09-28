@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/samber/lo"
@@ -117,6 +118,44 @@ func TestInvalidFileFails(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
 		}
+	}
+}
+
+type countedFS struct {
+	afero.Fs
+
+	path  string
+	opens atomic.Int64
+}
+
+func (f *countedFS) Open(name string) (afero.File, error) {
+	if name == f.path {
+		f.opens.Add(1)
+	}
+
+	return f.Fs.Open(name)
+}
+
+func TestExitOnErrorStopsReadingLaterFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	first, later := filepath.Join(dir, "a.yaml"), filepath.Join(dir, "b.yaml")
+	require.NoError(t, os.WriteFile(first, []byte("receivers: [\n"), 0o600))
+	require.NoError(t, os.WriteFile(later, []byte("service: {}\n"), 0o600))
+
+	fsys := &countedFS{Fs: afero.NewOsFs(), path: later}
+	cmd := otelcolconfiglint.NewCommand(&otelcolconfiglint.GlobalCmdOptions{Fs: fsys})
+	cmd.SetArgs([]string{"run", "--schema-location", repoSchemas, "--exit-on-error", first, later})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	if code := otelcolconfiglint.ExitCode(cmd.Execute()); code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+
+	if got := fsys.opens.Load(); got != 0 {
+		t.Fatalf("later file was read %d times after first failure", got)
 	}
 }
 
@@ -1086,7 +1125,7 @@ func TestMemoryLimiterConfigReachesTheCommandLine(t *testing.T) {
 func TestAWorkingLimiterPassesTheCommandLine(t *testing.T) {
 	t.Parallel()
 
-	code, out, errOut := lint(t, limiterConfig, "--fail-on", "info", "--min-severity", "warning", "-")
+	code, out, errOut := lint(t, limiterConfig, "--fail-on", "warning", "--min-severity", "warning", "-")
 	require.Equal(t, 0, code, "a recommended limiter should pass: %s%s", out, errOut)
 }
 

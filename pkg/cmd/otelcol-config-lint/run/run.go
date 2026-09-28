@@ -271,7 +271,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 		Distribution:  o.distribution,
 		AllowInsecure: o.insecureSchemaLocation,
 		NoCache:       o.noCache,
-		Fs:            o.FS(),
+		Fs:            o.Fs,
 	}
 
 	// A location the store will refuse is a bad flag, so it is reported here
@@ -381,17 +381,19 @@ func (o *options) lintAll(
 ) error {
 	var summary lint.Summary
 
-	// Results are buffered so output stays in path order even though the files
-	// are checked concurrently.
+	// Regular runs buffer results to preserve path order. Early-exit runs check
+	// one file at a time so no later work has to be canceled.
 	results := make(map[string]lint.Result, files.Len())
 
 	if files.Has(scanner.StdinMarker) {
 		results[scanner.StdinMarker] = linter.LintReader(cmd.Context(), "stdin", cmd.InOrStdin())
 	}
 
-	onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
-	for r := range linter.LintAll(cmd.Context(), onDisk, o.concurrency) {
-		results[r.Path] = r
+	if !o.exitOnError {
+		onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
+		for r := range linter.LintAll(cmd.Context(), onDisk, o.concurrency) {
+			results[r.Path] = r
+		}
 	}
 
 	// An environment decides whether some rules run at all, so a verbose run
@@ -400,6 +402,9 @@ func (o *options) lintAll(
 
 	for _, f := range sets.List(files) {
 		r := results[f]
+		if o.exitOnError && f != scanner.StdinMarker {
+			r = linter.LintFile(cmd.Context(), f)
+		}
 
 		summary.Add(r)
 

@@ -134,6 +134,12 @@ func TestFailOnRaisesTheGate(t *testing.T) {
 	if r := strictly.Lint(t.Context(), "x.yaml", []byte(src)); r.Status != lint.Invalid {
 		t.Error("-fail-on warning should fail")
 	}
+
+	hidden := newLinter(t, lint.Options{FailOn: diag.Warning, MinSeverity: diag.Error}).Lint(
+		t.Context(), "x.yaml", []byte(src))
+	if hidden.Status != lint.Invalid || len(hidden.Diagnostics) != 0 {
+		t.Errorf("hidden warnings must still fail the gate: %+v", hidden)
+	}
 }
 
 func TestDisabledRule(t *testing.T) {
