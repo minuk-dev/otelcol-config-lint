@@ -144,7 +144,7 @@ func TestExitOnErrorStopsReadingLaterFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(first, []byte("receivers: [\n"), 0o600))
 	require.NoError(t, os.WriteFile(later, []byte("service: {}\n"), 0o600))
 
-	fsys := &countedFS{Fs: afero.NewOsFs(), path: later}
+	fsys := &countedFS{Fs: afero.NewOsFs(), path: later, opens: atomic.Int64{}}
 	cmd := otelcolconfiglint.NewCommand(&otelcolconfiglint.GlobalCmdOptions{Fs: fsys})
 	cmd.SetArgs([]string{"run", "--schema-location", repoSchemas, "--exit-on-error", first, later})
 	cmd.SetOut(&bytes.Buffer{})
