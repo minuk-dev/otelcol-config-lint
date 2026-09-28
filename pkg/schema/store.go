@@ -521,9 +521,7 @@ func (s Store) readLocal(path string) (*Schema, error) {
 // Resolving a version consults the index and so does listing them, so a run
 // that lints against several releases would otherwise fetch the same file once
 // per lookup -- against a rate limit that counts requests, the fetch this
-// field was added to save. A failure is remembered too: a registry that could
-// not answer for the index is not going to answer any faster for being asked
-// again by every version in turn.
+// field was added to save. Failed reads are retried by later lookups.
 func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
 	// A location this store may not read is not a fetch, and not an answer to
 	// remember: another store, allowed to read it, would be handed the refusal.
@@ -532,7 +530,7 @@ func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
 		return nil, err
 	}
 
-	return indexMemo.do(root, func() (*Index, error) {
+	return indexMemo.do(root, s.memoizeDocuments(), func() (*Index, error) {
 		// The index grows a line per release, so what is cached from a previous
 		// run is offered back with its validator rather than trusted outright.
 		body, err := s.get(ctx, join(root, IndexFile), revalidated)
@@ -545,16 +543,15 @@ func (s Store) fetchIndex(ctx context.Context, root string) (*Index, error) {
 }
 
 // fetchComponents reads a remote registry's component availability index, once
-// per registry and on the same terms as its index: a registry publishing none
-// answers 404, and remembering that is what keeps the next unknown component
-// from asking again.
+// per registry and on the same terms as its index. A failed read is retried by
+// later lookups.
 func (s Store) fetchComponents(ctx context.Context, root string) (*Components, error) {
 	err := s.refuseInsecure(root)
 	if err != nil {
 		return nil, err
 	}
 
-	return componentsMemo.do(root, func() (*Components, error) {
+	return componentsMemo.do(root, s.memoizeDocuments(), func() (*Components, error) {
 		// It gains an entry per component added or dropped, so it is
 		// revalidated rather than kept, the way the index is.
 		body, err := s.get(ctx, join(root, ComponentsFile), revalidated)
@@ -570,26 +567,37 @@ func (s Store) fetchComponents(ctx context.Context, root string) (*Components, e
 // it was read from and kept for the life of the process.
 type docMemo[T any] struct{ m sync.Map }
 
-// docResult is one read, kept whether it succeeded or not.
+// docResult is one successful read.
 type docResult[T any] struct {
 	doc T
-	err error
 }
 
 // do returns what the root was read as, reading it only the first time it is
 // asked for.
-func (d *docMemo[T]) do(root string, read func() (T, error)) (T, error) {
+func (d *docMemo[T]) do(root string, useMemo bool, read func() (T, error)) (T, error) {
+	if !useMemo {
+		return read()
+	}
+
 	cached, ok := d.m.Load(root)
 	if ok {
 		result, _ := cached.(docResult[T])
 
-		return result.doc, result.err
+		return result.doc, nil
 	}
 
 	doc, err := read()
-	d.m.Store(root, docResult[T]{doc: doc, err: err})
+	if err == nil {
+		d.m.Store(root, docResult[T]{doc: doc})
+	}
 
 	return doc, err
+}
+
+// Only the default store can share a process-wide answer. Other stores may
+// fetch the same URL with a different client or read a different cache.
+func (s Store) memoizeDocuments() bool {
+	return !s.NoCache && s.HTTPClient == nil && s.Fs == nil && s.CacheDir == ""
 }
 
 // The documents a registry publishes beside its schemas, each read once.

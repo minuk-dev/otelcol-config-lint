@@ -2,10 +2,42 @@ package schema
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestFailedIndexReadDoesNotPoisonLaterLookup(t *testing.T) {
+	t.Setenv(cacheEnv, t.TempDir())
+
+	var calls atomic.Int64
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+
+		_, _ = w.Write([]byte(`{"distributions":{"contrib":["v0.157.0"]}}`))
+	}))
+	defer srv.Close()
+
+	store := Store{Locations: []string{srv.URL}, AllowInsecure: true}
+	if got := store.Versions(t.Context()); len(got) != 0 {
+		t.Fatalf("first lookup = %v, want no versions", got)
+	}
+
+	if got := store.Versions(t.Context()); len(got) != 1 || got[0] != "v0.157.0" {
+		t.Fatalf("second lookup = %v, want recovered registry", got)
+	}
+
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("requests = %d, want 2", got)
+	}
+}
 
 // TestStoresShareOneDefaultClient pins that a store without a client of its own
 // does not build one per call. A client owns a connection pool, so a fresh one

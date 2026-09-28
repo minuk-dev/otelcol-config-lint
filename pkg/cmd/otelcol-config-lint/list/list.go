@@ -219,7 +219,7 @@ func (o *versionsOptions) prepare(cmd *cobra.Command) error {
 		Distribution:  o.distribution,
 		AllowInsecure: o.insecureSchemaLocation,
 		NoCache:       o.noCache,
-		Fs:            o.FS(),
+		Fs:            o.Fs,
 	}
 
 	err = o.store.Validate()
