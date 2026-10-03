@@ -39,3 +39,20 @@ func TestReadTakesTheWholeFile(t *testing.T) {
 	_, err = schema.Read(strings.NewReader(""))
 	require.Error(t, err, "an empty file is not a schema")
 }
+
+func TestReadRejectsNullComponents(t *testing.T) {
+	t.Parallel()
+
+	for name, input := range map[string]string{
+		"JSON": `{"components":{"receiver":{"otlp":null}}}`,
+		"YAML": "components:\n  receiver:\n    otlp: null\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			sch, err := schema.Read(strings.NewReader(input))
+			require.ErrorContains(t, err, "receiver.otlp: component must not be null")
+			assert.Nil(t, sch)
+		})
+	}
+}

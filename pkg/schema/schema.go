@@ -251,6 +251,9 @@ var errEmptySchema = errors.New("decode schema: empty document")
 // document, where everything after the first would otherwise be dropped.
 var errMultiDocumentSchema = errors.New("decode schema: more than one document")
 
+// errNullComponent reports an inventory entry with no component definition.
+var errNullComponent = errors.New("component must not be null")
+
 // Format is a schema serialisation format.
 type Format string
 
@@ -296,8 +299,12 @@ func Read(r io.Reader) (*Schema, error) {
 		c.Components = map[config.Kind]map[string]*Component{}
 	}
 
-	for _, byType := range c.Components {
+	for kind, byType := range c.Components {
 		for typ, comp := range byType {
+			if comp == nil {
+				return nil, fmt.Errorf("decode schema: %s.%s: %w", kind, typ, errNullComponent)
+			}
+
 			if comp.Type == "" {
 				comp.Type = typ
 			}
