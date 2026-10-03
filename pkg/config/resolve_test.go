@@ -2,7 +2,6 @@ package config_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -191,25 +190,26 @@ func TestAMergeOfSomethingThatIsNotAMappingIsLeftAlone(t *testing.T) {
 	assert.Contains(t, settings(t, f, "batch"), "<<")
 }
 
-// TestACyclicAliasDoesNotHang pins that a document yaml.v3 refuses to decode
-// still parses: the node tree comes back with the loop in it, and a linter
-// that recursed into it would never report anything at all.
-func TestACyclicAliasDoesNotHang(t *testing.T) {
+func TestCyclicAliasesAreRejected(t *testing.T) {
 	t.Parallel()
 
-	done := make(chan struct{})
+	for name, value := range map[string]string{
+		"mapping":  "nested: *loop",
+		"sequence": "nested: [*loop]",
+		"merge":    "<<: *loop",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	go func() {
-		defer close(done)
+			f, err := config.Parse("test.yaml", []byte("processors:\n  batch: &loop\n    "+value+"\n"))
 
-		_, err := config.Parse("test.yaml", []byte("processors:\n  batch: &loop\n    nested: [*loop]\n"))
-		assert.NoError(t, err)
-	}()
+			var syn *config.SyntaxError
 
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("parsing an anchor that contains itself did not finish")
+			require.ErrorAs(t, err, &syn)
+			assert.Nil(t, f)
+			assert.Equal(t, 3, syn.Line)
+			assert.Contains(t, syn.Msg, "cyclic YAML alias")
+		})
 	}
 }
 

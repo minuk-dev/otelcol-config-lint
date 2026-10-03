@@ -22,18 +22,20 @@ const MergeTag = "!!merge"
 // Nodes are reused rather than copied, so a merged setting keeps the position
 // it was written at: a finding about it lands on the line in the anchor, which
 // is the line the reader has to edit.
-func resolve(root *yaml.Node) {
+// A cyclic alias is returned so the parser can reject it before rules run.
+func resolve(root *yaml.Node) *yaml.Node {
 	r := resolver{active: map[*yaml.Node]bool{}, walked: map[*yaml.Node]bool{}}
 	r.value(root)
+
+	return r.cycle
 }
 
 // resolver carries what a single pass over one document has to remember.
 type resolver struct {
-	// active is the aliases currently being followed, which is what stops an
-	// anchor that contains itself from recursing forever. yaml.v3 refuses such
-	// a document when it decodes one, but it hands back the node tree without
-	// complaint, so the linter has to survive it to report anything at all.
+	// active holds nodes on the current path, including the anchor targets.
 	active map[*yaml.Node]bool
+	// cycle is an alias pointing back into the current path.
+	cycle *yaml.Node
 	// walked is the nodes already rewritten. An anchor merged into a dozen
 	// components is one node reached a dozen times, and rewriting it once is
 	// both faster and what keeps its own merges from being applied twice.
@@ -53,10 +55,13 @@ func (r *resolver) value(n *yaml.Node) *yaml.Node {
 		return n
 	}
 
-	// An alias naming no anchor, or one that leads back to itself, is left as
-	// it was written: there is nothing to put in its place, and a document
-	// holding either does not load for the collector either.
-	if n.Alias == nil || r.active[n] {
+	if n.Alias == nil {
+		return n
+	}
+
+	if r.active[n] || r.active[n.Alias] {
+		r.cycle = n
+
 		return n
 	}
 
@@ -73,6 +78,9 @@ func (r *resolver) walk(n *yaml.Node) {
 	}
 
 	r.walked[n] = true
+
+	r.active[n] = true
+	defer delete(r.active, n)
 
 	if n.Kind == yaml.MappingNode {
 		r.mapping(n)

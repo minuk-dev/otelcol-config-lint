@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -101,6 +104,39 @@ func TestSyntaxErrorIsADiagnosticNotAFailure(t *testing.T) {
 
 	if len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != "yaml-syntax" {
 		t.Errorf("want a yaml-syntax diagnostic, got %+v", r.Diagnostics)
+	}
+}
+
+func TestCyclicAliasesAreInvalid(t *testing.T) {
+	t.Parallel()
+
+	const childEnv = "OTELCOL_TEST_CYCLIC_ALIAS"
+	if os.Getenv(childEnv) != "1" {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+
+		//nolint:gosec // re-executes this test binary with a fixed test filter
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestCyclicAliasesAreInvalid$")
+
+		cmd.Env = append(os.Environ(), childEnv+"=1")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+
+		return
+	}
+
+	// Bound a regression's stack overflow to this subprocess.
+	debug.SetMaxStack(256 * 1024)
+
+	l := newLinter(t, lint.Options{})
+
+	for _, value := range []string{"nested: *loop", "nested: [*loop]", "<<: *loop"} {
+		result := l.Lint(t.Context(), "cycle.yaml", []byte("exporters:\n  otlp: &loop\n    "+value+"\n"))
+		require.Equal(t, lint.Invalid, result.Status)
+		require.Len(t, result.Diagnostics, 1)
+		assert.Equal(t, "yaml-syntax", result.Diagnostics[0].Rule)
+		assert.Contains(t, result.Diagnostics[0].Message, "cyclic YAML alias")
+		assert.Equal(t, 3, result.Diagnostics[0].Position.Line)
 	}
 }
 

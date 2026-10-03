@@ -221,7 +221,10 @@ func Parse(path string, src []byte) (*File, error) {
 	// twice.
 	f.DuplicateKeys = collectDuplicates(root, "")
 
-	resolve(root)
+	if cycle := resolve(root); cycle != nil {
+		return nil, &SyntaxError{Path: path, Line: cycle.Line, Column: cycle.Column,
+			Msg: "config contains a cyclic YAML alias"}
+	}
 
 	for _, e := range entries(root, "") {
 		kind, isSection := SectionKind(e.Key)
