@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/samber/lo"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
@@ -372,15 +371,22 @@ func collectorBlock(src string) bool {
 
 		service := mappingValue(root, "service")
 
-		return lo.SomeBy(sections, func(key string) bool { return mappingValue(root, key) != nil }) ||
-			mappingValue(service, "pipelines") != nil
+		for _, key := range sections {
+			if mappingValue(root, key) != nil {
+				return true
+			}
+		}
+
+		return mappingValue(service, "pipelines") != nil
 	}
 
 	// A broken collector config still needs its syntax finding. These key
 	// prefixes identify it without pretending the invalid YAML has a node tree.
 	for line := range strings.SplitSeq(src, "\n") {
-		if lo.SomeBy(sections, func(key string) bool { return strings.HasPrefix(line, key+":") }) {
-			return true
+		for _, key := range sections {
+			if strings.HasPrefix(line, key+":") {
+				return true
+			}
 		}
 	}
 

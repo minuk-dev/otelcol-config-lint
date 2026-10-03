@@ -3,7 +3,6 @@ package rule
 import (
 	"math"
 
-	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -61,9 +60,9 @@ func (m MemoryLimiter) At(s Setting) *yaml.Node { return NodeOr(s.Node, m.Node) 
 // A value resolved at runtime leaves the whole figure unknown: a partly known
 // hard limit is worse than none, since every finding about it would be
 // confident about a number nobody has yet.
-func (m MemoryLimiter) HardLimit(env Environment) mo.Option[int64] {
+func (m MemoryLimiter) HardLimit(env Environment) (int64, bool) {
 	if m.LimitMiB.Unknown() || m.LimitPercent.Unknown() {
-		return mo.None[int64]()
+		return 0, false
 	}
 
 	// A figure that does not fit in a byte count is left unknown rather than
@@ -71,21 +70,21 @@ func (m MemoryLimiter) HardLimit(env Environment) mo.Option[int64] {
 	// nowhere in the config, and a finding quoting it would be worse than none.
 	if m.LimitMiB.Positive() {
 		if m.LimitMiB.Num > math.MaxInt64/mib {
-			return mo.None[int64]()
+			return 0, false
 		}
 
-		return mo.Some(m.LimitMiB.Num * mib)
+		return m.LimitMiB.Num * mib, true
 	}
 
 	if m.LimitPercent.Positive() && env.MemoryLimit > 0 {
 		if env.MemoryLimit > math.MaxInt64/m.LimitPercent.Num {
-			return mo.None[int64]()
+			return 0, false
 		}
 
-		return mo.Some(env.MemoryLimit * m.LimitPercent.Num / WholePercent)
+		return env.MemoryLimit * m.LimitPercent.Num / WholePercent, true
 	}
 
-	return mo.None[int64]()
+	return 0, false
 }
 
 func readMemoryLimiter(c config.Component) MemoryLimiter {

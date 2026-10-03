@@ -10,9 +10,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-
-	"github.com/samber/lo"
-	"github.com/samber/mo"
 )
 
 // ErrInvalid reports a string that is not a memory quantity.
@@ -83,7 +80,7 @@ func Parse(text string) (int64, error) {
 
 	digits, suffix := split(trimmed)
 
-	factor, ok := factorOf(suffix).Get()
+	factor, ok := factorOf(suffix)
 	if !ok {
 		return 0, fmt.Errorf("%q is %w: %q is not a memory suffix (want Ki, Mi, Gi, Ti, Pi, Ei, k, M, G, T, P or E)",
 			text, ErrInvalid, suffix)
@@ -114,10 +111,14 @@ func split(text string) (string, string) {
 
 // factorOf returns what a suffix multiplies by, and nothing at all when it is
 // not one of the accepted suffixes.
-func factorOf(suffix string) mo.Option[float64] {
-	found, ok := lo.Find(units(), func(candidate unit) bool { return candidate.suffix == suffix })
+func factorOf(suffix string) (float64, bool) {
+	for _, candidate := range units() {
+		if candidate.suffix == suffix {
+			return candidate.factor, true
+		}
+	}
 
-	return mo.TupleToOption(found.factor, ok)
+	return 0, false
 }
 
 // Format renders a byte count the way a manifest would state it, so a
@@ -136,13 +137,12 @@ func Format(bytes int64) string {
 		{suffix: "Ki", factor: Ki},
 	}
 
-	whole, ok := lo.Find(binary, func(candidate unit) bool {
+	for _, candidate := range binary {
 		size := int64(candidate.factor)
 
-		return bytes >= size && bytes%size == 0
-	})
-	if ok {
-		return strconv.FormatInt(bytes/int64(whole.factor), 10) + whole.suffix
+		if bytes >= size && bytes%size == 0 {
+			return strconv.FormatInt(bytes/size, 10) + candidate.suffix
+		}
 	}
 
 	// Not a whole number of any unit: one decimal place of the largest unit

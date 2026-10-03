@@ -3,8 +3,6 @@ package rule
 import (
 	"regexp"
 
-	"github.com/samber/lo"
-	"github.com/samber/mo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -48,26 +46,27 @@ func MapEntries(n *yaml.Node, path string) []MapEntry {
 // has. What counts as a usable value is the caller's business: an expansion is
 // nothing to a rule resolving a name, and still worth reading to one asking
 // which address a component listens on.
-func ChildNode(n *yaml.Node, key string) mo.Option[*yaml.Node] {
+func ChildNode(n *yaml.Node, key string) (*yaml.Node, bool) {
 	n = ResolveAlias(n)
 	if n == nil || n.Kind != yaml.MappingNode {
-		return mo.None[*yaml.Node]()
+		return nil, false
 	}
 
-	e, found := lo.Find(MapEntries(n, ""), func(e MapEntry) bool { return e.Key == key })
-	if !found {
-		return mo.None[*yaml.Node]()
+	for _, e := range MapEntries(n, "") {
+		if e.Key == key {
+			return e.Node, true
+		}
 	}
 
-	return mo.Some(e.Node)
+	return nil, false
 }
 
 // ScalarChild returns the named scalar of a mapping, when it holds a name
 // worth resolving.
-func ScalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
-	val, written := ChildNode(n, key).Get()
+func ScalarChild(n *yaml.Node, key string) (*yaml.Node, bool) {
+	val, written := ChildNode(n, key)
 	if !written {
-		return mo.None[*yaml.Node]()
+		return nil, false
 	}
 
 	return ScalarName(val)
@@ -76,13 +75,13 @@ func ScalarChild(n *yaml.Node, key string) mo.Option[*yaml.Node] {
 // ScalarName returns the node when it holds a name worth resolving. An empty
 // value is not a reference, and one built from a confmap expansion is only
 // known once the collector starts.
-func ScalarName(n *yaml.Node) mo.Option[*yaml.Node] {
+func ScalarName(n *yaml.Node) (*yaml.Node, bool) {
 	n = ResolveAlias(n)
 	if n == nil || n.Kind != yaml.ScalarNode || n.Value == "" || HasExpansion(n.Value) {
-		return mo.None[*yaml.Node]()
+		return nil, false
 	}
 
-	return mo.Some(n)
+	return n, true
 }
 
 // WalkSettings visits every mapping inside a component's settings, together

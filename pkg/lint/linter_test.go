@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samber/lo"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -210,9 +209,15 @@ func TestEmbeddedConfigMapReportsEmptyPipeline(t *testing.T) {
 	r := newLinter(t, lint.Options{Embedded: true}).Lint(t.Context(), "manifest.yaml", []byte(src))
 	require.Equal(t, lint.Invalid, r.Status)
 
-	assert.True(t, lo.SomeBy(r.Diagnostics, func(d diag.Diagnostic) bool {
-		return d.Rule == "empty-pipeline" && d.Position.File == "manifest.yaml"
-	}))
+	assert.Condition(t, func() bool {
+		for _, d := range r.Diagnostics {
+			if d.Rule == "empty-pipeline" && d.Position.File == "manifest.yaml" {
+				return true
+			}
+		}
+
+		return false
+	})
 }
 
 func TestMinSeverityFilters(t *testing.T) {

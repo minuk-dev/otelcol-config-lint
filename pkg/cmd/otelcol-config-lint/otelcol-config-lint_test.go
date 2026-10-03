@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/samber/lo"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -953,20 +952,29 @@ func findings(t *testing.T, out string) map[string][]finding {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, out)
 	}
 
-	byFile := lo.GroupBy(report.Files, func(f fileReport) string { return filepath.Base(f.Filename) })
+	byFile := make(map[string][]finding)
 
-	return lo.MapValues(byFile, func(files []fileReport, _ string) []finding {
-		return lo.FlatMap(files, func(f fileReport, _ int) []finding { return f.Diagnostics })
-	})
+	for _, f := range report.Files {
+		base := filepath.Base(f.Filename)
+		byFile[base] = append(byFile[base], f.Diagnostics...)
+	}
+
+	return byFile
 }
 
 // rulesFired returns the rules each file in a JSON report was flagged by.
 func rulesFired(t *testing.T, out string) map[string][]string {
 	t.Helper()
 
-	return lo.MapValues(findings(t, out), func(found []finding, _ string) []string {
-		return lo.Map(found, func(d finding, _ int) string { return d.Rule })
-	})
+	rules := make(map[string][]string)
+
+	for file, found := range findings(t, out) {
+		for _, d := range found {
+			rules[file] = append(rules[file], d.Rule)
+		}
+	}
+
+	return rules
 }
 
 // TestEnvironmentIsResolvedPerFile is the point of the whole kubernetes block:
@@ -1166,9 +1174,16 @@ func TestFindingsCiteUpstreamInEveryFormat(t *testing.T) {
 	assert.Contains(t, text, docs)
 
 	_, out, _ := lint(t, src, "--output", "json", "-")
-	cited := lo.ContainsBy(findings(t, out)["stdin"], func(d finding) bool {
-		return d.Rule == "memory-limiter-config" && strings.Contains(d.Docs, docs)
-	})
+	cited := false
+
+	for _, d := range findings(t, out)["stdin"] {
+		if d.Rule == "memory-limiter-config" && strings.Contains(d.Docs, docs) {
+			cited = true
+
+			break
+		}
+	}
+
 	assert.True(t, cited, "the JSON report should carry a docs field:\n%s", out)
 
 	_, github, _ := lint(t, src, "--output", "github", "-")
@@ -1221,7 +1236,12 @@ kubernetes:
 
 	found := findings(t, out)
 	said := func(file string) string {
-		return strings.Join(lo.Map(found[file], func(d finding, _ int) string { return d.Message }), "\n")
+		messages := make([]string, 0, len(found[file]))
+		for _, d := range found[file] {
+			messages = append(messages, d.Message)
+		}
+
+		return strings.Join(messages, "\n")
 	}
 
 	assert.Contains(t, said("other.yaml"), "memory request of 128Mi",
