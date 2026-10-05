@@ -6,6 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/unknownfield"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -129,6 +133,71 @@ func (cfg *Inner) Unmarshal(componentParser *confmap.Conf) error { return nil }
 
 	assert.True(t, got.Open, "the outer mapping inherits the inner one's openness")
 	assert.ElementsMatch(t, []string{"endpoint", "timeout"}, keysOf(got.Children))
+}
+
+func TestNestedSelfDecodingStructsStayOpen(t *testing.T) {
+	t.Parallel()
+
+	index := newGoIndex()
+	index.add("example.com/rcv", []byte(`package rcv
+
+import "go.opentelemetry.io/collector/confmap"
+
+type Config struct {
+	Nested Inner `+"`mapstructure:\"nested\"`"+`
+	Items []Inner `+"`mapstructure:\"items\"`"+`
+	Closed Ordinary `+"`mapstructure:\"closed\"`"+`
+}
+
+type Inner struct {
+	Known string `+"`mapstructure:\"known\"`"+`
+	Hidden string `+"`mapstructure:\"-\"`"+`
+}
+
+func (cfg *Inner) Unmarshal(conf *confmap.Conf) error { return nil }
+
+type Ordinary struct {
+	Known string `+"`mapstructure:\"known\"`"+`
+	Hidden string `+"`mapstructure:\"-\"`"+`
+}
+`))
+
+	fields := index.fields("example.com/rcv.Config", nil, 0)
+	require.NotNil(t, fields)
+	assert.False(t, fields.Open, "a nested decoder does not open its parent")
+
+	nested := fields.Children["nested"]
+	require.NotNil(t, nested)
+
+	items := fields.Children["items"]
+	require.NotNil(t, items)
+	assert.Equal(t, typeList, items.Type)
+	item := items.Children["item"]
+	require.NotNil(t, item)
+
+	for _, field := range []*schema.Field{nested, item} {
+		assert.True(t, field.Open, "named structs and list items preserve openness")
+		assert.Equal(t, typeMap, field.Type)
+		assert.Equal(t, map[string]*schema.Field{"known": {Type: typeString}}, field.Children)
+	}
+
+	sch := &schema.Schema{Components: map[config.Kind]map[string]*schema.Component{
+		config.KindReceiver: {"custom": {Type: "custom", Fields: fields}},
+	}}
+	found, err := ruletest.RunWith(unknownfield.New(), `
+receivers:
+  custom:
+    nested: {known: value, hidden: custom}
+    items: [{known: value, hidden: custom}]
+    closed: {known: value, hidden: unknown}
+    typo: unknown
+`, ruletest.Options{Strict: true, Schema: sch})
+	require.NoError(t, err)
+	require.Len(t, found, 2, "only the ordinary struct and parent reject unknown keys")
+	assert.ElementsMatch(t, []string{"receivers.custom.closed.hidden", "receivers.custom.typo"},
+		[]string{found[0].Path, found[1].Path})
+	assert.Equal(t, diag.Error, found[0].Severity)
+	assert.Equal(t, diag.Error, found[1].Severity)
 }
 
 func keysOf(children map[string]*schema.Field) []string {
