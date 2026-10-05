@@ -94,6 +94,11 @@ carry a path with a space in it, globs allowed), `collector-version`,
 two, a fresh container has no cache to read, and a workflow that reads its
 schemas over plain HTTP is one whose findings anyone on the path can choose.
 
+For `strict`, `embedded`, `ignore-missing-schemas`, `verbose` and `exit-on-error`,
+omitted or blank inputs inherit the settings file (or the CLI default of `false`
+when no setting is present). Explicit `true` or `false` inputs override the
+settings file, so `strict: false` can turn off a repository's `run.strict: true`.
+
 The counts come back as outputs — `exit-code`, `valid`, `invalid`, `errors`,
 `skipped`, `warnings` and `infos` — so a later step can decide what to do with
 them:

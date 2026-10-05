@@ -37,17 +37,17 @@ inputs:
     required: false
     default: ""
   strict:
-    description: Report unknown component settings as errors.
+    description: Report unknown component settings as errors. Blank inherits the settings file.
     required: false
-    default: "false"
+    default: ""
   embedded:
-    description: Lint collector configs in Kubernetes ConfigMap data blocks.
+    description: Lint collector configs in Kubernetes ConfigMap data blocks. Blank inherits the settings file.
     required: false
-    default: "false"
+    default: ""
   ignore-missing-schemas:
-    description: Do not fail on components missing from the schema.
+    description: Do not fail on components missing from the schema. Blank inherits the settings file.
     required: false
-    default: "false"
+    default: ""
   min-severity:
     description: "Lowest severity to report: error, warning or info."
     required: false
@@ -100,13 +100,13 @@ inputs:
     required: false
     default: "false"
   verbose:
-    description: Also report the files that passed.
+    description: Also report the files that passed. Blank inherits the settings file.
     required: false
-    default: "false"
+    default: ""
   exit-on-error:
-    description: Stop at the first file that fails.
+    description: Stop at the first file that fails. Blank inherits the settings file.
     required: false
-    default: "false"
+    default: ""
 
 outputs:
   exit-code:

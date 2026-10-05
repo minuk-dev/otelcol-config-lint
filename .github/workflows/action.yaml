@@ -50,6 +50,45 @@ jobs:
             Dockerfile
           git --no-pager diff -- Dockerfile
 
+      - name: Boolean inputs override settings only when explicit
+        run: PATH="$PWD/dist/action:$PATH" bash build/docker/action-entrypoint_test.sh
+
+      - name: Write a repository policy with strict enabled
+        run: |
+          printf 'run:\n  strict: true\nrules:\n  default: none\n  enable: [unknown-field]\n' \
+            >.action-policy.yaml
+
+      - name: An omitted boolean input inherits repository policy
+        id: inherited-strict
+        continue-on-error: true
+        uses: ./
+        with:
+          files: testdata/rules/unknown-field.yaml
+          config: .action-policy.yaml
+          collector-version: v0.157.0
+          schema-location: testdata/schemas
+          output: json
+
+      - name: Explicit false overrides repository policy
+        id: false-strict
+        uses: ./
+        with:
+          files: testdata/rules/unknown-field.yaml
+          config: .action-policy.yaml
+          collector-version: v0.157.0
+          schema-location: testdata/schemas
+          strict: false
+          output: json
+
+      - name: The action distinguishes omitted and false boolean inputs
+        run: |
+          test "${{ steps.inherited-strict.outcome }}" = "failure"
+          test "${{ steps.inherited-strict.outputs.exit-code }}" = "1"
+          test "${{ steps.inherited-strict.outputs.invalid }}" = "1"
+          test "${{ steps.false-strict.outputs.exit-code }}" = "0"
+          test "${{ steps.false-strict.outputs.valid }}" = "1"
+          test "${{ steps.false-strict.outputs.warnings }}" = "1"
+
       - name: File summary lists each result
         run: |
           summary_file=$(mktemp)

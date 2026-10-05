@@ -12,9 +12,9 @@ in_files="."
 in_collector_version=""
 in_distribution=""
 in_schema_location=""
-in_strict="false"
-in_embedded="false"
-in_ignore_missing_schemas="false"
+in_strict=""
+in_embedded=""
+in_ignore_missing_schemas=""
 in_min_severity=""
 in_fail_on=""
 in_default=""
@@ -27,8 +27,8 @@ in_config=""
 in_no_config="false"
 in_summary="true"
 in_file_summary="false"
-in_verbose="false"
-in_exit_on_error="false"
+in_verbose=""
+in_exit_on_error=""
 
 # Inputs arrive as --name=value, one per input declared in action.yml, so the
 # script does not depend on the order action.yml lists them in.
@@ -80,10 +80,10 @@ value() {
   fi
 }
 
-# toggle <flag> <input>: boolean inputs arrive as the strings true and false.
+# toggle <flag> <input>: blank inherits settings; explicit true or false wins.
 toggle() {
-  if [ "$2" = "true" ]; then
-    flags+=("--$1")
+  if [ -n "$2" ]; then
+    flags+=("--$1=$2")
   fi
 }
 
