@@ -61,6 +61,9 @@ const DistributionPlaceholder = "{{.Distribution}}"
 // supplied its own client.
 const defaultFetchTimeout = 30 * time.Second
 
+// maxSchemaRedirects matches net/http's default redirect limit.
+const maxSchemaRedirects = 10
+
 // maxRemoteBytes bounds what one remote schema or index may deliver, and
 // maxRemoteMiB is the same number as the error reports it. A location is
 // whatever the caller named, and a decoder materialises everything it is
@@ -407,6 +410,7 @@ var (
 	// that permits one.
 	errInsecureLocation = errors.New("refusing to fetch a schema over plain http, " +
 		"which anyone on the path can rewrite")
+	errTooManyRedirects = errors.New("stopped after 10 redirects")
 )
 
 func (s Store) loadFrom(ctx context.Context, loc, version string) (*Schema, error) {
@@ -765,7 +769,28 @@ func (s Store) attempt(ctx context.Context, url, etag string) (served, error) {
 		req.Header.Set("If-None-Match", etag)
 	}
 
-	resp, err := s.client().Do(req)
+	// Copy the client so its transport and caller policy are reused without
+	// mutating a shared client. The policy must apply before each redirect.
+	client := *s.client()
+	checkRedirect := client.CheckRedirect
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		err := s.refuseInsecure(next.URL.String())
+		if err != nil {
+			return err
+		}
+
+		if checkRedirect != nil {
+			return checkRedirect(next, via)
+		}
+
+		if len(via) >= maxSchemaRedirects {
+			return errTooManyRedirects
+		}
+
+		return nil
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return none, fmt.Errorf("fetch %s: %w", url, err)
 	}

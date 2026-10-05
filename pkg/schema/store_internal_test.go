@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFailedIndexReadDoesNotPoisonLaterLookup(t *testing.T) {
@@ -54,4 +55,118 @@ func TestStoresShareOneDefaultClient(t *testing.T) {
 
 	own := Store{HTTPClient: &http.Client{}}
 	assert.NotSame(t, defaultClient(), own.client(), "a store with a client of its own should fetch with it")
+}
+
+func TestSchemaRedirectTransportPolicy(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name                                string
+		toHTTP, allowInsecure, customPolicy bool
+	}{
+		{name: "refuse HTTP", toHTTP: true, allowInsecure: false, customPolicy: false},
+		{name: "refuse HTTP with caller policy", toHTTP: true, allowInsecure: false, customPolicy: true},
+		{name: "allow HTTP opt-in", toHTTP: true, allowInsecure: true, customPolicy: false},
+		{name: "allow HTTP opt-in with caller policy", toHTTP: true, allowInsecure: true, customPolicy: true},
+		{name: "allow HTTPS", toHTTP: false, allowInsecure: false, customPolicy: false},
+		{name: "allow HTTPS with caller policy", toHTTP: false, allowInsecure: false, customPolicy: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var httpCalls, policyCalls atomic.Int64
+
+			insecure := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				httpCalls.Add(1)
+
+				_, _ = w.Write([]byte("components: {}"))
+			}))
+			defer insecure.Close()
+
+			secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/final.yaml" {
+					_, _ = w.Write([]byte("components: {}"))
+
+					return
+				}
+
+				target := "/final.yaml"
+				if tt.toHTTP {
+					target = insecure.URL + target
+				}
+
+				http.Redirect(w, r, target, http.StatusFound)
+			}))
+			defer secure.Close()
+
+			client := secure.Client()
+			if tt.customPolicy {
+				client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+					policyCalls.Add(1)
+
+					return nil
+				}
+			}
+
+			store := Store{HTTPClient: client, AllowInsecure: tt.allowInsecure, NoCache: true}
+
+			_, err := store.fetch(t.Context(), secure.URL+"/v0.157.0.yaml")
+			if tt.toHTTP && !tt.allowInsecure {
+				require.ErrorIs(t, err, errInsecureLocation)
+				assert.Zero(t, httpCalls.Load(), "refused destination must never be contacted")
+				assert.Zero(t, policyCalls.Load())
+			} else {
+				require.NoError(t, err)
+
+				if tt.toHTTP {
+					assert.EqualValues(t, 1, httpCalls.Load())
+				}
+
+				if tt.customPolicy {
+					assert.EqualValues(t, 1, policyCalls.Load())
+				}
+			}
+
+			if tt.customPolicy {
+				next, err := http.NewRequestWithContext(t.Context(), http.MethodGet, insecure.URL, http.NoBody)
+				require.NoError(t, err)
+				require.NoError(t, client.CheckRedirect(next, nil), "the caller's policy must remain unchanged")
+			} else {
+				assert.Nil(t, client.CheckRedirect)
+			}
+		})
+	}
+}
+
+func TestSchemaRedirectPreservesCallerRejection(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/final.yaml", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	client := srv.Client()
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	store := Store{HTTPClient: client, AllowInsecure: true, NoCache: true}
+	_, err := store.fetch(t.Context(), srv.URL+"/v0.157.0.yaml")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "302")
+}
+
+func TestSchemaRedirectKeepsDefaultLimit(t *testing.T) {
+	t.Parallel()
+
+	var calls atomic.Int64
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		http.Redirect(w, r, "/loop.yaml", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	store := Store{AllowInsecure: true, NoCache: true}
+	_, err := store.fetch(t.Context(), srv.URL+"/loop.yaml")
+	require.ErrorIs(t, err, errTooManyRedirects)
+	assert.EqualValues(t, 10, calls.Load())
 }
