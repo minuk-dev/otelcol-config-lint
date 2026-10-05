@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -143,27 +144,26 @@ func TestCacheInterleavedWritesKeepBodyAndValidatorTogether(t *testing.T) {
 
 	fsys := afero.NewOsFs()
 	dir := t.TempDir()
-	paused := &pauseAfterRenameFs{
-		Fs: fsys, renamed: make(chan struct{}), resume: make(chan struct{}), once: sync.Once{},
-	}
-	// Always release the writer, even if a later assertion fails.
-	defer close(paused.resume)
+	// Keep network I/O outside the bubble; only the filesystem interleaving
+	// needs deterministic goroutine synchronization.
+	synctest.Test(t, func(t *testing.T) {
+		paused := &pauseAfterRenameFs{
+			Fs: fsys, renamed: false, resume: make(chan struct{}), once: sync.Once{},
+		}
+		defer close(paused.resume)
 
-	newer := &diskCache{fs: paused, dir: dir}
-	older := &diskCache{fs: fsys, dir: dir}
-	done := make(chan struct{})
+		newer := &diskCache{fs: paused, dir: dir}
+		older := &diskCache{fs: fsys, dir: dir}
 
-	go func() {
-		newer.save(srv.URL, []byte("new index"), `"new"`)
-		close(done)
-	}()
+		go newer.save(srv.URL, []byte("new index"), `"new"`)
 
-	<-paused.renamed
-	older.save(srv.URL, []byte("old index"), `"old"`)
+		synctest.Wait()
+		require.True(t, paused.renamed, "the writer must reach the first replacement")
+		older.save(srv.URL, []byte("old index"), `"old"`)
 
-	paused.resume <- struct{}{}
-
-	<-done
+		paused.resume <- struct{}{}
+		// Test waits for the resumed writer to finish before returning.
+	})
 
 	store := Store{AllowInsecure: true, CacheDir: dir, Fs: fsys, HTTPClient: srv.Client()}
 	for range 3 {
@@ -178,7 +178,7 @@ func TestCacheInterleavedWritesKeepBodyAndValidatorTogether(t *testing.T) {
 type pauseAfterRenameFs struct {
 	afero.Fs
 
-	renamed chan struct{}
+	renamed bool
 	resume  chan struct{}
 	once    sync.Once
 }
@@ -187,7 +187,8 @@ func (fsys *pauseAfterRenameFs) Rename(oldname, newname string) error {
 	err := fsys.Fs.Rename(oldname, newname)
 	if err == nil {
 		fsys.once.Do(func() {
-			close(fsys.renamed)
+			fsys.renamed = true
+
 			<-fsys.resume
 		})
 	}
