@@ -3,6 +3,7 @@ package schema
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,12 +17,6 @@ const cacheDirName = "otelcol-config-lint"
 // cacheEnv is the environment variable naming where caches go, which is where
 // this one goes when it is set.
 const cacheEnv = "XDG_CACHE_HOME"
-
-// etagSuffix names the file holding an entry's validator, beside the body it
-// validates. Two files rather than one envelope: what is cached is exactly
-// what was served, so a cached schema can be read with any editor and diffed
-// against the registry.
-const etagSuffix = ".etag"
 
 // The modes the cache creates its directory and files with. Nothing here is
 // secret, but nothing else has a reason to write it either.
@@ -49,8 +44,8 @@ const (
 )
 
 // diskCache keeps what a registry served, so that the next run does not ask
-// for it again. Entries are keyed by URL, and the body and its validator are
-// separate files.
+// for it again. Entries are keyed by URL, and each file holds the body and its
+// validator together so one rename publishes both, including across processes.
 //
 // It is best-effort throughout: a cache that cannot be read or written is a
 // fetch that goes to the network, never an error. Nothing here is the answer
@@ -58,6 +53,11 @@ const (
 type diskCache struct {
 	fs  afero.Fs
 	dir string
+}
+
+type cacheEntry struct {
+	Body []byte `json:"body"`
+	ETag string `json:"etag"`
 }
 
 // cache is where this store keeps what it fetched, or nil when it was told not
@@ -99,31 +99,33 @@ func cacheRoot() (string, error) {
 	return filepath.Join(dir, cacheDirName), nil
 }
 
-// path is where one URL's body is kept. The name is a digest of the URL: a
+// path is where one URL's entry is kept. The name is a digest of the URL: a
 // location is whatever the caller named, and its path is not one this package
-// should be laying out directories from.
+// should be laying out directories from. The suffix separates these entries
+// from legacy body/ETag pairs, whose consistency cannot be trusted, and keeps
+// older binaries from reading or overwriting the new format.
 func (c *diskCache) path(url string) string {
 	sum := sha256.Sum256([]byte(url))
 
-	return filepath.Join(c.dir, hex.EncodeToString(sum[:]))
+	return filepath.Join(c.dir, hex.EncodeToString(sum[:])+".json")
 }
 
 // load returns what was cached for a URL: the body, the validator to offer the
 // registry with it, and whether there was anything at all.
 func (c *diskCache) load(url string) ([]byte, string, bool) {
-	body, err := afero.ReadFile(c.fs, c.path(url))
+	content, err := afero.ReadFile(c.fs, c.path(url))
 	if err != nil {
 		return nil, "", false
 	}
 
-	// A missing validator only means the entry cannot be revalidated; the body
-	// is still the body.
-	etag, err := afero.ReadFile(c.fs, c.path(url)+etagSuffix)
-	if err != nil {
-		return body, "", true
+	var entry cacheEntry
+
+	err = json.Unmarshal(content, &entry)
+	if err != nil || entry.Body == nil {
+		return nil, "", false
 	}
 
-	return body, string(etag), true
+	return entry.Body, entry.ETag, true
 }
 
 // save records what a registry served. A failure is ignored: the run has the
@@ -135,25 +137,17 @@ func (c *diskCache) save(url string, body []byte, etag string) {
 		return
 	}
 
-	err = c.write(c.path(url), body)
+	content, err := json.Marshal(cacheEntry{Body: body, ETag: etag})
 	if err != nil {
 		return
 	}
 
-	if etag == "" {
-		// Leave no stale validator beside a fresh body: it would be offered
-		// for content it no longer describes.
-		_ = c.fs.Remove(c.path(url) + etagSuffix)
-
-		return
-	}
-
-	_ = c.write(c.path(url)+etagSuffix, []byte(etag))
+	_ = c.write(c.path(url), content)
 }
 
 // write puts a file in place in one step, so that a run reading the cache
 // while another writes it sees either the old entry or the new one, and a
-// write cut short leaves neither.
+// write cut short leaves the previous entry intact.
 func (c *diskCache) write(path string, content []byte) error {
 	tmp, err := afero.TempFile(c.fs, c.dir, filepath.Base(path)+"-")
 	if err != nil {

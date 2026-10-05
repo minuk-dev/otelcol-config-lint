@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -116,6 +118,197 @@ func TestCacheServesTheNewBodyWhenTheValidatorIsStale(t *testing.T) {
 	body, err = store.get(t.Context(), srv.URL, revalidated)
 	require.NoError(t, err)
 	assert.Equal(t, `index "v2"`, string(body), "the new validator should have replaced the old one")
+}
+
+// Separate cache instances share only the filesystem, as separate CLI runs
+// do. Pause the newer writer after its first replacement, let an older writer
+// finish, then resume: separate body/ETag writes used to leave old/new here.
+func TestCacheInterleavedWritesKeepBodyAndValidatorTogether(t *testing.T) {
+	t.Parallel()
+
+	var notModified atomic.Int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"new"` {
+			notModified.Add(1)
+			w.WriteHeader(http.StatusNotModified)
+
+			return
+		}
+
+		w.Header().Set("ETag", `"new"`)
+		_, _ = w.Write([]byte("new index"))
+	}))
+	defer srv.Close()
+
+	fsys := afero.NewOsFs()
+	dir := t.TempDir()
+	paused := &pauseAfterRenameFs{
+		Fs: fsys, renamed: make(chan struct{}), resume: make(chan struct{}), once: sync.Once{},
+	}
+	// Always release the writer, even if a later assertion fails.
+	defer close(paused.resume)
+
+	newer := &diskCache{fs: paused, dir: dir}
+	older := &diskCache{fs: fsys, dir: dir}
+	done := make(chan struct{})
+
+	go func() {
+		newer.save(srv.URL, []byte("new index"), `"new"`)
+		close(done)
+	}()
+
+	<-paused.renamed
+	older.save(srv.URL, []byte("old index"), `"old"`)
+
+	paused.resume <- struct{}{}
+
+	<-done
+
+	store := Store{AllowInsecure: true, CacheDir: dir, Fs: fsys, HTTPClient: srv.Client()}
+	for range 3 {
+		body, err := store.get(t.Context(), srv.URL, revalidated)
+		require.NoError(t, err)
+		assert.Equal(t, "new index", string(body), "a validator must describe the body returned on 304")
+	}
+
+	assert.GreaterOrEqual(t, notModified.Load(), int32(2), "exercise repeated 304 revalidations")
+}
+
+type pauseAfterRenameFs struct {
+	afero.Fs
+
+	renamed chan struct{}
+	resume  chan struct{}
+	once    sync.Once
+}
+
+func (fsys *pauseAfterRenameFs) Rename(oldname, newname string) error {
+	err := fsys.Fs.Rename(oldname, newname)
+	if err == nil {
+		fsys.once.Do(func() {
+			close(fsys.renamed)
+			<-fsys.resume
+		})
+	}
+
+	return err
+}
+
+func TestCacheIgnoresLegacyBodyAndValidator(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		keep freshness
+	}{
+		{name: "immutable", keep: immutable},
+		{name: "revalidated", keep: revalidated},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Empty(t, r.Header.Get("If-None-Match"), "legacy validators cannot be trusted")
+				w.Header().Set("ETag", `"new"`)
+				_, _ = w.Write([]byte("new index"))
+			}))
+			defer srv.Close()
+
+			store := Store{AllowInsecure: true, CacheDir: t.TempDir(), HTTPClient: srv.Client()}
+			cache := store.cache()
+			legacyPath := strings.TrimSuffix(cache.path(srv.URL), ".json")
+			require.NoError(t, afero.WriteFile(cache.fs, legacyPath, []byte("old index"), cacheFilePerm))
+			require.NoError(t, afero.WriteFile(cache.fs, legacyPath+".etag", []byte(`"new"`), cacheFilePerm))
+
+			body, err := store.get(t.Context(), srv.URL, tt.keep)
+			require.NoError(t, err)
+			assert.Equal(t, "new index", string(body))
+		})
+	}
+}
+
+func TestCacheEntryRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		body []byte
+		etag string
+	}{
+		{name: "with validator", body: []byte("index"), etag: `W/"new"`},
+		{name: "without validator", body: []byte("no ETag"), etag: ""},
+		{name: "empty body", body: []byte{}, etag: `"empty"`},
+		{name: "binary body", body: []byte{0, 0xff}, etag: `"binary"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cache := &diskCache{fs: afero.NewMemMapFs(), dir: t.TempDir()}
+			cache.save("https://example.com/index", []byte("previous"), `"old"`)
+			cache.save("https://example.com/index", tt.body, tt.etag)
+
+			body, etag, ok := cache.load("https://example.com/index")
+			require.True(t, ok)
+			assert.Equal(t, tt.body, body)
+			assert.Equal(t, tt.etag, etag)
+		})
+	}
+}
+
+func TestCacheInvalidEntryIsAMiss(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		content string
+	}{
+		{name: "truncated", content: `{"body":"aW5kZXg=","etag":`},
+		{name: "missing body", content: `{"etag":"new"}`},
+		{name: "null body", content: `{"body":null,"etag":"new"}`},
+		{name: "invalid base64", content: `{"body":"!","etag":"new"}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cache := &diskCache{fs: afero.NewOsFs(), dir: t.TempDir()}
+			url := "https://example.com/index"
+			require.NoError(t, afero.WriteFile(cache.fs, cache.path(url), []byte(tt.content), cacheFilePerm))
+
+			body, etag, ok := cache.load(url)
+			assert.False(t, ok)
+			assert.Nil(t, body)
+			assert.Empty(t, etag)
+		})
+	}
+}
+
+func TestCacheFailedReplacementKeepsPreviousEntry(t *testing.T) {
+	t.Parallel()
+
+	fsys := afero.NewOsFs()
+	cache := &diskCache{fs: fsys, dir: t.TempDir()}
+	url := "https://example.com/index"
+	cache.save(url, []byte("old index"), `"old"`)
+	cache.fs = failRenameFs{Fs: fsys}
+	cache.save(url, []byte("new index"), `"new"`)
+
+	body, etag, ok := cache.load(url)
+	require.True(t, ok)
+	assert.Equal(t, "old index", string(body))
+	assert.Equal(t, `"old"`, etag)
+
+	entries, err := afero.ReadDir(fsys, cache.dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "failed replacements must remove temporary files")
+}
+
+type failRenameFs struct {
+	afero.Fs
+}
+
+func (fsys failRenameFs) Rename(_, _ string) error {
+	return os.ErrPermission
 }
 
 // TestNoCacheAsksEveryTime pins what --no-cache is for: a schema corrected
