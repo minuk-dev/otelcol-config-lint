@@ -64,12 +64,12 @@ func TestSchemaRedirectTransportPolicy(t *testing.T) {
 		name                                string
 		toHTTP, allowInsecure, customPolicy bool
 	}{
-		{name: "refuse HTTP", toHTTP: true},
-		{name: "refuse HTTP with caller policy", toHTTP: true, customPolicy: true},
-		{name: "allow HTTP opt-in", toHTTP: true, allowInsecure: true},
+		{name: "refuse HTTP", toHTTP: true, allowInsecure: false, customPolicy: false},
+		{name: "refuse HTTP with caller policy", toHTTP: true, allowInsecure: false, customPolicy: true},
+		{name: "allow HTTP opt-in", toHTTP: true, allowInsecure: true, customPolicy: false},
 		{name: "allow HTTP opt-in with caller policy", toHTTP: true, allowInsecure: true, customPolicy: true},
-		{name: "allow HTTPS"},
-		{name: "allow HTTPS with caller policy", customPolicy: true},
+		{name: "allow HTTPS", toHTTP: false, allowInsecure: false, customPolicy: false},
+		{name: "allow HTTPS with caller policy", toHTTP: false, allowInsecure: false, customPolicy: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
