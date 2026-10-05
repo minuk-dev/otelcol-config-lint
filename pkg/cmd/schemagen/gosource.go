@@ -289,6 +289,7 @@ func (g *goIndex) field(decl *goType, expr ast.Expr, doc string, seen []string, 
 				out.Open = true
 			} else {
 				out.Children = nested.Children
+				out.Open = nested.Open
 			}
 		}
 	}
