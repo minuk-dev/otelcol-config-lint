@@ -13,16 +13,20 @@ describes**. A run that configures nothing sees nothing new.
 
 ## What it reports
 
-The hard limit is `limit_mib`, or `limit_percentage` resolved against the
-container's memory limit. Only the most serious clause applies, so a limit that
-is over the container's is not also reported as being over 80% of it.
+The hard limit is a positive `limit_mib`, which takes precedence over
+`limit_percentage`, or a positive `limit_percentage` resolved against the
+container's memory limit. The missing-container-limit warning only applies
+when a known percentage from 1 to 100 is selected; zero, invalid values, and
+runtime expansions that leave the selected limit unknown skip that warning.
+Only the most serious clause applies, so a limit that is over the container's
+is not also reported as being over 80% of it.
 
 | Config | Severity |
 | --- | --- |
 | the hard limit is at or above the container memory limit | `error` |
 | less than ~50MiB is left over it — the process runs about that far above what the limiter counts | `warning` |
 | the hard limit is above 80% of the container memory limit | `warning` |
-| `limit_percentage` with no container memory limit to be a percentage of | `warning` |
+| an active `limit_percentage` with no container memory limit to be a percentage of | `warning` |
 | the limiter may use more than the container's memory *request* | `info` |
 
 ## Example

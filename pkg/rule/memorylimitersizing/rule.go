@@ -45,9 +45,14 @@ func (r memoryLimiterSizing) Check(ctx *rule.Context) {
 
 // checkPercentage reports a percentage limit with nothing to be a percentage
 // of. Outside a container with a memory limit it resolves against the whole
-// node, which is not a limit on this collector at all.
+// node, which is not a limit on this collector at all. A positive limit_mib
+// takes precedence; an unknown one leaves the selected limit unknown too.
 func (r memoryLimiterSizing) checkPercentage(ctx *rule.Context, lim rule.MemoryLimiter) {
-	if !lim.LimitPercent.Present || ctx.Env.MemoryLimit > 0 {
+	if ctx.Env.MemoryLimit > 0 || lim.LimitMiB.Positive() || lim.LimitMiB.Unknown() {
+		return
+	}
+
+	if !lim.LimitPercent.Positive() || lim.LimitPercent.Num > rule.WholePercent {
 		return
 	}
 
