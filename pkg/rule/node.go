@@ -167,10 +167,7 @@ func IndexPath(path string, i int) string {
 	return path + "[" + Itoa(i) + "]"
 }
 
-var (
-	durationRE  = regexp.MustCompile(`^-?(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$`)
-	expansionRE = regexp.MustCompile(`\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
-)
+var expansionRE = regexp.MustCompile(`\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 
 // HasExpansion reports whether a scalar contains a confmap expansion such as
 // ${env:HOST}, whose value is unknown until the collector starts.

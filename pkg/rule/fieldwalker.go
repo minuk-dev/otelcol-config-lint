@@ -219,7 +219,7 @@ func matchesType(field *schema.Field, node *yaml.Node) bool {
 	case "float":
 		return node.Tag == "!!float" || node.Tag == "!!int"
 	case "duration":
-		return node.Kind == yaml.ScalarNode && durationRE.MatchString(node.Value)
+		return ReadDuration(node).Known
 	default:
 		return true
 	}
