@@ -258,13 +258,21 @@ func (f *junitFormatter) Result(r Result) error {
 	}
 
 	for _, d := range r.Diagnostics {
-		if d.Severity != diag.Error {
+		if r.Status != Invalid {
 			continue
 		}
 
 		c.Failures = append(c.Failures, junitFailure{
 			Message: d.Message, Type: d.Rule,
 			Text: d.Position.String() + ": " + d.Message,
+		})
+	}
+
+	if r.Status == Invalid && len(c.Failures) == 0 {
+		c.Failures = append(c.Failures, junitFailure{
+			Message: "File failed the configured severity threshold; diagnostics were filtered out.",
+			Type:    string(Invalid),
+			Text:    "",
 		})
 	}
 
