@@ -211,7 +211,7 @@ func matchesType(field *schema.Field, node *yaml.Node) bool {
 	case typeList:
 		return node.Kind == yaml.SequenceNode
 	case "string":
-		return node.Kind == yaml.ScalarNode
+		return node.Kind == yaml.ScalarNode && node.Tag == "!!str"
 	case "bool":
 		return node.Tag == BoolTag
 	case "int":
