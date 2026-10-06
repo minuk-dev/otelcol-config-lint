@@ -81,9 +81,19 @@ func TestMemoryLimiterSizing(t *testing.T) {
 			env:  container,
 			want: diag.Warning, says: "above 80%",
 		},
+		"a fixed limit overrides a percentage of the container": {
+			src:  limiter("    check_interval: 1s\n    limit_mib: 512\n    limit_percentage: 50"),
+			env:  container,
+			want: diag.Error, says: "before the limiter engages",
+		},
 		"more than the pod asked for": {
 			src:  sized("400"),
 			env:  rule.Environment{Kubernetes: true, MemoryRequest: 256 * quantity.Mi, MemoryLimit: 512 * quantity.Mi},
+			want: diag.Info, says: "memory request",
+		},
+		"a fixed limit with a percentage still exceeds the request": {
+			src:  limiter("    check_interval: 1s\n    limit_mib: 400\n    limit_percentage: 80"),
+			env:  rule.Environment{Kubernetes: true, MemoryRequest: 256 * quantity.Mi, MemoryLimit: 0},
 			want: diag.Info, says: "memory request",
 		},
 	}
@@ -102,6 +112,62 @@ func TestMemoryLimiterSizing(t *testing.T) {
 					t.Errorf("want severity %q, got %q for %q", tt.want, d.Severity, d.Message)
 				}
 			}
+		})
+	}
+}
+
+func TestMemoryLimiterSizingPercentageWithoutContainerLimit(t *testing.T) {
+	t.Parallel()
+
+	env := rule.Environment{Kubernetes: true, MemoryRequest: 512 * quantity.Mi, MemoryLimit: 0}
+	tests := []struct {
+		name     string
+		settings string
+		warn     bool
+	}{
+		{name: "absent limits", settings: "", warn: false},
+		{name: "positive percentage", settings: "    limit_percentage: 80", warn: true},
+		{name: "whole percentage", settings: "    limit_percentage: 100", warn: true},
+		{name: "zero fixed limit", settings: "    limit_mib: 0\n    limit_percentage: 80", warn: true},
+		{name: "fixed limit with zero percentage", settings: "    limit_mib: 512\n    limit_percentage: 0", warn: false},
+		{name: "fixed limit with positive percentage", settings: "    limit_mib: 512\n    limit_percentage: 80", warn: false},
+		{name: "zero percentage", settings: "    limit_percentage: 0", warn: false},
+		{name: "negative percentage", settings: "    limit_percentage: -1", warn: false},
+		{name: "percentage above hundred", settings: "    limit_percentage: 101", warn: false},
+		{name: "invalid percentage", settings: "    limit_percentage: invalid", warn: false},
+		{name: "runtime percentage", settings: "    limit_percentage: ${env:PERCENT}", warn: false},
+		{
+			name:     "fixed limit with runtime percentage",
+			settings: "    limit_mib: 512\n    limit_percentage: ${env:PERCENT}",
+			warn:     false,
+		},
+		{
+			name:     "runtime fixed limit with positive percentage",
+			settings: "    limit_mib: ${env:LIMIT}\n    limit_percentage: 80",
+			warn:     false,
+		},
+		{
+			name:     "invalid fixed limit with positive percentage",
+			settings: "    limit_mib: invalid\n    limit_percentage: 80",
+			warn:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found := checkIn(t, limiter("    check_interval: 1s\n"+tt.settings), env)
+			if !tt.warn {
+				assert.Empty(t, found)
+
+				return
+			}
+
+			require.Len(t, found, 1)
+			assert.Equal(t, diag.Warning, found[0].Severity)
+			assert.Equal(t, "processors.memory_limiter.limit_percentage", found[0].Path)
+			assert.Contains(t, found[0].Message, "no memory limit")
 		})
 	}
 }
