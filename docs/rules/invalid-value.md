@@ -8,7 +8,7 @@ accepts.
 ## What it reports
 
 Every value the [field schema](../schemas.md#field-schemas) types that the
-config writes as something else — a duration without a unit, a string where a
+config writes as something else — a nonzero duration without a unit, a string where a
 list belongs, an enum value that is not one of the enum's — saying what it must
 be instead.
 
@@ -30,6 +30,10 @@ The bare `5` is the one worth having the rule for. It parses, and it is not five
 seconds.
 
 ## Notes
+
+Durations use Go's `time.ParseDuration`, matching the Collector's decoder.
+Values such as `.5s`, `1.s`, `+1s`, `0`, and `1μs` are valid; values outside
+the range of `time.Duration` are reported.
 
 Enums come from the `config.schema.yaml` upstream publishes, which the Go source
 alone cannot supply — see [Field schemas](../schemas.md#field-schemas).
