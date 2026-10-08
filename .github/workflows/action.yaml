@@ -50,7 +50,7 @@ jobs:
             Dockerfile
           git --no-pager diff -- Dockerfile
 
-      - name: Boolean inputs override settings only when explicit
+      - name: Boolean and string inputs override settings only when explicit
         run: PATH="$PWD/dist/action:$PATH" bash build/docker/action-entrypoint_test.sh
 
       - name: Write a repository policy with strict enabled

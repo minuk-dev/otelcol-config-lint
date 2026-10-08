@@ -22,13 +22,13 @@ inputs:
     required: false
     default: "."
   collector-version:
-    description: Collector release to validate against, e.g. v0.157.0.
+    description: Collector release to validate against, e.g. v0.157.0. Blank inherits the settings file.
     required: false
-    default: latest
+    default: ""
   distribution:
-    description: "Collector distribution to validate against: core, contrib, k8s or otlp."
+    description: "Collector distribution to validate against: core, contrib, k8s or otlp. Blank inherits the settings file."
     required: false
-    default: contrib
+    default: ""
   schema-location:
     description: >-
       Where to find schemas: a registry directory or URL, a {{.Version}} /
@@ -49,13 +49,13 @@ inputs:
     required: false
     default: ""
   min-severity:
-    description: "Lowest severity to report: error, warning or info."
+    description: "Lowest severity to report: error, warning or info. Blank inherits the settings file."
     required: false
-    default: info
+    default: ""
   fail-on:
-    description: "Severity that makes a file invalid: error, warning or info."
+    description: "Severity that makes a file invalid: error, warning or info. Blank inherits the settings file."
     required: false
-    default: error
+    default: ""
   default:
     description: "Rule set to start from: all (the default) or none."
     required: false
