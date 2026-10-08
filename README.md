@@ -94,6 +94,11 @@ carry a path with a space in it, globs allowed), `collector-version`,
 two, a fresh container has no cache to read, and a workflow that reads its
 schemas over plain HTTP is one whose findings anyone on the path can choose.
 
+For `collector-version`, `distribution`, `min-severity` and `fail-on`, omitted or
+blank inputs inherit the settings file. Explicit nonblank inputs override it.
+Without a setting, the CLI defaults apply: `latest`, `contrib`, `info` and `error`,
+respectively.
+
 For `strict`, `embedded`, `ignore-missing-schemas`, `verbose` and `exit-on-error`,
 omitted or blank inputs inherit the settings file (or the CLI default of `false`
 when no setting is present). Explicit `true` or `false` inputs override the
