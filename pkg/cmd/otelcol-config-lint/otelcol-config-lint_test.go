@@ -3,6 +3,7 @@ package otelcolconfiglint_test
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"net/http"
@@ -256,6 +257,66 @@ func TestJUnitAndTAPOutput(t *testing.T) {
 	_, tap, _ := lint(t, "", "--output", "tap", badConfig)
 	if !strings.HasPrefix(tap, "1..1\nnot ok 1 - ") {
 		t.Errorf("unexpected tap output:\n%s", tap)
+	}
+}
+
+func TestJUnitFailureThresholds(t *testing.T) {
+	t.Parallel()
+
+	const src = "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpiont: localhost:4317\n"
+
+	for _, tt := range []struct {
+		name        string
+		severity    string
+		failOn      string
+		minSeverity string
+		wantCode    int
+	}{
+		{name: "warning passes", severity: "warning", failOn: "error", minSeverity: "info", wantCode: 0},
+		{name: "warning fails", severity: "warning", failOn: "warning", minSeverity: "info", wantCode: 1},
+		{name: "hidden warning fails", severity: "warning", failOn: "warning", minSeverity: "error", wantCode: 1},
+		{name: "info passes", severity: "info", failOn: "warning", minSeverity: "info", wantCode: 0},
+		{name: "info fails", severity: "info", failOn: "info", minSeverity: "info", wantCode: 1},
+		{name: "hidden info fails", severity: "info", failOn: "info", minSeverity: "error", wantCode: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			input, ruleName := src, "unknown-field"
+			if tt.severity == "info" {
+				// unknown-field sets each finding's severity; use a rule that accepts overrides for info.
+				input, ruleName = "recievers: {}\n", "unknown-top-level-key"
+			}
+
+			code, out, errOut := lint(t, input,
+				"--no-config", "--collector-version", "v0.157.0", "--default", "none", "--enable", ruleName,
+				"--strict=false", "--severity", ruleName+"="+tt.severity, "--fail-on", tt.failOn,
+				"--min-severity", tt.minSeverity, "--output", "junit", "-",
+			)
+			require.Equal(t, tt.wantCode, code, errOut)
+
+			var report struct {
+				Tests    int `xml:"tests,attr"`
+				Failures int `xml:"failures,attr"`
+				Errors   int `xml:"errors,attr"`
+				Cases    []struct {
+					Failures []struct {
+						Message string `xml:"message,attr"`
+					} `xml:"failure"`
+				} `xml:"testcase"`
+			}
+
+			require.NoError(t, xml.Unmarshal([]byte(out), &report))
+			assert.Equal(t, 1, report.Tests)
+			assert.Equal(t, tt.wantCode, report.Failures)
+			assert.Zero(t, report.Errors)
+			require.Len(t, report.Cases, 1)
+			require.Len(t, report.Cases[0].Failures, tt.wantCode)
+
+			if tt.wantCode != 0 {
+				assert.NotEmpty(t, report.Cases[0].Failures[0].Message)
+			}
+		})
 	}
 }
 
