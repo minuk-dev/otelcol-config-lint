@@ -53,7 +53,9 @@ func (r Result) Message() string {
 
 // Options configures a Linter.
 type Options struct {
-	// Schema describes the collector release to check against.
+	// Schema describes the collector release to check against. A nil schema or
+	// one with no components runs structural checks only; schema-dependent
+	// rules stay silent.
 	Schema *schema.Schema
 	// Fs is the filesystem LintFile reads from. A nil Fs means the real one.
 	Fs afero.Fs
