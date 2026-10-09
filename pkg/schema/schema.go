@@ -254,6 +254,9 @@ var errMultiDocumentSchema = errors.New("decode schema: more than one document")
 // errNullComponent reports an inventory entry with no component definition.
 var errNullComponent = errors.New("component must not be null")
 
+// errNullField reports a child entry with no field definition.
+var errNullField = errors.New("field must not be null")
+
 // Format is a schema serialisation format.
 type Format string
 
@@ -310,10 +313,32 @@ func Read(r io.Reader) (*Schema, error) {
 			if comp.Type == "" {
 				comp.Type = typ
 			}
+
+			if comp.Fields != nil {
+				err := validateField(comp.Fields, string(kind)+"."+typ+".fields")
+				if err != nil {
+					return nil, fmt.Errorf("decode schema: %w", err)
+				}
+			}
 		}
 	}
 
 	return &c, nil
+}
+
+func validateField(field *Field, path string) error {
+	if field == nil {
+		return fmt.Errorf("%s: %w", path, errNullField)
+	}
+
+	for name, child := range field.Children {
+		err := validateField(child, path+"."+name)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ReadFile decodes a schema from a file on disk.
