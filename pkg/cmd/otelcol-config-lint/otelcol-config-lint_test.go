@@ -21,6 +21,7 @@ import (
 
 	otelcolconfiglint "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint"
 	runcmd "github.com/minuk-dev/otelcol-config-lint/pkg/cmd/otelcol-config-lint/run"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 )
 
 // repoSchemas is the committed schema fixture. The binary reads the published
@@ -140,6 +141,49 @@ func TestInvalidFileFails(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestMalformedServiceReferencesFail(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile(filepath.Join(validConfig, "agent.yaml"))
+	require.NoError(t, err)
+
+	for slot, refs := range map[string]string{
+		"receivers": "otlp", "processors": "memory_limiter, batch",
+		"exporters": "debug", "extensions": "zpages",
+	} {
+		t.Run(slot, func(t *testing.T) {
+			t.Parallel()
+
+			bad := strings.Replace(string(src), slot+": ["+refs+"]",
+				slot+": ["+refs+", {bogus: true}]", 1)
+			require.NotEqual(t, string(src), bad)
+
+			code, out, errOut := lint(t, bad, "--no-config", "--collector-version", "v0.157.0", "--output", "json", "-")
+			require.Equal(t, 1, code, errOut)
+
+			var report struct {
+				Files []struct {
+					Status      string           `json:"status"`
+					Diagnostics diag.Diagnostics `json:"diagnostics"`
+				} `json:"files"`
+			}
+
+			require.NoError(t, json.Unmarshal([]byte(out), &report))
+			require.Len(t, report.Files, 1)
+			assert.Equal(t, "invalid", report.Files[0].Status)
+			found := slices.DeleteFunc(report.Files[0].Diagnostics, func(d diag.Diagnostic) bool {
+				return d.Rule != "wrong-node-type"
+			})
+			require.Len(t, found, 1)
+			d := found[0]
+			assert.Equal(t, "wrong-node-type", d.Rule)
+			assert.Equal(t, diag.Error, d.Severity)
+			assert.Positive(t, d.Position.Line)
+			assert.Positive(t, d.Position.Column)
+		})
 	}
 }
 

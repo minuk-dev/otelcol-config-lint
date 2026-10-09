@@ -4,7 +4,9 @@
 
 Component sections are mappings of component id to settings; `service.extensions`
 and the three pipeline slots are lists. Writing one as the other is a config the
-collector cannot decode.
+collector cannot decode. Each item in a service reference list must be a scalar
+component id; mappings and nested lists are reported at the offending item,
+including items supplied by YAML aliases.
 
 ## What it reports
 
@@ -13,6 +15,7 @@ collector cannot decode.
 | `receivers`, `processors`, `exporters`, `connectors`, `extensions` | a mapping |
 | `service.extensions` | a list |
 | a pipeline's `receivers`, `processors`, `exporters` | a list |
+| each item in those service reference lists | a scalar component id |
 
 A null node — a key written with nothing under it — is not reported: that is how
 a component with no settings is declared.
