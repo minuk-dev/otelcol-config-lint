@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/afero"
+
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -29,7 +31,7 @@ func (o *options) prune() error {
 		return nil
 	}
 
-	entries, err := os.ReadDir(o.registryDir)
+	entries, err := afero.ReadDir(o.fs(), o.registryDir)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", o.registryDir, err)
 	}
@@ -53,11 +55,11 @@ func (o *options) prune() error {
 // pruneDistribution removes the schema files of one distribution's dropped
 // releases, in every format they were written in.
 func (o *options) pruneDistribution(dir string) error {
-	dropped := drop(versionsIn(dir), o.retain, o.retainEvery)
+	dropped := drop(o.versionsIn(dir), o.retain, o.retainEvery)
 
 	for _, v := range dropped {
 		for _, ext := range schema.Extensions() {
-			err := os.Remove(filepath.Join(dir, v+ext))
+			err := o.fs().Remove(filepath.Join(dir, v+ext))
 			if err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("remove %s: %w", filepath.Join(dir, v+ext), err)
 			}

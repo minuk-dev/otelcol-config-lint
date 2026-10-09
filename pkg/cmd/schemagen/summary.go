@@ -2,9 +2,10 @@ package schemagen
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/afero"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
@@ -32,9 +33,9 @@ func (o *options) summarise(cat *schema.Schema) {
 
 	dir := filepath.Join(o.registryDir, cat.Distribution)
 
-	previous := readVersion(dir, cat.CollectorVersion)
+	previous := o.readVersion(dir, cat.CollectorVersion)
 	if previous == nil {
-		previous = previousIn(dir, cat.CollectorVersion)
+		previous = o.previousIn(dir, cat.CollectorVersion)
 	}
 
 	o.diffs = append(o.diffs, schema.DiffSchemas(previous, cat))
@@ -42,10 +43,10 @@ func (o *options) summarise(cat *schema.Schema) {
 
 // previousIn reads the newest release a distribution directory holds that is
 // older than version, or nil when it holds none.
-func previousIn(dir, version string) *schema.Schema {
+func (o *options) previousIn(dir, version string) *schema.Schema {
 	var newest string
 
-	for _, v := range versionsIn(dir) {
+	for _, v := range o.versionsIn(dir) {
 		if schema.Compare(v, version) >= 0 {
 			continue
 		}
@@ -59,16 +60,16 @@ func previousIn(dir, version string) *schema.Schema {
 		return nil
 	}
 
-	return readVersion(dir, newest)
+	return o.readVersion(dir, newest)
 }
 
 // readVersion reads one release out of a distribution directory, in whichever
 // form it is filed, or nil when the directory does not hold it. A file that
 // cannot be read is treated as absent: a summary is a convenience, and failing
 // the run over it would throw away the schemas that did generate.
-func readVersion(dir, version string) *schema.Schema {
+func (o *options) readVersion(dir, version string) *schema.Schema {
 	for _, ext := range schema.Extensions() {
-		cat, err := schema.ReadFile(filepath.Join(dir, version+ext))
+		cat, err := schema.ReadFileFS(o.fs(), filepath.Join(dir, version+ext))
 		if err == nil {
 			return cat
 		}
@@ -110,7 +111,7 @@ func (o *options) writeSummary() error {
 		return nil
 	}
 
-	err := os.WriteFile(o.summaryFile, []byte(b.String()), filePerm)
+	err := afero.WriteFile(o.fs(), o.summaryFile, []byte(b.String()), filePerm)
 	if err != nil {
 		return fmt.Errorf("write summary: %w", err)
 	}

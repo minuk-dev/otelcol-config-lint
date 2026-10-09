@@ -310,7 +310,7 @@ func (s Store) indexAt(ctx context.Context, loc string) *Index {
 
 		return idx
 	case locDir:
-		idx, err := readIndexFile(s.fs(), filepath.Join(loc, IndexFile))
+		idx, err := ReadIndexFileFS(s.fs(), filepath.Join(loc, IndexFile))
 		if err != nil {
 			return nil
 		}
@@ -334,7 +334,7 @@ func (s Store) componentsAt(ctx context.Context, loc string) *Components {
 
 		return comps
 	case locDir:
-		comps, err := readComponentsFile(s.fs(), filepath.Join(loc, ComponentsFile))
+		comps, err := ReadComponentsFileFS(s.fs(), filepath.Join(loc, ComponentsFile))
 		if err != nil {
 			return nil
 		}
@@ -357,7 +357,7 @@ func (s Store) versionsAt(ctx context.Context, loc string) []string {
 
 		return idx.Versions(s.distribution())
 	case locDir:
-		idx, err := readIndexFile(s.fs(), filepath.Join(loc, IndexFile))
+		idx, err := ReadIndexFileFS(s.fs(), filepath.Join(loc, IndexFile))
 		if err == nil {
 			return idx.Versions(s.distribution())
 		}
@@ -529,7 +529,7 @@ func (s Store) loadFlat(dir, version string) (*Schema, error) {
 
 		_, err := s.fs().Stat(path)
 		if err == nil {
-			return readFile(s.fs(), path)
+			return ReadFileFS(s.fs(), path)
 		}
 	}
 
@@ -544,7 +544,7 @@ func (s Store) readLocal(path string) (*Schema, error) {
 		return nil, errNotFound
 	}
 
-	return readFile(s.fs(), path)
+	return ReadFileFS(s.fs(), path)
 }
 
 // fetchIndex reads a remote registry's index, once per registry.

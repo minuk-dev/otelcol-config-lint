@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,4 +82,30 @@ func TestWorkspaceRejectsEscapingSymlinks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkspaceUsesInjectedFS(t *testing.T) {
+	t.Parallel()
+
+	fsys := afero.NewMemMapFs()
+	opts := &options{fsys: fsys, cacheDir: filepath.Join(t.TempDir(), "cache")}
+
+	var man manifest
+
+	man.Dist.Name = "custom"
+	man.Dist.Version = "0.157.0"
+	man.Receivers = []manifestComponent{{GoMod: "example.com/receiver v0.0.0", Name: ""}}
+	work, err := opts.workspace(&man)
+	require.NoError(t, err)
+	gomod, err := afero.ReadFile(fsys, filepath.Join(work, "go.mod"))
+	require.NoError(t, err)
+	require.Contains(t, string(gomod), "example.com/receiver v0.0.0")
+
+	imports, err := afero.ReadFile(fsys, filepath.Join(work, "components.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(imports), `_ "example.com/receiver"`)
+	require.NoDirExists(t, opts.cacheDir)
+	opts.fsys = afero.NewReadOnlyFs(fsys)
+	_, err = opts.workspace(&man)
+	require.ErrorIs(t, err, os.ErrPermission)
 }

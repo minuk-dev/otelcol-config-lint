@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
@@ -105,12 +106,11 @@ const commandTimeout = 10 * time.Minute
 // options holds everything the command was asked to do. The fields are filled
 // in by registerFlags and then by prepare, in that order.
 //
-// It is unexported, and so is every field: each one is either a flag, which
-// registerFlags overwrites with its default the moment it is declared, or
-// state the run resolves for itself. There is nothing an embedder could set
-// that the command would honour, which is why NewCommand takes no options and
-// this type is the package's own.
+// The filesystem is supplied by the embedder; flags and resolved state remain
+// private to the command.
 type options struct {
+	fsys afero.Fs
+
 	// flags
 	builders    []string
 	outFile     string
@@ -131,11 +131,17 @@ type options struct {
 	diffs []*schema.Diff
 }
 
-// NewCommand builds the schemagen command. It is configured through its flags
-// alone: schemagen is a build-time tool driven from the command line, so the
-// options it fills in are its own.
+// NewCommand builds the schemagen command using the real filesystem.
 func NewCommand() *cobra.Command {
-	opts := &options{} //nolint:exhaustruct // every field is filled in by registerFlags and prepare
+	return NewCommandWithFS(nil)
+}
+
+// NewCommandWithFS builds the command using fsys for file operations. A nil
+// filesystem uses the real disk with confined registry and workspace writes.
+// A supplied filesystem owns its symlink policy. Generate also invokes the
+// external go tool, whose workspace and module paths must exist on real disk.
+func NewCommandWithFS(fsys afero.Fs) *cobra.Command {
+	opts := &options{fsys: fsys}
 
 	// The root carries no work of its own: every mode is a subcommand, so a
 	// bare invocation prints the help that lists them.
@@ -374,7 +380,7 @@ func (o *options) printVersions(cmd *cobra.Command) error {
 	for _, builder := range o.builders {
 		name, path := splitBuilder(builder)
 
-		man, err := readManifest(path, name)
+		man, err := o.readManifest(path, name)
 		if err != nil {
 			return err
 		}
@@ -446,7 +452,7 @@ func (o *options) checkDestination(manifests []string) error {
 func (o *options) generate(builder string, formats []schema.Format) error {
 	name, path := splitBuilder(builder)
 
-	man, err := readManifest(path, name)
+	man, err := o.readManifest(path, name)
 	if err != nil {
 		return err
 	}

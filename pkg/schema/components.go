@@ -180,12 +180,16 @@ func ReadComponents(r io.Reader) (*Components, error) {
 // ReadComponentsFile decodes a component availability index from a file on
 // disk.
 func ReadComponentsFile(path string) (*Components, error) {
-	return readComponentsFile(afero.NewOsFs(), path)
+	return ReadComponentsFileFS(afero.NewOsFs(), path)
 }
 
-// readComponentsFile decodes a component availability index from a file on the
-// given filesystem.
-func readComponentsFile(fsys afero.Fs, path string) (*Components, error) {
+// ReadComponentsFileFS decodes a component availability index from a file on the
+// given filesystem. A nil filesystem uses the real disk.
+func ReadComponentsFileFS(fsys afero.Fs, path string) (*Components, error) {
+	if fsys == nil {
+		fsys = afero.NewOsFs()
+	}
+
 	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open components: %w", err)

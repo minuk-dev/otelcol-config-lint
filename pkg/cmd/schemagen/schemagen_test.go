@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -944,4 +945,32 @@ func TestPrintVersionNeedsAManifest(t *testing.T) {
 	assert.Equal(t, schemagen.ExitUsage, code)
 	assert.Contains(t, stderr, schemagen.ErrNoManifests.Error())
 	assert.Contains(t, stderr, "Usage:")
+}
+
+func TestPrintVersionWithFS(t *testing.T) {
+	t.Parallel()
+
+	fsys := afero.NewMemMapFs()
+	path := filepath.Join(t.TempDir(), "manifest.yaml")
+	require.NoError(t, fsys.MkdirAll(filepath.Dir(path), 0o750))
+
+	body := "dist:\n  name: custom\n  version: 0.157.0\n" +
+		"receivers:\n  - gomod: example.com/receiver v0.0.0\n"
+	require.NoError(t, afero.WriteFile(fsys, path, []byte(body), 0o600))
+
+	var stdout bytes.Buffer
+
+	cmd := schemagen.NewCommandWithFS(fsys)
+	cmd.SetArgs([]string{"print-version", "--builder", path})
+	cmd.SetOut(&stdout)
+	require.NoError(t, cmd.Execute())
+	assert.Equal(t, "custom\tv0.157.0\n", stdout.String())
+
+	// A file on disk must not be visible through the injected filesystem.
+	diskPath := singleComponentManifest(t, t.TempDir())
+	cmd = schemagen.NewCommandWithFS(fsys)
+	cmd.SetArgs([]string{"print-version", "--builder", diskPath})
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stdout)
+	require.ErrorIs(t, cmd.Execute(), os.ErrNotExist)
 }
