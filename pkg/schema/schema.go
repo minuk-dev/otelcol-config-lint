@@ -266,6 +266,8 @@ const (
 
 // Read decodes a schema. Both YAML and JSON are accepted, since JSON is valid
 // YAML, so callers do not have to know which form they were handed.
+// An empty component inventory is accepted for structural-only library use;
+// callers that require component validation must check Count before linting.
 func Read(r io.Reader) (*Schema, error) {
 	var c Schema
 

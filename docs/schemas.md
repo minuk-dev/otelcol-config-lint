@@ -50,6 +50,17 @@ Repeat the flag to search several in order, so a private distribution's schema
 can take precedence over the public ones, or so a vendored copy answers before
 the network is tried.
 
+The CLI requires a schema with at least one component. A document containing
+`{}`, `null`, or only empty component maps ends the run with a schema-loading
+error and exit code 2, before any lint results are emitted. Check
+`--schema-location` and replace or regenerate the schema. This also applies to
+remote schemas, an opted-in nearest-version fallback, and runs using
+`--ignore-missing-schemas`.
+
+Library callers can use `schema.Read` with an empty inventory and pass it to
+`lint.New` for structural checks only. A nil `lint.Options.Schema` has the same
+effect: schema-dependent rules stay silent, while structural rules still run.
+
 A remote location must be `https://`. The schema is what every rule reasons from
 — which components exist, which settings they take — so anyone able to rewrite
 one in flight decides what the linter reports. A plain `http://` location is

@@ -92,6 +92,45 @@ func TestStatuses(t *testing.T) {
 	}
 }
 
+func TestEmptySchemaKeepsStructuralChecks(t *testing.T) {
+	t.Parallel()
+
+	const src = `receivers:
+  imaginaryreceiver: {}
+service:
+  pipelines:
+    traces:
+      receivers: [imaginaryreceiver]
+`
+
+	for name, input := range map[string]string{
+		"nil schema":      "",
+		"empty object":    `{}`,
+		"null":            `null`,
+		"empty inventory": `{"components":{"receiver":{},"exporter":{}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var cat *schema.Schema
+
+			if input != "" {
+				var err error
+
+				cat, err = schema.Read(strings.NewReader(input))
+				require.NoError(t, err)
+				require.NotNil(t, cat)
+				assert.Zero(t, cat.Count())
+			}
+
+			result := lint.New(lint.Options{Schema: cat, MinSeverity: diag.Error}).Lint(t.Context(), "config.yaml", []byte(src))
+			require.Equal(t, lint.Invalid, result.Status)
+			require.Len(t, result.Diagnostics, 1)
+			assert.Equal(t, "empty-pipeline", result.Diagnostics[0].Rule)
+		})
+	}
+}
+
 func TestSyntaxErrorIsADiagnosticNotAFailure(t *testing.T) {
 	t.Parallel()
 

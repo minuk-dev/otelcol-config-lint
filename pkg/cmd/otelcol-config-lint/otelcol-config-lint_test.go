@@ -546,6 +546,79 @@ func TestSchemaLocationOverridesTheBuiltins(t *testing.T) {
 	}
 }
 
+func TestEmptySchemaEndsTheRun(t *testing.T) {
+	t.Parallel()
+
+	const src = `receivers:
+  imaginaryreceiver: {}
+exporters:
+  imaginaryexporter: {}
+service:
+  pipelines:
+    traces:
+      receivers: [imaginaryreceiver]
+      exporters: [imaginaryexporter]
+`
+
+	for name, input := range map[string]string{
+		"empty object":     `{}`,
+		"null":             `null`,
+		"empty inventory":  `{"collectorVersion":"v0.157.0","components":{}}`,
+		"empty kinds":      `{"components":{"receiver":{},"processor":{},"exporter":{},"connector":{},"extension":{}}}`,
+		"YAML empty kinds": "components:\n  receiver: {}\n  exporter: {}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "contrib"), 0o700))
+			path := filepath.Join(dir, "contrib", "v0.157.0.json")
+			require.NoError(t, os.WriteFile(path, []byte(input), 0o600))
+
+			index := `{"distributions":{"contrib":["v0.157.0"]},"extensions":{"contrib":".json"}}`
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "index.json"), []byte(index), 0o600))
+
+			srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+			t.Cleanup(srv.Close)
+
+			for location, target := range map[string]string{
+				"local file":      path,
+				"local registry":  dir,
+				"remote registry": srv.URL,
+			} {
+				t.Run(location, func(t *testing.T) {
+					t.Parallel()
+
+					versions := map[string]string{"exact": "v0.157.0"}
+					if location != "local file" {
+						versions["latest"] = "latest"
+						versions["fallback"] = "v0.158.0"
+					}
+
+					for mode, version := range versions {
+						t.Run(mode, func(t *testing.T) {
+							t.Parallel()
+
+							code, out, errOut := run(t, src, "run", "--no-config", "--no-cache",
+								"--insecure-schema-location", "--schema-location", target,
+								"--collector-version", version, "--allow-nearest-fallback",
+								"--ignore-missing-schemas", "--output", "json", "-")
+							require.Equal(t, otelcolconfiglint.ExitUsage, code, "%s", errOut)
+							assert.Empty(t, out, "an unusable schema must not emit a lint result")
+							assert.Contains(t, errOut, "load schema: component inventory is empty")
+							assert.Contains(t, errOut, "--schema-location")
+
+							if mode == "fallback" {
+								assert.Contains(t, errOut, "falling back to v0.157.0")
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestIgnoreMissingSchemas(t *testing.T) {
 	t.Parallel()
 

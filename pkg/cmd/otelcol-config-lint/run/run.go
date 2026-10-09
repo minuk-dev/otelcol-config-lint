@@ -37,6 +37,9 @@ var (
 	ErrFilesInvalid = errors.New("at least one file is invalid")
 )
 
+var errEmptySchema = errors.New("load schema: component inventory is empty; " +
+	"check --schema-location and replace or regenerate the schema")
+
 // NoExactSchemaError reports that no location carries the requested release.
 // It ends the run rather than standing in for the release, and it is a usage
 // error because what has to change is the request: either the version asked
@@ -440,6 +443,10 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 	cat, err := o.loadSchema(cmd)
 	if err != nil {
 		return nil, err
+	}
+
+	if cat.Count() == 0 {
+		return nil, errEmptySchema
 	}
 
 	minSeverity, err := diag.ParseSeverity(o.minSeverity)
