@@ -315,14 +315,17 @@ func (o *options) run(cmd *cobra.Command) error {
 		}
 	}
 
-	err = o.publishRegistry()
-	if err != nil {
-		return err
-	}
+	// A rejected run must leave the registry and summary untouched.
+	if len(skipped) < len(manifests) {
+		err = o.publishRegistry()
+		if err != nil {
+			return err
+		}
 
-	err = o.writeSummary()
-	if err != nil {
-		return err
+		err = o.writeSummary()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Carrying on past a manifest that failed is what keeps it from discarding
@@ -434,13 +437,6 @@ func (o *options) checkDestination(manifests []string) error {
 		return ErrNoPrevious
 	case o.registryDir == "" && o.retain > 0:
 		return ErrNothingToPrune
-	case o.registryDir == "":
-		return nil
-	}
-
-	err := os.MkdirAll(o.registryDir, dirPerm)
-	if err != nil {
-		return fmt.Errorf("create registry directory: %w", err)
 	}
 
 	return nil

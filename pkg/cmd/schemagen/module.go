@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -136,9 +135,20 @@ func (o *options) resolveModules(man *manifest) (*moduleSet, error) {
 // manifest's components as requirements, its replacements as replacements, and
 // a file importing every component so tidy keeps them all.
 func (o *options) workspace(man *manifest) (string, error) {
-	dir := filepath.Join(o.cacheDir, "workspace", man.Dist.Name)
+	err := validateDestination(man.Dist.Name, man.collectorVersion())
+	if err != nil {
+		return "", err
+	}
 
-	err := os.MkdirAll(dir, dirPerm)
+	root, err := createRoot(o.cacheDir)
+	if err != nil {
+		return "", fmt.Errorf("open cache: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	dir := filepath.Join("workspace", man.Dist.Name)
+
+	err = root.MkdirAll(dir, dirPerm)
 	if err != nil {
 		return "", fmt.Errorf("create workspace: %w", err)
 	}
@@ -162,7 +172,7 @@ func (o *options) workspace(man *manifest) (string, error) {
 		fmt.Fprintf(&gomod, "\nreplace %s\n", strings.TrimSpace(replace))
 	}
 
-	err = os.WriteFile(filepath.Join(dir, "go.mod"), gomod.Bytes(), filePerm)
+	err = root.WriteFile(filepath.Join(dir, "go.mod"), gomod.Bytes(), filePerm)
 	if err != nil {
 		return "", fmt.Errorf("write go.mod: %w", err)
 	}
@@ -177,12 +187,12 @@ func (o *options) workspace(man *manifest) (string, error) {
 
 	imports.WriteString(")\n")
 
-	err = os.WriteFile(filepath.Join(dir, "components.go"), imports.Bytes(), filePerm)
+	err = root.WriteFile(filepath.Join(dir, "components.go"), imports.Bytes(), filePerm)
 	if err != nil {
 		return "", fmt.Errorf("write components.go: %w", err)
 	}
 
-	return dir, nil
+	return filepath.Join(o.cacheDir, dir), nil
 }
 
 // goCommand runs the go tool in the workspace and returns its stdout. The

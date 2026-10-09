@@ -249,6 +249,13 @@ In the registry the file name comes from the manifest — `dist.otelcol_version`
 name where the registry spells a distribution differently from upstream, as it
 does for `otelcol`, which is filed as `core`.
 
+Distribution names (including `--builder` overrides) must start with a letter,
+digit or underscore, contain only ASCII letters, digits, dots, underscores or
+hyphens, and cannot end with a dot. Paths and `.` or `..` are rejected. Versions
+must be `X.Y.Z`, with an optional `v` prefix, prerelease or build metadata.
+Invalid names and versions are rejected before that manifest writes any files;
+if every manifest fails, the registry and summary are left untouched.
+
 Component renames are carried through: upstream is moving types to snake_case,
 so from v0.157.0 the OTLP gRPC exporter is `otlp_grpc` with `otlp` kept as a
 deprecated alias. Both resolve, and using the old name reports
