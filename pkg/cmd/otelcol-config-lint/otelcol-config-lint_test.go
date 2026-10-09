@@ -1643,3 +1643,121 @@ func TestSharedFlagsAgreeAcrossCommands(t *testing.T) {
 		})
 	}
 }
+
+func TestNullSettingDefaults(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile(filepath.Join(validConfig, "agent.yaml"))
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name string
+		old  string
+		new  string
+		code int
+		rule string
+		path string
+	}{
+		{
+			name: "required interval", old: "check_interval: 1s", new: "check_interval: %s",
+			code: 1, rule: "memory-limiter-config", path: "processors.memory_limiter.check_interval",
+		},
+		{
+			name: "required limit", old: "limit_mib: 512", new: "limit_mib: %s",
+			code: 1, rule: "memory-limiter-config", path: "processors.memory_limiter.limit_mib",
+		},
+		{
+			name: "null batch size decodes to zero", old: "send_batch_size: 8192",
+			new:  "send_batch_size: %s\n    send_batch_max_size: 1000",
+			code: 0, rule: "", path: "",
+		},
+		{
+			name: "valid null batch size with large cap", old: "send_batch_size: 8192",
+			new: "send_batch_size: %s\n    send_batch_max_size: 8192", code: 0, rule: "", path: "",
+		},
+		{name: "null timeout decodes to zero", old: "timeout: 5s", new: "timeout: %s", code: 0, rule: "", path: ""},
+		{
+			name: "uncapped batches", old: "send_batch_size: 8192",
+			new: "send_batch_size: 8192\n    send_batch_max_size: %s", code: 0, rule: "", path: "",
+		},
+		{
+			name: "default spike", old: "spike_limit_mib: 128", new: "spike_limit_mib: %s", code: 0, rule: "", path: "",
+		},
+		{
+			name: "percentage limit with default fixed limit", old: "limit_mib: 512",
+			new: "limit_mib: %s\n    limit_percentage: 80\n    spike_limit_percentage: 20", code: 0, rule: "", path: "",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			for name, value := range map[string]string{"null": "null", "shorthand": "~", "empty": ""} {
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+
+					input := strings.Replace(string(src), tt.old, fmt.Sprintf(tt.new, value), 1)
+					require.NotEqual(t, string(src), input)
+					code, out, errOut := lint(t, input, "--no-config", "--collector-version", "v0.157.0",
+						"--min-severity", "error", "--verbose", "--output", "json", "-")
+					require.Equal(t, tt.code, code, "stdout=%s stderr=%s", out, errOut)
+
+					var report struct {
+						Files []struct {
+							Status      string           `json:"status"`
+							Diagnostics diag.Diagnostics `json:"diagnostics"`
+						} `json:"files"`
+					}
+
+					require.NoError(t, json.Unmarshal([]byte(out), &report))
+					require.Len(t, report.Files, 1)
+
+					if tt.code == 0 {
+						assert.Equal(t, "valid", report.Files[0].Status)
+						assert.Empty(t, report.Files[0].Diagnostics)
+
+						return
+					}
+
+					assert.Equal(t, "invalid", report.Files[0].Status)
+					require.Len(t, report.Files[0].Diagnostics, 1, "avoid duplicate errors for required nulls")
+					d := report.Files[0].Diagnostics[0]
+					assert.Equal(t, tt.rule, d.Rule)
+					assert.Equal(t, tt.path, d.Path)
+					assert.Equal(t, diag.Error, d.Severity)
+					assert.Positive(t, d.Position.Line)
+				})
+			}
+		})
+	}
+}
+
+func TestMemoryLimiterRequiredInterval(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name     string
+		interval string
+		code     int
+	}{
+		{name: "missing interval is required", interval: "", code: 1},
+		{name: "runtime interval stays unknown", interval: "    check_interval: ${env:INTERVAL}\n", code: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			code, out, errOut := lint(t, limiterWith(tt.interval+"    limit_mib: 512"),
+				"--no-config", "--collector-version", "v0.157.0", "--min-severity", "error", "--output", "json", "-")
+			require.Equal(t, tt.code, code, "stdout=%s stderr=%s", out, errOut)
+
+			found := findings(t, out)["stdin"]
+			if tt.code == 0 {
+				assert.Empty(t, found)
+
+				return
+			}
+
+			require.Len(t, found, 1)
+			assert.Equal(t, "required-field", found[0].Rule)
+		})
+	}
+}

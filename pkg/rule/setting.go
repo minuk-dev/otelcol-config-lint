@@ -32,14 +32,18 @@ func Absent() Setting { return Setting{Node: nil, Present: false, Known: false, 
 // reads it: confmap unmarshals through yaml.v3, which resolves 0x400 as 1024,
 // 8_192 as 8192, and a leading zero as octal, so 0100 is 64 and not a hundred.
 // Reading base 10 here would compare, and quote back, a number the collector
-// never sees.
+// never sees. Null is a known zero, matching the Collector's scalar decoder.
 //
 // A value nothing can know before the collector starts -- an expansion, or text
 // of the wrong type -- is present but not known, which stops every check that
 // would need the number.
 func ReadInt(node *yaml.Node) Setting {
-	out := Setting{Node: node, Present: true, Known: false, Num: 0}
-	if node == nil || node.Kind != yaml.ScalarNode || HasExpansion(node.Value) {
+	if node == nil {
+		return Absent()
+	}
+
+	out := Setting{Node: node, Present: true, Known: IsNull(node), Num: 0}
+	if out.Known || node.Kind != yaml.ScalarNode || HasExpansion(node.Value) {
 		return out
 	}
 
@@ -54,9 +58,14 @@ func ReadInt(node *yaml.Node) Setting {
 }
 
 // ReadDuration reads a duration setting, holding it in nanoseconds.
+// Null is a known zero as it is in ReadInt.
 func ReadDuration(node *yaml.Node) Setting {
-	out := Setting{Node: node, Present: true, Known: false, Num: 0}
-	if node == nil || node.Kind != yaml.ScalarNode || HasExpansion(node.Value) {
+	if node == nil {
+		return Absent()
+	}
+
+	out := Setting{Node: node, Present: true, Known: IsNull(node), Num: 0}
+	if out.Known || node.Kind != yaml.ScalarNode || HasExpansion(node.Value) {
 		return out
 	}
 
