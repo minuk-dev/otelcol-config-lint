@@ -110,6 +110,12 @@ and both rules report a silence rather than a failure.
   as a setting, and a key written in place still wins over the one a merge
   supplies. Findings keep the line they were written on, so a setting an anchor
   supplies is reported at the anchor — the line to edit.
+- **Bounded YAML expansion.** Before resolving aliases or merges, the parser
+  rejects inputs whose expanded tree exceeds 100,000 nodes with a `yaml-syntax`
+  diagnostic. Each alias use counts its target subtree again, including keys
+  and values; merge sources count before duplicate keys are removed. This
+  bounds traversal work for every rule, even for a small file with many shared
+  subtrees. Cyclic aliases are also rejected.
 - **Expansions are left alone.** `${env:...}` and `${file:...}` are resolved at
   startup, not here, so a rule that cannot see the value stays quiet rather than
   guessing. The exception is where the written half is already the finding:

@@ -18,6 +18,8 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/hardcodedsecret"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -176,6 +178,74 @@ func TestCyclicAliasesAreInvalid(t *testing.T) {
 		assert.Equal(t, "yaml-syntax", result.Diagnostics[0].Rule)
 		assert.Contains(t, result.Diagnostics[0].Message, "cyclic YAML alias")
 		assert.Equal(t, 3, result.Diagnostics[0].Position.Line)
+	}
+}
+
+func TestAliasAmplificationIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	const childEnv = "OTELCOL_TEST_ALIAS_AMPLIFICATION"
+	if os.Getenv(childEnv) != "1" {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		t.Cleanup(cancel)
+
+		//nolint:gosec // re-executes this test binary with a fixed test filter
+		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestAliasAmplificationIsInvalid$")
+
+		cmd.Env = append(os.Environ(), childEnv+"=1")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+
+		return
+	}
+
+	src, err := os.ReadFile("../../testdata/aliases/amplification.yaml")
+	require.NoError(t, err)
+
+	start := bytes.Index(src, []byte("    nest6:"))
+	end := bytes.Index(src, []byte("\nextensions:"))
+
+	require.Positive(t, start)
+	require.Greater(t, end, start)
+	bounded := strings.Replace(string(src[:start])+string(src[end:]), "value: x", "token: abc123def456", 1)
+
+	for name, rules := range map[string][]rule.Rule{
+		"all rules":        nil,
+		"hardcoded-secret": {hardcodedsecret.New()},
+		"no rules":         {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			l := newLinter(t, lint.Options{Rules: rules})
+			result := l.Lint(t.Context(), "amplification.yaml", src)
+			require.Equal(t, lint.Invalid, result.Status)
+			require.Len(t, result.Diagnostics, 1)
+			assert.Equal(t, "yaml-syntax", result.Diagnostics[0].Rule)
+			assert.Contains(t, result.Diagnostics[0].Message, "YAML expansion limit of 100000 nodes")
+			assert.Positive(t, result.Diagnostics[0].Position.Line)
+			assert.Positive(t, result.Diagnostics[0].Position.Column)
+
+			// A smaller shared graph must still reach the index and rule walkers.
+			result = l.Lint(t.Context(), "bounded.yaml", []byte(bounded))
+
+			secrets := 0
+
+			for _, d := range result.Diagnostics {
+				assert.NotEqual(t, "yaml-syntax", d.Rule)
+
+				if d.Rule == "hardcoded-secret" {
+					secrets++
+				}
+			}
+
+			if name == "no rules" {
+				assert.Equal(t, lint.Valid, result.Status)
+				assert.Zero(t, secrets)
+			} else {
+				assert.Equal(t, 1, secrets)
+			}
+		})
 	}
 }
 
