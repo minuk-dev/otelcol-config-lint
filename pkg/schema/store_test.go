@@ -215,6 +215,88 @@ func TestUnknownVersionSuggestsTheNearestOlder(t *testing.T) {
 	}
 }
 
+func TestStoreLoadChecksSchemaIdentity(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, version, distribution, request, target, wantErr string
+	}{
+		{"matching", latestVersion, distCore, latestVersion, distCore, ""},
+		{"normalized request", latestVersion, distCore, " 0.157.0 ", distCore, ""},
+		{"normalized metadata", " 0.157.0 ", distCore, latestVersion, distCore, ""},
+		{"wrong version", "v0.110.0", distCore, latestVersion, distCore,
+			`collectorVersion is "v0.110.0", want "v0.157.0"`},
+		{"wrong distribution", latestVersion, distContrib, latestVersion, distCore,
+			`distribution is "contrib", want "core"`},
+		{"missing version", "", distCore, latestVersion, distCore,
+			`collectorVersion is "", want "v0.157.0"`},
+		{"legacy default", latestVersion, "", latestVersion, "", ""},
+		{"legacy contrib", latestVersion, "", latestVersion, distContrib, ""},
+		{"legacy core", latestVersion, "", latestVersion, distCore,
+			`distribution is "", want "core"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			registry(t, root)
+
+			dist := tt.target
+			if dist == "" {
+				dist = schema.DefaultDistribution
+			}
+
+			body := `{"collectorVersion":"` + tt.version + `","components":{}}`
+			if tt.distribution != "" {
+				body = `{"collectorVersion":"` + tt.version + `","distribution":"` + tt.distribution + `","components":{}}`
+			}
+
+			file := filepath.Join(root, dist, latestVersion+".json")
+			write(t, file, body)
+
+			srv := httptest.NewServer(http.FileServer(http.Dir(root)))
+			t.Cleanup(srv.Close)
+
+			for name, location := range map[string]string{
+				"file":            file,
+				"template":        filepath.Join(root, "{{.Distribution}}", "{{.Version}}.json"),
+				"flat directory":  filepath.Join(root, dist),
+				"registry":        root,
+				"remote file":     srv.URL + "/" + dist + "/" + latestVersion + ".json",
+				"remote template": srv.URL + "/{{.Distribution}}/{{.Version}}.json",
+				"remote registry": srv.URL,
+			} {
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+
+					store := schema.Store{
+						Locations:     []string{location, repoSchemas},
+						Distribution:  tt.target,
+						AllowInsecure: true,
+					}
+
+					cat, err := store.Load(t.Context(), tt.request)
+					if tt.wantErr == "" {
+						require.NoError(t, err)
+						assert.Equal(t, tt.version, cat.CollectorVersion)
+
+						return
+					}
+
+					require.ErrorContains(t, err, tt.wantErr)
+					assert.Nil(t, cat)
+					assert.Contains(t, err.Error(), "schema identity mismatch")
+					assert.Contains(t, err.Error(), "--schema-location")
+					assert.Contains(t, err.Error(), strings.Split(location, "{{")[0])
+
+					var unknown *schema.UnknownVersionError
+					assert.NotErrorAs(t, err, &unknown, "a mismatched schema must not trigger nearest-version fallback")
+				})
+			}
+		})
+	}
+}
+
 func TestDirectoryLocationWinsOverEmbedded(t *testing.T) {
 	t.Parallel()
 
