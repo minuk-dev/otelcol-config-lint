@@ -215,16 +215,18 @@ func Parse(path string, src []byte) (*File, error) {
 
 	f.Root = root
 
+	_, err = expandedSize(path, root, map[*yaml.Node]int{})
+	if err != nil {
+		return nil, err
+	}
+
 	// Duplicates are collected from the document as written, before anything
 	// is merged into it: a key the config writes itself replaces one a merge
 	// supplies, and that is the merge key's purpose rather than a key declared
 	// twice.
 	f.DuplicateKeys = collectDuplicates(root, "")
 
-	if cycle := resolve(root); cycle != nil {
-		return nil, &SyntaxError{Path: path, Line: cycle.Line, Column: cycle.Column,
-			Msg: "config contains a cyclic YAML alias"}
-	}
+	resolve(root)
 
 	for _, e := range entries(root, "") {
 		kind, isSection := SectionKind(e.Key)

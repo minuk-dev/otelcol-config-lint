@@ -1,6 +1,57 @@
 package config
 
-import "gopkg.in/yaml.v3"
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
+// maxExpandedNodes bounds downstream tree walks, including repeated aliases.
+const maxExpandedNodes = 100_000
+
+// expandedSize counts the tree before alias sharing and merge deduplication.
+// Memoized subtree sizes bound this check to the written graph's size; -1 marks
+// an unfinished subtree so cycles are rejected at the alias that closes them.
+func expandedSize(path string, n *yaml.Node, sizes map[*yaml.Node]int) (int, error) {
+	if n == nil {
+		return 0, nil
+	}
+
+	if size, found := sizes[n]; found {
+		return size, nil
+	}
+
+	sizes[n] = -1
+	children := n.Content
+
+	if n.Kind == yaml.AliasNode {
+		if sizes[n.Alias] == -1 {
+			return 0, &SyntaxError{Path: path, Line: n.Line, Column: n.Column,
+				Msg: "config contains a cyclic YAML alias"}
+		}
+
+		children = []*yaml.Node{n.Alias}
+	}
+
+	size := 1
+
+	for _, child := range children {
+		count, err := expandedSize(path, child, sizes)
+		if err != nil {
+			return 0, err
+		}
+
+		size += count
+		if size > maxExpandedNodes {
+			return 0, &SyntaxError{Path: path, Line: child.Line, Column: child.Column,
+				Msg: fmt.Sprintf("config exceeds YAML expansion limit of %d nodes", maxExpandedNodes)}
+		}
+	}
+
+	sizes[n] = size
+
+	return size, nil
+}
 
 // MergeTag is the tag yaml.v3 gives the YAML merge key, "<<". The tag rather
 // than the spelling is what says a key is one: a quoted "<<" is a plain string
@@ -22,20 +73,14 @@ const MergeTag = "!!merge"
 // Nodes are reused rather than copied, so a merged setting keeps the position
 // it was written at: a finding about it lands on the line in the anchor, which
 // is the line the reader has to edit.
-// A cyclic alias is returned so the parser can reject it before rules run.
-func resolve(root *yaml.Node) *yaml.Node {
-	r := resolver{active: map[*yaml.Node]bool{}, walked: map[*yaml.Node]bool{}}
+// Cycles and excessive expansion are rejected before this pass.
+func resolve(root *yaml.Node) {
+	r := resolver{walked: map[*yaml.Node]bool{}}
 	r.value(root)
-
-	return r.cycle
 }
 
 // resolver carries what a single pass over one document has to remember.
 type resolver struct {
-	// active holds nodes on the current path, including the anchor targets.
-	active map[*yaml.Node]bool
-	// cycle is an alias pointing back into the current path.
-	cycle *yaml.Node
 	// walked is the nodes already rewritten. An anchor merged into a dozen
 	// components is one node reached a dozen times, and rewriting it once is
 	// both faster and what keeps its own merges from being applied twice.
@@ -59,15 +104,6 @@ func (r *resolver) value(n *yaml.Node) *yaml.Node {
 		return n
 	}
 
-	if r.active[n] || r.active[n.Alias] {
-		r.cycle = n
-
-		return n
-	}
-
-	r.active[n] = true
-	defer delete(r.active, n)
-
 	return r.value(n.Alias)
 }
 
@@ -78,9 +114,6 @@ func (r *resolver) walk(n *yaml.Node) {
 	}
 
 	r.walked[n] = true
-
-	r.active[n] = true
-	defer delete(r.active, n)
 
 	if n.Kind == yaml.MappingNode {
 		r.mapping(n)

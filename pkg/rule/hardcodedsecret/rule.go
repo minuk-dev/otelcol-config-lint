@@ -45,6 +45,7 @@ func (r hardcodedSecret) Check(ctx *rule.Context) {
 	// edit, so it is reported once: repeating it under each component would
 	// put the same line in the report as many times as the config aliases it.
 	reported := map[*yaml.Node]bool{}
+	visited := map[secretContext]bool{}
 
 	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
@@ -53,7 +54,7 @@ func (r hardcodedSecret) Check(ctx *rule.Context) {
 		}
 
 		for _, c := range sec.Components {
-			for _, hit := range findSecrets(c.ValueNode, kind.Section()+"."+c.ID.String(), "", false) {
+			for _, hit := range findSecrets(c.ValueNode, kind.Section()+"."+c.ID.String(), "", false, visited) {
 				if reported[hit.node] {
 					continue
 				}
@@ -82,6 +83,13 @@ type secretHit struct {
 	path string
 }
 
+// The same scalar can be ordinary text under one key and a secret under another.
+type secretContext struct {
+	node      *yaml.Node
+	key       string
+	inHeaders bool
+}
+
 // findSecrets walks a component's settings for a scalar whose key names a
 // credential and whose value is written out rather than expanded, at any
 // nesting depth: an exporter's credentials sit under auth, tls or headers
@@ -92,10 +100,17 @@ type secretHit struct {
 // the key at the bracket would let a credential through for being written one
 // line lower. inHeaders reports that the walk is inside a headers map, whose
 // keys are header names rather than settings.
-func findSecrets(n *yaml.Node, path, key string, inHeaders bool) []secretHit {
+func findSecrets(n *yaml.Node, path, key string, inHeaders bool, visited map[secretContext]bool) []secretHit {
 	if n == nil {
 		return nil
 	}
+
+	context := secretContext{node: n, key: key, inHeaders: inHeaders}
+	if visited[context] {
+		return nil
+	}
+
+	visited[context] = true
 
 	var out []secretHit
 
@@ -103,11 +118,11 @@ func findSecrets(n *yaml.Node, path, key string, inHeaders bool) []secretHit {
 	case yaml.MappingNode:
 		for _, e := range rule.MapEntries(n, path) {
 			out = append(out,
-				findSecrets(e.Node, e.Path, e.Key, inHeaders || strings.EqualFold(e.Key, headersKey))...)
+				findSecrets(e.Node, e.Path, e.Key, inHeaders || strings.EqualFold(e.Key, headersKey), visited)...)
 		}
 	case yaml.SequenceNode:
 		for i, item := range n.Content {
-			out = append(out, findSecrets(item, rule.IndexPath(path, i), key, inHeaders)...)
+			out = append(out, findSecrets(item, rule.IndexPath(path, i), key, inHeaders, visited)...)
 		}
 	case yaml.ScalarNode:
 		if isHardcodedSecret(key, n.Value, inHeaders) {

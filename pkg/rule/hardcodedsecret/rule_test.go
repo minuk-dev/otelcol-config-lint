@@ -305,4 +305,26 @@ service:
 	found := check(t, src)
 	require.Len(t, found, 1)
 	assert.Equal(t, "exporters.otlp.headers.authorization", found[0].Path)
+	assert.Equal(t, 7, found[0].Position.Line)
+}
+
+func TestHardcodedSecretChecksEachAliasContext(t *testing.T) {
+	t.Parallel()
+
+	for name, settings := range map[string]string{
+		"scalar key":     "    label: &shared abc123def456\n    token: *shared\n",
+		"sequence key":   "    labels: &shared [abc123def456]\n    api_keys: *shared\n",
+		"headers":        "    metadata: &shared {authorization: Bearer abc123def456}\n    headers: *shared\n",
+		"merged headers": "    metadata: &shared {authorization: Bearer abc123def456}\n    headers:\n      <<: *shared\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := check(t, secreting(settings))
+			require.Len(t, found, 1)
+			assert.Equal(t, 6, found[0].Position.Line, "the finding keeps the anchor's source position")
+			assert.NotContains(t, found[0].Path, "label")
+			assert.NotContains(t, found[0].Path, "metadata")
+		})
+	}
 }

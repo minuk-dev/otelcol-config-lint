@@ -934,10 +934,22 @@ func TestAMergedValueIsStillChecked(t *testing.T) {
 
 	found := checkRule(t, "invalid-value", src)
 	require.Len(t, found, 2, "the anchor and the exporter that merges it both carry the value")
+	assert.Equal(t, 10, found[0].Position.Line)
+	assert.Equal(t, found[0].Position, found[1].Position, "both findings retain the merged value's position")
 
 	paths := []string{found[0].Path, found[1].Path}
 	assert.Contains(t, paths, "exporters.otlp.timeout",
 		"the exporter that merges the value should be reported, not only the anchor it came from")
+}
+
+func TestAliasedValuesKeepSchemaContext(t *testing.T) {
+	t.Parallel()
+
+	src := "exporters:\n  otlp:\n    endpoint: &shared backend:4317\n    timeout: *shared\n"
+	found := checkRule(t, "invalid-value", src)
+	require.Len(t, found, 1)
+	assert.Equal(t, "exporters.otlp.timeout", found[0].Path)
+	assert.Equal(t, diag.Position{File: "test.yaml", Line: 3, Column: 15}, found[0].Position)
 }
 
 // TestWrongNodeTypeReportsWhatAnAliasResolvesTo pins that resolution does not
