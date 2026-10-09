@@ -139,6 +139,89 @@ func TestIncompleteManifest(t *testing.T) {
 	assert.Contains(t, stderr, "1 of 1 manifests could not be generated")
 }
 
+func TestGenerateRejectsUnsafeIdentity(t *testing.T) {
+	t.Parallel()
+
+	values := map[string]string{
+		"parent": "..", "traversal": "../../victim", "slash": "custom/child",
+		"backslash": `custom\child`, "windows absolute": `C:\victim`, "UNC": `\\server\victim`,
+		"dot": ".", "whitespace": "custom child", "control": "custom\tchild", "absolute": "/victim",
+	}
+
+	for label, value := range values {
+		for _, field := range []string{"name", "override", "version", "otelcol_version", "pinned"} {
+			t.Run(label+"/"+field, func(t *testing.T) {
+				t.Parallel()
+
+				root := t.TempDir()
+				input := value
+
+				if label == "absolute" {
+					input = filepath.Join(root, "victim")
+				}
+
+				path := singleComponentManifest(t, root)
+				body := readFile(t, path)
+				builder := path
+
+				switch field {
+				case "name":
+					body = strings.Replace(body, "name: custom", fmt.Sprintf("name: %q", input), 1)
+				case "override":
+					builder = input + "=" + path
+				case "version":
+					body = strings.Replace(body, "name: custom", fmt.Sprintf("name: custom\n  version: %q", input), 1)
+				case "otelcol_version":
+					body = strings.Replace(body, "otelcol_version: 0.157.0", fmt.Sprintf("otelcol_version: %q", input), 1)
+				case "pinned":
+					body = fmt.Sprintf("dist:\n  name: custom\n  version: 0.157.0\nreceivers:\n  - gomod: %q\n",
+						"go.opentelemetry.io/collector/receiver/otlpreceiver v0."+input)
+				}
+
+				writeFile(t, path, body)
+
+				cache := filepath.Join(root, "cache")
+				registry := filepath.Join(root, "registry")
+				victim := filepath.Join(root, "victim")
+				require.NoError(t, os.MkdirAll(victim, 0o750))
+				require.NoError(t, os.MkdirAll(registry, 0o750))
+
+				sentinels := []string{
+					filepath.Join(victim, "go.mod"), filepath.Join(victim, "components.go"),
+					filepath.Join(victim, "v0.157.0.yaml"), filepath.Join(registry, "index.json"),
+					filepath.Join(registry, "components.json"), filepath.Join(root, "summary.md"),
+					filepath.Join(root, "schema.yaml"),
+				}
+				for _, sentinel := range sentinels {
+					writeFile(t, sentinel, "sentinel")
+				}
+
+				for _, destination := range [][]string{
+					{"--out", filepath.Join(root, "schema.yaml")},
+					{"--registry", registry, "--summary", filepath.Join(root, "summary.md"), "--retain", "1"},
+					{"--registry", filepath.Join(root, "new-registry")},
+				} {
+					args := append([]string{"--builder", builder, "--cache", cache}, destination...)
+					code, _, stderr := run(t, args...)
+					assert.Equal(t, schemagen.ExitFailure, code, "%s", stderr)
+					assert.Contains(t, stderr, "invalid", "%s", stderr)
+				}
+
+				assert.NoDirExists(t, cache)
+				assert.NoDirExists(t, filepath.Join(root, "new-registry"))
+
+				entries, err := os.ReadDir(registry)
+				require.NoError(t, err)
+				assert.Len(t, entries, 2)
+
+				for _, sentinel := range sentinels {
+					assert.Equal(t, "sentinel", readFile(t, sentinel), "%s was overwritten", sentinel)
+				}
+			})
+		}
+	}
+}
+
 // TestSkipsOneOfSeveral covers the other half: a manifest that cannot be read
 // does not discard the distributions that could, and the run still fails, so a
 // registry is never published a distribution short.

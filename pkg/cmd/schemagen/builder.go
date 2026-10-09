@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -23,8 +24,47 @@ var (
 	// errNoComponents reports a manifest that declares no components at all.
 	errNoComponents = errors.New("declares no components")
 	// errBadGoMod reports a gomod line that is not "module version".
-	errBadGoMod = errors.New(`not in "module version" form`)
+	errBadGoMod            = errors.New(`not in "module version" form`)
+	errInvalidDistribution = errors.New("invalid distribution name")
+	errInvalidVersion      = errors.New("invalid collector version")
 )
+
+var (
+	distributionPattern = regexp.MustCompile(`^[A-Za-z0-9_](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$`)
+	versionPattern      = regexp.MustCompile(`^v` + versionNumber + `\.` + versionNumber + `\.` + versionNumber +
+		`(-` + prereleaseIdentifier + `(\.` + prereleaseIdentifier + `)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
+)
+
+const (
+	versionNumber        = `(0|[1-9][0-9]*)`
+	prereleaseIdentifier = `(` + versionNumber + `|[0-9]*[A-Za-z-][0-9A-Za-z-]*)`
+)
+
+func validateDistribution(name string) error {
+	if !distributionPattern.MatchString(name) || !filepath.IsLocal(name) {
+		return fmt.Errorf("%w %q: use a single name containing letters, digits, dots, underscores or hyphens",
+			errInvalidDistribution, name)
+	}
+
+	return nil
+}
+
+func validateVersion(version string) error {
+	if !versionPattern.MatchString(schema.Normalize(version)) {
+		return fmt.Errorf("%w %q: expected X.Y.Z with optional prerelease and build metadata", errInvalidVersion, version)
+	}
+
+	return nil
+}
+
+func validateDestination(name, version string) error {
+	err := validateDistribution(name)
+	if err != nil {
+		return err
+	}
+
+	return validateVersion(version)
+}
 
 // manifest is the subset of an OCB builder configuration schemagen needs. It is
 // decoded leniently: the file is written for the builder, which keeps adding
@@ -113,6 +153,22 @@ func readManifest(path, name string) (*manifest, error) {
 
 	if parsed.collectorVersion() == "" {
 		return nil, fmt.Errorf("%s: %w", path, errNoDistVersion)
+	}
+
+	err = validateDistribution(parsed.Dist.Name)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+
+	for _, version := range []string{parsed.Dist.Version, parsed.Dist.OtelColVersion, parsed.collectorVersion()} {
+		if version == "" {
+			continue
+		}
+
+		err = validateVersion(version)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
 	}
 
 	if len(parsed.components()) == 0 {

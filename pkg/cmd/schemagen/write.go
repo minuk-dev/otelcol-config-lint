@@ -54,17 +54,26 @@ func formatFor(path string, formats []schema.Format) schema.Format {
 // "<registry>/<distribution>/<version>.<format>", which is the layout the
 // registry is read back in.
 func (o *options) writeRegistry(cat *schema.Schema, formats []schema.Format) error {
-	dir := filepath.Join(o.registryDir, cat.Distribution)
-
-	err := os.MkdirAll(dir, dirPerm)
+	err := validateDestination(cat.Distribution, cat.CollectorVersion)
 	if err != nil {
-		return fmt.Errorf("create %s: %w", dir, err)
+		return err
+	}
+
+	root, err := createRoot(o.registryDir)
+	if err != nil {
+		return fmt.Errorf("open registry: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	err = root.MkdirAll(cat.Distribution, dirPerm)
+	if err != nil {
+		return fmt.Errorf("create distribution directory: %w", err)
 	}
 
 	for _, format := range formats {
-		dest := filepath.Join(dir, cat.CollectorVersion+"."+string(format))
+		dest := filepath.Join(cat.Distribution, cat.CollectorVersion+"."+string(format))
 
-		err := write(dest, cat, format)
+		err := writeDoc(o.registryDir, dest, func(w io.Writer) error { return cat.Write(w, format) })
 		if err != nil {
 			return err
 		}
@@ -110,7 +119,7 @@ func (o *options) writeIndex() (*schema.Index, error) {
 
 	dest := filepath.Join(o.registryDir, schema.IndexFile)
 
-	err = writeDoc(dest, idx.Write)
+	err = writeDoc(o.registryDir, schema.IndexFile, idx.Write)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +159,7 @@ func (o *options) writeComponents(idx *schema.Index) error {
 
 	dest := filepath.Join(o.registryDir, schema.ComponentsFile)
 
-	err := writeDoc(dest, comps.Write)
+	err := writeDoc(o.registryDir, schema.ComponentsFile, comps.Write)
 	if err != nil {
 		return err
 	}
@@ -235,8 +244,14 @@ var errNoSchemaFile = errors.New("no schema file")
 
 // writeDoc writes one of the documents published beside the schemas, replacing
 // whatever was there before.
-func writeDoc(dest string, encode func(io.Writer) error) error {
-	f, err := os.Create(dest)
+func writeDoc(dir, dest string, encode func(io.Writer) error) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	f, err := root.Create(dest)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dest, err)
 	}
@@ -247,6 +262,20 @@ func writeDoc(dest string, encode func(io.Writer) error) error {
 	}
 
 	return err
+}
+
+func createRoot(dir string) (*os.Root, error) {
+	err := os.MkdirAll(dir, dirPerm)
+	if err != nil {
+		return nil, fmt.Errorf("create %s: %w", dir, err)
+	}
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", dir, err)
+	}
+
+	return root, nil
 }
 
 // extensionIn returns the file extension a distribution's schemas should be
