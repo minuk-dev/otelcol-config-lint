@@ -87,11 +87,16 @@ func ReadIndex(r io.Reader) (*Index, error) {
 
 // ReadIndexFile decodes a registry index from a file on disk.
 func ReadIndexFile(path string) (*Index, error) {
-	return readIndexFile(afero.NewOsFs(), path)
+	return ReadIndexFileFS(afero.NewOsFs(), path)
 }
 
-// readIndexFile decodes a registry index from a file on the given filesystem.
-func readIndexFile(fsys afero.Fs, path string) (*Index, error) {
+// ReadIndexFileFS decodes a registry index from a file on the given filesystem.
+// A nil filesystem uses the real disk.
+func ReadIndexFileFS(fsys afero.Fs, path string) (*Index, error) {
+	if fsys == nil {
+		fsys = afero.NewOsFs()
+	}
+
 	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open index: %w", err)

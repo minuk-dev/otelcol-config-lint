@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/spf13/afero"
 )
 
 // errNoModules reports that not one module of the manifest could be resolved,
@@ -140,11 +142,11 @@ func (o *options) workspace(man *manifest) (string, error) {
 		return "", err
 	}
 
-	root, err := createRoot(o.cacheDir)
+	root, closeRoot, err := o.createRoot(o.cacheDir)
 	if err != nil {
 		return "", fmt.Errorf("open cache: %w", err)
 	}
-	defer func() { _ = root.Close() }()
+	defer closeRoot()
 
 	dir := filepath.Join("workspace", man.Dist.Name)
 
@@ -172,7 +174,7 @@ func (o *options) workspace(man *manifest) (string, error) {
 		fmt.Fprintf(&gomod, "\nreplace %s\n", strings.TrimSpace(replace))
 	}
 
-	err = root.WriteFile(filepath.Join(dir, "go.mod"), gomod.Bytes(), filePerm)
+	err = afero.WriteFile(root, filepath.Join(dir, "go.mod"), gomod.Bytes(), filePerm)
 	if err != nil {
 		return "", fmt.Errorf("write go.mod: %w", err)
 	}
@@ -187,7 +189,7 @@ func (o *options) workspace(man *manifest) (string, error) {
 
 	imports.WriteString(")\n")
 
-	err = root.WriteFile(filepath.Join(dir, "components.go"), imports.Bytes(), filePerm)
+	err = afero.WriteFile(root, filepath.Join(dir, "components.go"), imports.Bytes(), filePerm)
 	if err != nil {
 		return "", fmt.Errorf("write components.go: %w", err)
 	}

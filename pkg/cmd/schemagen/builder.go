@@ -3,12 +3,12 @@ package schemagen
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -130,8 +130,8 @@ func splitBuilder(value string) (string, string) {
 
 // readManifest loads one OCB builder configuration. A non-empty name overrides
 // the distribution the manifest names itself.
-func readManifest(path, name string) (*manifest, error) {
-	raw, err := os.ReadFile(path)
+func (o *options) readManifest(path, name string) (*manifest, error) {
+	raw, err := afero.ReadFile(o.fs(), path)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest: %w", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -52,7 +53,7 @@ func (o *options) build(man *manifest) (*schema.Schema, error) {
 
 	for path, mod := range mods.byPath {
 		if worth(path) {
-			scanModule(mod, set, index, metas)
+			o.scanModule(mod, set, index, metas)
 		}
 	}
 
@@ -148,10 +149,10 @@ const repositorySegments = 3
 // declared there, but the types and schemas its settings are made of very much
 // live there -- an exporter's sending_queue is defined in exporterhelper's own
 // internal package.
-func scanModule(mod resolvedModule, set *schemaSet, index *goIndex, metas map[string]metadata) {
+func (o *options) scanModule(mod resolvedModule, set *schemaSet, index *goIndex, metas map[string]metadata) {
 	root := filepath.Clean(mod.Dir)
 
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	_ = afero.Walk(o.fs(), root, func(p string, d os.FileInfo, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // an unreadable corner of a module is skipped, not fatal
 		}
@@ -169,14 +170,14 @@ func scanModule(mod resolvedModule, set *schemaSet, index *goIndex, metas map[st
 		switch {
 		case d.Name() == metadataFile:
 			if declarable(importPath, mod.Path) {
-				readMetadata(p, importPath, metas)
+				o.readMetadata(p, importPath, metas)
 			}
 		case d.Name() == configSchemaFile:
-			if raw, ok := readLimited(p, maxSchemaBytes); ok {
+			if raw, ok := o.readLimited(p, maxSchemaBytes); ok {
 				set.add(importPath, raw)
 			}
 		case isConfigSource(p):
-			if raw, ok := readLimited(p, maxSourceBytes); ok {
+			if raw, ok := o.readLimited(p, maxSourceBytes); ok {
 				index.add(importPath, raw)
 			}
 		}
@@ -225,13 +226,13 @@ func importPathOf(module, root, file string) string {
 	return module + "/" + filepath.ToSlash(rel)
 }
 
-func readLimited(path string, limit int64) ([]byte, bool) {
-	info, err := os.Stat(path)
+func (o *options) readLimited(path string, limit int64) ([]byte, bool) {
+	info, err := o.fs().Stat(path)
 	if err != nil || info.Size() > limit {
 		return nil, false
 	}
 
-	raw, err := os.ReadFile(path)
+	raw, err := afero.ReadFile(o.fs(), path)
 	if err != nil {
 		return nil, false
 	}
@@ -241,8 +242,8 @@ func readLimited(path string, limit int64) ([]byte, bool) {
 
 // readMetadata records a component's own declaration. A few metadata files are
 // templates rather than component metadata, and are skipped.
-func readMetadata(file, importPath string, metas map[string]metadata) {
-	raw, ok := readLimited(file, maxMetadataBytes)
+func (o *options) readMetadata(file, importPath string, metas map[string]metadata) {
+	raw, ok := o.readLimited(file, maxMetadataBytes)
 	if !ok {
 		return
 	}

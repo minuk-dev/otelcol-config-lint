@@ -343,11 +343,16 @@ func validateField(field *Field, path string) error {
 
 // ReadFile decodes a schema from a file on disk.
 func ReadFile(path string) (*Schema, error) {
-	return readFile(afero.NewOsFs(), path)
+	return ReadFileFS(afero.NewOsFs(), path)
 }
 
-// readFile decodes a schema from a file on the given filesystem.
-func readFile(fsys afero.Fs, path string) (*Schema, error) {
+// ReadFileFS decodes a schema from a file on the given filesystem.
+// A nil filesystem uses the real disk.
+func ReadFileFS(fsys afero.Fs, path string) (*Schema, error) {
+	if fsys == nil {
+		fsys = afero.NewOsFs()
+	}
+
 	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open schema: %w", err)
