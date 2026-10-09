@@ -224,3 +224,34 @@ func TestBatchSizeBoundsPointsAtTheDuplicate(t *testing.T) {
 	require.Lenf(t, found, 1, "want one finding about the repeated key, got %+v", found)
 	assert.Equal(t, "processors.batch.metadata_keys[2]", found[0].Path)
 }
+
+func TestBatchSizeBoundsDistinguishesNullFromMissing(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name     string
+		settings string
+		invalid  bool
+	}{
+		{name: "missing uses 8192", settings: "", invalid: true},
+		{name: "null uses zero", settings: "    send_batch_size: null\n", invalid: false},
+		{name: "shorthand uses zero", settings: "    send_batch_size: ~\n", invalid: false},
+		{name: "empty uses zero", settings: "    send_batch_size:\n", invalid: false},
+		{name: "explicit zero", settings: "    send_batch_size: 0\n", invalid: false},
+		{name: "runtime expansion stays unknown", settings: "    send_batch_size: ${env:SIZE}\n", invalid: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found := check(t, batcher("batch", tt.settings+"    send_batch_max_size: 1000"))
+			if tt.invalid {
+				require.Len(t, found, 1)
+				assert.Contains(t, found[0].Message, "below the default send_batch_size of 8192")
+
+				return
+			}
+
+			assert.Empty(t, found)
+		})
+	}
+}

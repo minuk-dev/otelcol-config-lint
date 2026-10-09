@@ -155,3 +155,23 @@ func TestMemoryLimiterConfigRemarksOnAFarOffInterval(t *testing.T) {
 		t.Errorf("an interval near the recommended one is a choice, not a finding: %+v", found)
 	}
 }
+
+func TestMemoryLimiterConfigNullDefaults(t *testing.T) {
+	t.Parallel()
+
+	for name, value := range map[string]string{"null": "null", "shorthand": "~", "empty": ""} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			found := check(t, limiter("memory_limiter", "    check_interval: "+value+"\n    limit_mib: 512"))
+			require.Len(t, found, 1)
+			require.Contains(t, found[0].Message, "'check_interval' must be greater than zero")
+			require.Equal(t, diag.Error, found[0].Severity)
+
+			found = check(t, limiter("memory_limiter", "    check_interval: 1s\n    limit_mib: "+value))
+			require.Len(t, found, 1)
+			require.Contains(t, found[0].Message, "'limit_mib' or 'limit_percentage' must be greater than zero")
+			require.Equal(t, diag.Error, found[0].Severity)
+		})
+	}
+}
