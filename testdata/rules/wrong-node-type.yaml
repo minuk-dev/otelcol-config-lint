@@ -21,4 +21,4 @@ service:
       receivers: # wrong-node-type: a pipeline slot is a list of component ids, not a mapping
         otlp: {}
       processors: [memory_limiter, batch]
-      exporters: [otlp_grpc]
+      exporters: [otlp_grpc, {bogus: true}] # wrong-node-type: each reference must be a scalar component id

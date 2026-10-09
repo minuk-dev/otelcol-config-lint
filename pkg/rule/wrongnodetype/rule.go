@@ -51,6 +51,8 @@ func (r wrongNodeType) checkService(ctx *rule.Context) {
 		})
 	}
 
+	r.checkReferenceItems(ctx, svc.ExtensionsNode, "service.extensions")
+
 	for _, p := range svc.Pipelines {
 		for _, slot := range []struct {
 			name string
@@ -60,15 +62,35 @@ func (r wrongNodeType) checkService(ctx *rule.Context) {
 			{"processors", p.ProcessorsNode},
 			{"exporters", p.ExportersNode},
 		} {
+			path := "service.pipelines." + p.Key + "." + slot.name
+			r.checkReferenceItems(ctx, slot.node, path)
+
 			if slot.node == nil || rule.IsNull(slot.node) || slot.node.Kind == yaml.SequenceNode {
 				continue
 			}
 
 			ctx.Report(rule.Finding{
-				Node: slot.node, Path: "service.pipelines." + p.Key + "." + slot.name,
+				Node: slot.node, Path: path,
 				Message: slot.name + " must be a list, got " + rule.NodeKind(slot.node),
 				Hint:    "write it as a YAML sequence, e.g. " + slot.name + ": [otlp]",
 			})
 		}
+	}
+}
+
+func (r wrongNodeType) checkReferenceItems(ctx *rule.Context, n *yaml.Node, path string) {
+	if n == nil || n.Kind != yaml.SequenceNode {
+		return
+	}
+
+	for i, item := range n.Content {
+		if item.Kind == yaml.ScalarNode {
+			continue
+		}
+
+		ctx.Report(rule.Finding{
+			Node: item, Path: rule.IndexPath(path, i),
+			Message: "component reference must be a scalar, got " + rule.NodeKind(item),
+		})
 	}
 }
