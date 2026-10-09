@@ -493,6 +493,57 @@ func TestAllowNearestFallbackChecksAgainstTheOlderRelease(t *testing.T) {
 	assert.Contains(t, errOut, "falling back to", "the fallback should still be announced")
 }
 
+func TestSchemaIdentityMismatchEndsTheRun(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		version, distribution, wantErr string
+	}{
+		"version":      {"v0.110.0", "core", `collectorVersion is "v0.110.0", want "v0.157.0"`},
+		"distribution": {"v0.157.0", "contrib", `distribution is "contrib", want "core"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			path := filepath.Join(dir, "v0.157.0.json")
+			body := `{"collectorVersion":"` + tt.version + `","distribution":"` + tt.distribution +
+				`","components":{"receiver":{"otlp":{}}}}`
+			require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+
+			for mode, version := range map[string]string{
+				"file": "v0.157.0", "latest": "latest", "fallback": "v0.158.0",
+			} {
+				t.Run(mode, func(t *testing.T) {
+					t.Parallel()
+
+					location := dir
+					if mode == "file" {
+						location = path
+					}
+
+					code, out, errOut := run(t, "receivers: {}", "run", "--no-config",
+						"--schema-location", location, "--collector-version", version, "--distribution", "core",
+						"--allow-nearest-fallback", "--ignore-missing-schemas", "--output", "json", "-")
+					require.Equal(t, otelcolconfiglint.ExitUsage, code, "%s", errOut)
+					assert.Empty(t, out)
+					assert.Contains(t, errOut, "load schema")
+					assert.Contains(t, errOut, "schema identity mismatch")
+					assert.Contains(t, errOut, tt.wantErr)
+					assert.Contains(t, errOut, location)
+					assert.Contains(t, errOut, "--schema-location")
+
+					if mode == "fallback" {
+						assert.Contains(t, errOut, "falling back to v0.157.0")
+					} else {
+						assert.NotContains(t, errOut, "falling back")
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestAllowNearestFallbackIsAlsoASettingsKey pins that the opt-in can be
 // committed, since a repository tracking ahead of the registry does so for
 // every run rather than one.
@@ -605,7 +656,13 @@ service:
 								"--ignore-missing-schemas", "--output", "json", "-")
 							require.Equal(t, otelcolconfiglint.ExitUsage, code, "%s", errOut)
 							assert.Empty(t, out, "an unusable schema must not emit a lint result")
-							assert.Contains(t, errOut, "load schema: component inventory is empty")
+
+							if strings.Contains(input, "collectorVersion") {
+								assert.Contains(t, errOut, "load schema: component inventory is empty")
+							} else {
+								assert.Contains(t, errOut, `schema identity mismatch: collectorVersion is ""`)
+							}
+
 							assert.Contains(t, errOut, "--schema-location")
 
 							if mode == "fallback" {

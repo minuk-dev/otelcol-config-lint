@@ -202,6 +202,8 @@ func (s Store) WithDistribution(distribution string) Store {
 
 // Load returns the schema for a collector version. The special value "latest"
 // (or an empty string) selects the newest schema the store can enumerate.
+// The schema must declare that version and the store's distribution. Legacy
+// schemas without a distribution are treated as DefaultDistribution.
 func (s Store) Load(ctx context.Context, version string) (*Schema, error) {
 	err := s.Validate()
 	if err != nil {
@@ -223,6 +225,10 @@ func (s Store) Load(ctx context.Context, version string) (*Schema, error) {
 
 	for _, loc := range s.locations() {
 		c, err := s.loadFrom(ctx, loc, version)
+		if err == nil {
+			err = c.validateIdentity(version, s.distribution())
+		}
+
 		switch {
 		case err == nil:
 			return c, nil
@@ -234,6 +240,26 @@ func (s Store) Load(ctx context.Context, version string) (*Schema, error) {
 	}
 
 	return nil, &UnknownVersionError{Version: version, Available: s.Versions(ctx), Tried: tried}
+}
+
+func (c *Schema) validateIdentity(version, distribution string) error {
+	if Normalize(c.CollectorVersion) != version {
+		return fmt.Errorf("%w: collectorVersion is %q, want %q; check --schema-location or regenerate the schema",
+			errSchemaIdentity, c.CollectorVersion, version)
+	}
+
+	actual := c.Distribution
+	if actual == "" {
+		actual = DefaultDistribution
+	}
+
+	if actual != distribution {
+		return fmt.Errorf("%w: distribution is %q, want %q (missing distribution means %q); "+
+			"check --schema-location or regenerate the schema with an explicit distribution",
+			errSchemaIdentity, c.Distribution, distribution, DefaultDistribution)
+	}
+
+	return nil
 }
 
 // Validate reports the first location the store will refuse, so a command can
@@ -399,7 +425,8 @@ func (s Store) locations() []string {
 
 var (
 	// errNotFound signals that a location does not have the requested version.
-	errNotFound = errors.New("schema not found")
+	errNotFound       = errors.New("schema not found")
+	errSchemaIdentity = errors.New("schema identity mismatch")
 	// errNoSchemas signals that no location could be enumerated at all.
 	errNoSchemas = errors.New("no schemas available")
 	// errBadStatus signals a remote location answering with an unusable status.

@@ -44,11 +44,29 @@ A location is one of:
   `<distribution>/<version>.<ext>`, optionally with the `components.json`
   described [below](#which-releases-have-a-component);
 - a `{{.Version}}`/`{{.Distribution}}` template naming a single file;
+- a local path or URL naming a schema file directly;
 - `default`, for the published registry.
 
 Repeat the flag to search several in order, so a private distribution's schema
 can take precedence over the public ones, or so a vendored copy answers before
 the network is tried.
+
+Every loaded schema must declare a `collectorVersion` matching the resolved
+release and a `distribution` matching the selected distribution. Equivalent
+version spellings such as `0.157.0` and `v0.157.0` are accepted. Missing or
+mismatched versions, or mismatched distributions, end the run with a
+schema-loading error and exit code 2; the error names the location and the
+expected and declared values. Check `--schema-location` or regenerate the
+schema. This applies to files, templates, registry entries, and cached schemas.
+`latest` is checked against the newest listed release; with
+`--allow-nearest-fallback`, the check uses the older release actually selected.
+A metadata mismatch never triggers fallback or a search of later locations.
+
+Legacy schemas without `distribution` metadata are treated as `contrib`, the
+default distribution. They remain usable for `contrib` requests, but requests
+for `core`, `k8s`, `otlp`, or a private distribution require explicit matching
+metadata. A missing `collectorVersion` is always an error when loading through
+`schema.Store`.
 
 The CLI requires a schema with at least one component. A document containing
 `{}`, `null`, or only empty component maps ends the run with a schema-loading
