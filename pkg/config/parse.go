@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -190,15 +192,29 @@ func ParseFile(fsys afero.Fs, path string) (*File, error) {
 	return Parse(path, src)
 }
 
-// Parse parses config source that was read from path.
+// Parse parses a single config document that was read from path.
 //
 // A syntax error is returned as a *SyntaxError so callers can report it as a
 // diagnostic instead of a hard failure.
 func Parse(path string, src []byte) (*File, error) {
 	var doc yaml.Node
 
-	err := yaml.Unmarshal(src, &doc)
-	if err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(src))
+
+	err := dec.Decode(&doc)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, syntaxError(path, err)
+	}
+
+	var extra yaml.Node
+
+	err = dec.Decode(&extra)
+	if err == nil {
+		return nil, &SyntaxError{Path: path, Line: extra.Line, Column: extra.Column,
+			Msg: "config must contain no more than one document"}
+	}
+
+	if !errors.Is(err, io.EOF) {
 		return nil, syntaxError(path, err)
 	}
 

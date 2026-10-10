@@ -235,6 +235,43 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 	}
 }
 
+func TestParseTakesOneDocument(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src, wantError string
+	}{
+		{name: "single", src: "service: {}\n", wantError: ""},
+		{name: "comments", src: "service: {}\n# trailing comment\n", wantError: ""},
+		{name: "document end", src: "service: {}\n...\n", wantError: ""},
+		{name: "valid second", src: "service: {}\n---\nservice: {}\n", wantError: "more than one document"},
+		{name: "empty second", src: "service: {}\n---\n", wantError: "more than one document"},
+		{name: "malformed second", src: "service: {}\n---\nthis is: [broken\n", wantError: "expected"},
+		{name: "empty first", src: "---\n---\nservice: {}\n", wantError: "more than one document"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := config.Parse("config.yaml", []byte(tt.src))
+			if tt.wantError == "" {
+				require.NoError(t, err)
+				assert.NotNil(t, f.Root)
+
+				return
+			}
+
+			require.ErrorContains(t, err, tt.wantError)
+			assert.Nil(t, f)
+
+			var syn *config.SyntaxError
+			require.ErrorAs(t, err, &syn)
+			assert.Equal(t, "config.yaml", syn.Path)
+			assert.GreaterOrEqual(t, syn.Line, 2)
+			assert.Equal(t, "yaml-syntax", syn.Diagnostic().Rule)
+		})
+	}
+}
+
 func TestParseID(t *testing.T) {
 	t.Parallel()
 
