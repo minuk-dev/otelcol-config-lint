@@ -27,12 +27,20 @@ func (r invalidComponentID) Check(ctx *rule.Context) {
 	}
 
 	for _, ref := range ctx.File.Service.Extensions {
+		if rule.HasExpansion(ref.Node.Value) {
+			continue
+		}
+
 		check(ctx, ref.Node, ref.Path)
 	}
 
 	for _, p := range ctx.File.Service.Pipelines {
 		for _, kind := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
 			for _, ref := range p.Refs(kind) {
+				if rule.HasExpansion(ref.Node.Value) {
+					continue
+				}
+
 				check(ctx, ref.Node, ref.Path)
 			}
 		}

@@ -121,6 +121,17 @@ and both rules report a silence rather than a failure.
   startup, not here, so a rule that cannot see the value stays quiet rather than
   guessing. The exception is where the written half is already the finding:
   `0.0.0.0:${env:PORT}` says plainly who can reach it.
+  Service references containing expansions are unknown: the linter does not
+  read environment variables, provider files, remote providers or credentials
+  to resolve them. Literal references in the same list are still checked.
+  Unused-component findings are suppressed for the affected kind (including
+  connectors for dynamic receiver/exporter references); missing connector sides,
+  extension enablement and missing batch/memory-limiter processors are not
+  asserted where a dynamic reference could supply them. Usage-dependent checks
+  run only for components whose usage is established by literal references.
+  A clean result therefore does not prove that runtime references resolve or
+  that dynamically selected components pass those checks. Validate the resolved
+  config with the Collector in a controlled environment before deployment.
 - **A `docs:` link where there is one to give.** Practice, telemetry and
   security rules carry the upstream page that states the recommendation, so the
   claim can be checked instead of taken on trust. It is in the JSON output as

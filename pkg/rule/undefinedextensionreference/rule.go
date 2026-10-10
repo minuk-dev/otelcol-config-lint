@@ -42,7 +42,7 @@ func (r undefinedExtensionReference) Check(ctx *rule.Context) {
 
 		// Without a service block nothing is enabled at all, and
 		// service-required already says so.
-		if ctx.File.Service.Node == nil || ctx.Index.Enabled(ref.ID) {
+		if ctx.File.Service.Node == nil || ctx.Index.Enabled(ref.ID) || ctx.Index.HasDynamicRefs(config.KindExtension) {
 			continue
 		}
 

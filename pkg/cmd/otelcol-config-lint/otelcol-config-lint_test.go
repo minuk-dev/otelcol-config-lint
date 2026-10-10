@@ -109,6 +109,38 @@ func TestValidDirectoryPasses(t *testing.T) {
 	}
 }
 
+func TestDynamicReferencesKeepLiteralFailures(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile(filepath.Join(validConfig, "agent.yaml"))
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name, receivers string
+		code            int
+	}{
+		{name: "unresolved", receivers: `"${env:RECEIVER_ID}"`, code: 0},
+		{name: "literal missing beside unresolved", receivers: `"${env:RECEIVER_ID}", missing`, code: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dynamic := strings.ReplaceAll(string(src), "receivers: [otlp]", "receivers: ["+tt.receivers+"]")
+			code, stdout, stderr := lint(t, dynamic,
+				"--collector-version", "v0.157.0", "--distribution", "core", "--min-severity", "warning", "-")
+			assert.Equal(t, tt.code, code, "%s\n%s", stdout, stderr)
+			assert.NotContains(t, stdout, "RECEIVER_ID")
+			assert.NotContains(t, stdout, "unused-component")
+			assert.Empty(t, stderr)
+
+			if tt.code != 0 {
+				assert.Contains(t, stdout, `"missing"`)
+				assert.Contains(t, stdout, "undefined-reference")
+			}
+		})
+	}
+}
+
 func TestIdentifierValidation(t *testing.T) {
 	t.Parallel()
 

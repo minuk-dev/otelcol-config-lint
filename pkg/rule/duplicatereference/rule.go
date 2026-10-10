@@ -20,7 +20,12 @@ func (r duplicateReference) Check(ctx *rule.Context) {
 	for _, p := range ctx.File.Service.Pipelines {
 		for _, slot := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
 			seen := map[config.ID]bool{}
+
 			for _, ref := range p.Refs(slot) {
+				if rule.HasExpansion(ref.ID.String()) {
+					continue
+				}
+
 				if seen[ref.ID] {
 					ctx.Report(rule.Finding{
 						Node: ref.Node, Path: ref.Path,

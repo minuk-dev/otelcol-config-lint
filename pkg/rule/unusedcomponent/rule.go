@@ -24,7 +24,7 @@ func (r unusedComponent) Check(ctx *rule.Context) {
 
 	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
-		if sec == nil {
+		if sec == nil || ctx.Index.HasDynamicRefs(kind) {
 			continue
 		}
 

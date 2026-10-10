@@ -14,6 +14,8 @@ type Index struct {
 
 	declared map[config.Kind]map[config.ID]config.Component
 	used     map[config.Kind]map[config.ID]bool
+	// dynamic records slots whose references cannot be resolved statically.
+	dynamic map[config.Kind]bool
 	// enabled holds the extensions service.extensions lists, which is the only
 	// place that starts one. A settings reference marks an extension used
 	// without enabling it, and telling the two apart is what lets
@@ -37,6 +39,7 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 		File:       f,
 		declared:   map[config.Kind]map[config.ID]config.Component{},
 		used:       map[config.Kind]map[config.ID]bool{},
+		dynamic:    map[config.Kind]bool{config.KindExtension: HasDynamicRefs(f.Service.Extensions)},
 		enabled:    map[config.ID]bool{},
 		extRefs:    extensionRefs(f, sch),
 		asReceiver: map[config.ID][]config.Pipeline{},
@@ -53,9 +56,11 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 	}
 
 	for _, ref := range f.Service.Extensions {
-		idx.enabled[ref.ID] = true
+		if !HasExpansion(ref.ID.String()) {
+			idx.enabled[ref.ID] = true
 
-		idx.markUsed(config.KindExtension, ref.ID)
+			idx.markUsed(config.KindExtension, ref.ID)
+		}
 	}
 
 	// A component that names an extension in its own settings is using it,
@@ -68,6 +73,8 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 
 	for _, p := range f.Service.Pipelines {
 		for _, slot := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
+			idx.dynamic[slot] = idx.dynamic[slot] || HasDynamicRefs(p.Refs(slot))
+
 			for _, ref := range p.Refs(slot) {
 				c, ok := idx.Resolve(slot, ref.ID)
 				if !ok {
@@ -105,6 +112,10 @@ func (idx *Index) Declared(k config.Kind, id config.ID) (config.Component, bool)
 // Receiver and exporter slots also accept connectors, which is how the
 // collector wires two pipelines together.
 func (idx *Index) Resolve(slot config.Kind, id config.ID) (config.Component, bool) {
+	if HasExpansion(id.String()) {
+		return config.Component{}, false
+	}
+
 	if c, ok := idx.declared[slot][id]; ok {
 		return c, true
 	}
@@ -121,6 +132,27 @@ func (idx *Index) Resolve(slot config.Kind, id config.ID) (config.Component, boo
 // Used reports whether a declared component is referenced by the service
 // block, or, for an extension, by another component's settings.
 func (idx *Index) Used(k config.Kind, id config.ID) bool { return idx.used[k][id] }
+
+// HasDynamicRefs reports whether unresolved service references may select a
+// component of this kind. It does not establish that any component is used.
+func (idx *Index) HasDynamicRefs(k config.Kind) bool {
+	if k == config.KindConnector {
+		return idx.dynamic[config.KindReceiver] || idx.dynamic[config.KindExporter]
+	}
+
+	return idx.dynamic[k]
+}
+
+// HasDynamicRefs reports whether a reference list contains a provider expansion.
+func HasDynamicRefs(refs []config.Ref) bool {
+	for _, ref := range refs {
+		if HasExpansion(ref.ID.String()) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // Enabled reports whether service.extensions lists the extension, which is
 // what makes the collector instantiate it. An extension can be referenced
