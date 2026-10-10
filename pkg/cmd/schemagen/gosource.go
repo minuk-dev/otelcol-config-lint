@@ -131,7 +131,7 @@ func (g *goIndex) addMethod(importPath string, imports map[string]string, method
 	}
 
 	switch method.Name.Name {
-	case "UnmarshalText", "UnmarshalYAML", "UnmarshalJSON":
+	case "UnmarshalText":
 		g.textual[importPath+"."+name] = true
 	case "Unmarshal":
 		if takesConfmap(method, imports) {
