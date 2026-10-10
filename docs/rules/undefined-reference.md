@@ -37,6 +37,11 @@ config.yaml:21:25: error: pipeline "traces" references receiver "jaeger" which i
 
 ## Notes
 
+References containing provider expansions, such as `"${env:RECEIVER_ID}"`, are
+unresolved rather than missing. They are skipped without fetching provider
+values; literal missing references beside them still fail. See the shared
+[coverage limits](README.md#what-every-rule-has-in-common).
+
 A connector is resolvable from a pipeline's receiver *and* exporter slot, which
 is what makes it a connector; whether it is wired to both is
 [`connector-wiring`](connector-wiring.md)'s question.

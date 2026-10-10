@@ -41,14 +41,14 @@ func (r connectorWiring) checkSides(
 	path := "connectors." + c.ID.String()
 
 	switch {
-	case len(asExporter) == 0:
+	case len(asExporter) == 0 && !ctx.Index.HasDynamicRefs(config.KindExporter):
 		ctx.Report(rule.Finding{
 			Node: c.KeyNode, Path: path,
 			Message: "connector " + rule.Quote(c.ID.String()) +
 				" is used as a receiver but never as an exporter, so it gets no input",
 			Hint: "list it under exporters in the pipeline that should feed it",
 		})
-	case len(asReceiver) == 0:
+	case len(asReceiver) == 0 && !ctx.Index.HasDynamicRefs(config.KindReceiver):
 		ctx.Report(rule.Finding{
 			Node: c.KeyNode, Path: path,
 			Message: "connector " + rule.Quote(c.ID.String()) +

@@ -45,7 +45,7 @@ type missingBatch struct{ rule.Base }
 
 func (r missingBatch) Check(ctx *rule.Context) {
 	for _, p := range ctx.File.Service.Pipelines {
-		if rule.HasProcessorType(p, rule.BatchType) || len(p.Exporters) == 0 {
+		if rule.HasProcessorType(p, rule.BatchType) || rule.HasDynamicRefs(p.Processors) || len(p.Exporters) == 0 {
 			continue
 		}
 

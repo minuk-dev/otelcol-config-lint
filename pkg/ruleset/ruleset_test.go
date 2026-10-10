@@ -101,6 +101,105 @@ func TestCleanConfigIsQuiet(t *testing.T) {
 	}
 }
 
+func TestDynamicServiceReferences(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, from, to string }{
+		{"receiver", "receivers: [otlp]", `receivers: ["${env:RECEIVER_ID}"]`},
+		{"processors", "processors: [memory_limiter, batch]", `processors: ["${env:PROCESSOR_ID}"]`},
+		{"exporter", "exporters: [otlp]", `exporters: ["${env:EXPORTER_ID}"]`},
+		{"extension", "extensions: [zpages]", `extensions: ["${env:EXTENSION_ID}"]`},
+		{"embedded provider", "receivers: [otlp]", `receivers: ["otlp/${file:receiver-name.txt}"]`},
+		{"default", "receivers: [otlp]", `receivers: ["${env:RECEIVER_ID:-otlp}"]`},
+		{"shorthand", "receivers: [otlp]", `receivers: ["$RECEIVER_ID"]`},
+		{"mixed known and dynamic", "receivers: [otlp]", `receivers: [otlp, "${env:RECEIVER_ID}"]`},
+		{"repeated provider", "receivers: [otlp]", `receivers: ["${env:ID}", "${env:ID}"]`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Empty(t, check(t, strings.Replace(ruletest.Clean, tt.from, tt.to, 1)))
+		})
+	}
+}
+
+func TestDynamicReferencesPreserveLiteralChecks(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, from, to, path string }{
+		{"receiver", "receivers: [otlp]", `receivers: ["${env:ID}", missing]`,
+			"service.pipelines.traces.receivers[1]"},
+		{"processor", "processors: [memory_limiter, batch]", `processors: ["${env:ID}", missing]`,
+			"service.pipelines.traces.processors[1]"},
+		{"exporter", "exporters: [otlp]", `exporters: ["${env:ID}", missing]`,
+			"service.pipelines.traces.exporters[1]"},
+		{"extension", "extensions: [zpages]", `extensions: ["${env:ID}", missing]`,
+			"service.extensions[1]"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := strings.Replace(ruletest.Clean, tt.from, tt.to, 1)
+			found := checkRule(t, "undefined-reference", src)
+			require.Len(t, found, 1)
+			assert.Contains(t, found[0].Message, `"missing"`)
+			assert.Equal(t, tt.path, found[0].Path)
+			assert.Equal(t, diag.Error, found[0].Severity)
+		})
+	}
+
+	src := strings.Replace(ruletest.Clean, "receivers: [otlp]", `receivers: ["${env:ID}", otlp, otlp]`, 1)
+	assert.Len(t, checkRule(t, "duplicate-reference", src), 1)
+
+	// Unknown receiver usage must not hide a definitely unused exporter.
+	src = strings.Replace(ruletest.Clean, "receivers: [otlp]", `receivers: ["${env:ID}"]`, 1)
+	src = strings.Replace(src, "exporters:\n", "exporters:\n  debug:\n", 1)
+	found := checkRule(t, "unused-component", src)
+	require.Len(t, found, 1)
+	assert.Equal(t, "exporters.debug", found[0].Path)
+}
+
+func TestDynamicExtensionEnablement(t *testing.T) {
+	t.Parallel()
+
+	src := strings.Replace(ruletest.Clean, "extensions: [zpages]", `extensions: ["${env:ID}"]`, 1)
+	src = strings.Replace(src, "endpoint: backend:4317",
+		"endpoint: backend:4317\n    auth:\n      authenticator: zpages", 1)
+	assert.Empty(t, checkRule(t, "undefined-extension-reference", src))
+
+	src = strings.Replace(src, "authenticator: zpages", "authenticator: missing", 1)
+	found := checkRule(t, "undefined-extension-reference", src)
+	require.Len(t, found, 1)
+	assert.Contains(t, found[0].Message, "not declared under extensions")
+}
+
+func TestDynamicConnectorWiring(t *testing.T) {
+	t.Parallel()
+
+	src := `
+receivers: {otlp: }
+exporters: {debug: }
+connectors: {spanmetrics: }
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: ["${env:ID}"]}
+    metrics: {receivers: [spanmetrics], exporters: [debug]}
+`
+	assert.Empty(t, checkRule(t, "connector-wiring", src))
+	assert.Empty(t, checkRule(t, "unused-component", src))
+
+	src = strings.Replace(src, `exporters: ["${env:ID}"]`, "exporters: [spanmetrics]", 1)
+	src = strings.Replace(src, "receivers: [spanmetrics]", `receivers: ["${env:ID}"]`, 1)
+	assert.Empty(t, checkRule(t, "connector-wiring", src))
+
+	src = strings.Replace(src, `receivers: ["${env:ID}"]`, "receivers: [otlp]", 1)
+	assert.Len(t, checkRule(t, "connector-wiring", src), 1)
+
+	// A dynamic alternative does not undo a loop between literal references.
+	src = strings.Replace(src, "receivers: [otlp]", `receivers: [otlp, spanmetrics, "${env:ID}"]`, 1)
+	assert.Len(t, checkRule(t, "connector-wiring", src), 1)
+}
+
 func TestRules(t *testing.T) {
 	t.Parallel()
 

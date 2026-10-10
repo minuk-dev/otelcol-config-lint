@@ -59,6 +59,26 @@ so a tagged build reports its tag because it was built from that tag:
 | a commit between tags | `b7dbdd5`, or `b7dbdd5-dirty` |
 | no repository, or `go run` | `devel` |
 
+### Collector compatibility tests
+
+The compatibility test uses the official **otelcol v0.157.0** binary. Download
+the archive for your platform from the
+[upstream release](https://github.com/open-telemetry/opentelemetry-collector-releases/releases/tag/v0.157.0),
+extract `otelcol`, and run:
+
+```sh
+OTELCOL_BINARY=/absolute/path/to/otelcol go test -tags=integration \
+  ./pkg/cmd/otelcol-config-lint -run TestDynamicServiceReferencesCollectorCompatibility -v
+```
+
+The test replaces the valid agent fixture's pipeline and service extension
+references with environment provider expansions. It runs `otelcol validate`
+with an explicit environment containing only synthetic test values, checking
+both successful resolution and a runtime reference to an undeclared component.
+The linter leaves both cases unresolved. No user credentials or provider
+network calls are needed. The `collector-compatibility` CI job runs the same
+test against the pinned Linux binary.
+
 ### Go batch API
 
 `(*lint.Linter).LintAll` returns `([]lint.Result, error)` and waits for every
