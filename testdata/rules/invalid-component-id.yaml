@@ -1,0 +1,20 @@
+# A receiver and its reference both use an explicitly empty instance name.
+receivers:
+  otlp/: # invalid-component-id: the name after / must not be empty
+    protocols:
+      grpc:
+        endpoint: localhost:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+exporters:
+  debug:
+service:
+  pipelines:
+    traces:
+      receivers: [otlp/] # invalid-component-id: references use the same syntax
+      processors: [memory_limiter, batch]
+      exporters: [debug]

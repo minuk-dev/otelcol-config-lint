@@ -1,4 +1,4 @@
-// Package invalidpipelinekey reports a pipeline key that names no known signal.
+// Package invalidpipelinekey reports malformed pipeline IDs and unknown signals.
 package invalidpipelinekey
 
 import (
@@ -22,6 +22,15 @@ func (r invalidPipelineKey) Check(ctx *rule.Context) {
 	}
 
 	for _, p := range ctx.File.Service.Pipelines {
+		if reason := rule.IdentifierError(p.Key); reason != "" {
+			ctx.Report(rule.Finding{
+				Node: p.KeyNode, Path: "service.pipelines." + p.Key,
+				Message: "invalid pipeline identifier " + rule.Quote(p.Key) + ": " + reason,
+			})
+
+			continue
+		}
+
 		if rule.IsSignal(p.Signal) {
 			continue
 		}

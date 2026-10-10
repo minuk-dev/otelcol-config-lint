@@ -21,6 +21,7 @@
         "empty-pipeline",
         "hardcoded-secret",
         "insecure-tls",
+        "invalid-component-id",
         "invalid-pipeline-key",
         "invalid-value",
         "memory-limiter-config",
