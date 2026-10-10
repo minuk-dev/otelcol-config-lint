@@ -42,7 +42,7 @@ linters:
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Finding'
         # Option and result structs are meant to be partially set, with the
         # zero value carrying the default behaviour.
-        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|FormatterOptions|Result|Summary)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|PrepareOptions|FormatterOptions|Result|Summary)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(EnvironmentPolicy|EnvironmentOverride)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/schema\.(Store|Schema|Component|Field)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'

@@ -37,9 +37,6 @@ var (
 	ErrFilesInvalid = errors.New("at least one file is invalid")
 )
 
-var errEmptySchema = errors.New("load schema: component inventory is empty; " +
-	"check --schema-location and replace or regenerate the schema")
-
 // NoExactSchemaError reports that no location carries the requested release.
 // It ends the run rather than standing in for the release, and it is a usage
 // error because what has to change is the request: either the version asked
@@ -117,10 +114,8 @@ type options struct {
 	// internal state
 	// store is where the schemas are read from.
 	store schema.Store
-	// resolved is which rules run and at what level, once the flags and the
-	// file have both had their say and every name has been held to the rules
-	// that exist.
-	resolved ruleset.Resolved
+	// selection combines rule flags with the settings file.
+	selection ruleset.Selection
 	// envPolicy resolves the environment of each file linted.
 	envPolicy lint.EnvironmentPolicy
 	// kubernetesEnabled is what the flag or the settings file said about
@@ -267,16 +262,13 @@ func (o *options) prepare(cmd *cobra.Command) error {
 
 	o.kubernetesOverrides = file.Run.Kubernetes.Overrides
 
-	// The rules are resolved here rather than at the first lint, so a rule
+	// The rules are validated here rather than at the first lint, so a rule
 	// named that does not exist is reported where every other bad flag is.
-	o.resolved, err = ruleset.Resolve(file.RuleSelection(ruleset.Selection{
-		Default:  o.ruleDefault,
-		Enable:   o.enable,
-		Disable:  o.disable,
-		Severity: o.severity,
-		// Per-rule settings are the file's alone, which RuleSelection carries.
-		Settings: nil,
-	}))
+	o.selection = file.RuleSelection(ruleset.Selection{
+		Default: o.ruleDefault, Enable: o.enable, Disable: o.disable, Severity: o.severity,
+	})
+
+	_, err = ruleset.Resolve(o.selection)
 	if err != nil {
 		return err
 	}
@@ -472,15 +464,6 @@ func (o *options) reportResult(cmd *cobra.Command, formatter lint.Formatter, r l
 }
 
 func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
-	cat, err := o.loadSchema(cmd)
-	if err != nil {
-		return nil, err
-	}
-
-	if cat.Count() == 0 {
-		return nil, errEmptySchema
-	}
-
 	minSeverity, err := diag.ParseSeverity(o.minSeverity)
 	if err != nil {
 		return nil, fmt.Errorf("--min-severity: %w", err)
@@ -491,54 +474,36 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 		return nil, fmt.Errorf("--fail-on: %w", err)
 	}
 
-	return lint.New(lint.Options{
-		Schema:               cat,
+	linter, target, err := lint.Prepare(cmd.Context(), lint.PrepareOptions{
+		Store:                o.store,
+		CollectorVersion:     o.collectorVersion,
+		AllowNearestFallback: o.allowNearestFallback,
 		Fs:                   o.FS(),
-		Availability:         lint.NewVersionIndex(o.store),
-		Distributions:        lint.NewDistributionIndex(o.store, cat.CollectorVersion),
-		Rules:                o.resolved.Rules,
-		Severities:           o.resolved.Severities,
+		Rules:                o.selection,
 		Environment:          o.envPolicy.Resolve,
 		Strict:               o.strict,
 		Embedded:             o.embedded,
 		IgnoreMissingSchemas: o.ignoreMissing,
 		MinSeverity:          minSeverity,
 		FailOn:               failOn,
-	}), nil
-}
-
-// loadSchema resolves the targeted release.
-//
-// A release the registry does not carry ends the run: the exit code is the
-// only thing CI reads, and a run that silently checked the config against some
-// other release passed green while saying nothing an annotation would carry.
-// The nearest release is named instead, so the fix is one edit away, and
-// --allow-nearest-fallback checks against it for a run that is deliberately
-// tracking ahead of the registry.
-func (o *options) loadSchema(cmd *cobra.Command) (*schema.Schema, error) {
-	cat, err := o.store.Load(cmd.Context(), o.collectorVersion)
-	if err == nil {
-		return cat, nil
+	})
+	if target.Fallback {
+		cmd.PrintErrf("otelcol-config-lint: no schema for %s, falling back to %s\n",
+			target.RequestedVersion, target.CollectorVersion)
 	}
 
 	var unknown *schema.UnknownVersionError
-	if !errors.As(err, &unknown) {
-		return nil, fmt.Errorf("load schema: %w", err)
-	}
+	if !target.Fallback && errors.As(err, &unknown) {
+		near, hasNear := unknown.Nearest()
 
-	near, hasNear := unknown.Nearest()
-	if !hasNear || !o.allowNearestFallback {
 		return nil, &NoExactSchemaError{Err: unknown, Nearest: near, HasNearest: hasNear}
 	}
 
-	cmd.PrintErrf("otelcol-config-lint: no schema for %s, falling back to %s\n", unknown.Version, near)
-
-	cat, err = o.store.Load(cmd.Context(), near)
-	if err != nil {
-		return nil, fmt.Errorf("load schema %s: %w", near, err)
+	if errors.Is(err, lint.ErrEmptySchema) {
+		return nil, fmt.Errorf("%w; check --schema-location and replace or regenerate the schema", err)
 	}
 
-	return cat, nil
+	return linter, err
 }
 
 func defaultWorkers() int {

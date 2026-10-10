@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -39,7 +41,8 @@ type Result struct {
 	Path        string           `json:"filename"`
 	Status      Status           `json:"status"`
 	Diagnostics diag.Diagnostics `json:"diagnostics,omitempty"`
-	// Err is set when Status is Error.
+	// Err explains Error results and may also accompany Invalid YAML syntax.
+	// Inspect Status to distinguish invalid input from an execution failure.
 	Err error `json:"-"`
 }
 
@@ -52,8 +55,9 @@ func (r Result) Message() string {
 	return ""
 }
 
-// Options configures a Linter. Shared configuration, including schemas, maps,
-// rule settings and the Rules slice, must not be mutated during linting.
+// Options configures a Linter. New copies Severities and the Rules slice;
+// schemas, rule instances and callbacks remain shared and must be safe for
+// concurrent use without configuration changes during linting.
 type Options struct {
 	// Schema describes the collector release to check against. A nil schema or
 	// one with no components runs structural checks only; schema-dependent
@@ -106,14 +110,20 @@ type Distributions interface {
 	Distributions(ctx context.Context, k config.Kind, typ string) []string
 }
 
-// Linter checks config files against a rule set.
+// Linter checks config files against a rule set. It may be shared by concurrent
+// callers when the dependencies described in Options are safe to share.
 type Linter struct {
 	opts  Options
 	rules []rule.Rule
 }
 
-// New builds a Linter over every registered rule.
+// New builds a Linter from resolved dependencies, defaulting to all built-in
+// rules. It performs no I/O or policy validation. Use Prepare to load a schema
+// and validate built-in rule selection and severities.
 func New(opts Options) *Linter {
+	opts.Severities = maps.Clone(opts.Severities)
+	opts.Rules = slices.Clone(opts.Rules)
+
 	if opts.MinSeverity == "" {
 		opts.MinSeverity = diag.Info
 	}
@@ -143,8 +153,9 @@ func New(opts Options) *Linter {
 	return &Linter{opts: opts, rules: opts.Rules}
 }
 
-// Rules returns the rules the linter will run, in name order.
-func (l *Linter) Rules() []rule.Rule { return l.rules }
+// Rules returns a copy of the rule slice in execution order. Rule instances
+// remain shared and their configuration must not be mutated during linting.
+func (l *Linter) Rules() []rule.Rule { return slices.Clone(l.rules) }
 
 // SeverityFor returns the level a rule will report at.
 func (l *Linter) SeverityFor(r rule.Rule) diag.Severity {
