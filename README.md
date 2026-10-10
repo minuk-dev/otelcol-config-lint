@@ -236,6 +236,15 @@ found, how rules are selected, the JSON Schema an editor checks it against, and
 the `run.kubernetes` block that tells `memory-limiter-sizing` what container a
 config runs in.
 
+## Go library
+
+API servers and other Go programs can import `pkg/lint`, call `lint.Prepare`
+once to select a schema and rule policy, and check YAML bytes with
+`engine.Lint(ctx, name, source)`. Results contain structured diagnostics and
+the preparation result names the actual collector version and distribution.
+See [Using the linter from Go](docs/library.md) for initialization, consumer
+interfaces, result handling, cancellation and concurrent use.
+
 ## What it checks
 
 35 rules, listed by `otelcol-config-lint list rules` and documented one page

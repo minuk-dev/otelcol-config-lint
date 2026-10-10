@@ -23,6 +23,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/hardcodedsecret"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/servicerequired"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -902,4 +903,25 @@ func TestFormattersCarryTheDocumentationLink(t *testing.T) {
 			t.Errorf("%s output drops the link:\n%s", name, buf.String())
 		}
 	}
+}
+
+func TestNewOwnsRuleSliceAndSeverities(t *testing.T) {
+	t.Parallel()
+
+	rules := []rule.Rule{servicerequired.New()}
+	severities := map[string]diag.Severity{"service-required": diag.Warning}
+	linter := lint.New(lint.Options{
+		Rules: rules, Severities: severities, IgnoreMissingSchemas: true,
+	})
+	assert.NotContains(t, severities, "unknown-component", "New must not modify caller policy")
+
+	rules[0] = nil
+	severities["service-required"] = diag.Off
+	returned := linter.Rules()
+	returned[0] = nil
+
+	result := linter.Lint(t.Context(), "request.yaml", []byte("{}"))
+	require.Len(t, result.Diagnostics, 1)
+	assert.Equal(t, "service-required", result.Diagnostics[0].Rule)
+	assert.Equal(t, diag.Warning, result.Diagnostics[0].Severity)
 }

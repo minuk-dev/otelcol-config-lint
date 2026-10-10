@@ -23,7 +23,8 @@ import (
 type VersionIndex struct {
 	store schema.Store
 
-	once  sync.Once
+	mu    sync.Mutex
+	ready bool
 	byKey map[versionKey][]string
 }
 
@@ -43,19 +44,33 @@ const walkLimit = 12
 
 // NewVersionIndex returns an index over the schemas in store.
 func NewVersionIndex(store schema.Store) *VersionIndex {
-	return &VersionIndex{store: store, once: sync.Once{}, byKey: nil}
+	return &VersionIndex{store: store, mu: sync.Mutex{}, ready: false, byKey: nil}
 }
 
 // Versions returns the schema versions containing the component, oldest first.
 //
 // The context is the asking run's: the first question is what consults the
-// store, which for a remote registry means a fetch. It is built once, so the
-// first question's context is the one that build runs under; a later question
-// is answered from the map.
+// store, which for a remote registry means a fetch. A cancelled build is
+// retried by the next caller; otherwise later questions use the cached map.
+// Returned slices may be modified without changing that cache.
 func (v *VersionIndex) Versions(ctx context.Context, k config.Kind, typ string) []string {
-	v.once.Do(func() { v.build(ctx) })
+	v.mu.Lock()
+	defer v.mu.Unlock()
 
-	return v.byKey[versionKey{k, typ}]
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	if !v.ready {
+		v.build(ctx)
+		v.ready = ctx.Err() == nil
+	}
+
+	if !v.ready {
+		return nil
+	}
+
+	return slices.Clone(v.byKey[versionKey{k, typ}])
 }
 
 func (v *VersionIndex) build(ctx context.Context) {

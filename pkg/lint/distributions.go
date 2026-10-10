@@ -2,6 +2,7 @@ package lint
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -19,14 +20,15 @@ type DistributionIndex struct {
 	store   schema.Store
 	version string
 
-	once  sync.Once
+	mu    sync.Mutex
+	ready bool
 	byKey map[versionKey][]string
 }
 
 // NewDistributionIndex returns an index over the sibling distributions store
 // can serve at the given collector release.
 func NewDistributionIndex(store schema.Store, version string) *DistributionIndex {
-	return &DistributionIndex{store: store, version: version, once: sync.Once{}, byKey: nil}
+	return &DistributionIndex{store: store, version: version, mu: sync.Mutex{}, ready: false, byKey: nil}
 }
 
 // Distributions returns the distributions shipping the component, sorted. The
@@ -34,11 +36,26 @@ func NewDistributionIndex(store schema.Store, version string) *DistributionIndex
 // absent there, which is why it is asking.
 //
 // The context is the asking run's, on the same terms as VersionIndex.Versions:
-// the first question is what reads the sibling distributions.
+// the first question is what reads the sibling distributions. A cancelled
+// build is retried by the next caller. Returned slices are copies.
 func (d *DistributionIndex) Distributions(ctx context.Context, k config.Kind, typ string) []string {
-	d.once.Do(func() { d.build(ctx) })
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
-	return d.byKey[versionKey{k, typ}]
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	if !d.ready {
+		d.build(ctx)
+		d.ready = ctx.Err() == nil
+	}
+
+	if !d.ready {
+		return nil
+	}
+
+	return slices.Clone(d.byKey[versionKey{k, typ}])
 }
 
 func (d *DistributionIndex) build(ctx context.Context) {

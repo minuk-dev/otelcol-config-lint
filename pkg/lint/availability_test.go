@@ -1,6 +1,7 @@
 package lint_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -226,4 +228,43 @@ func writeAt(t *testing.T, path, content string) {
 	t.Helper()
 
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+}
+
+// cancelReadFS cancels the first build after it has started reading its store.
+type cancelReadFS struct {
+	afero.Fs
+
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (f *cancelReadFS) Open(name string) (afero.File, error) {
+	f.once.Do(f.cancel)
+
+	return f.Fs.Open(name)
+}
+
+func TestVersionIndexRetriesCancelledBuild(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	localRegistry(t, root, "v0.157.0", "v0.110.0")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	store := schema.Store{
+		Locations: []string{root},
+		Fs:        &cancelReadFS{Fs: afero.NewOsFs(), cancel: cancel, once: sync.Once{}},
+	}
+	index := lint.NewVersionIndex(store)
+	assert.Empty(t, index.Versions(ctx, config.KindReceiver, "otlp"))
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+
+	versions := index.Versions(t.Context(), config.KindReceiver, "otlp")
+	require.Equal(t, []string{"v0.110.0", "v0.157.0"}, versions)
+	versions[0] = "changed by caller"
+
+	assert.Equal(t, []string{"v0.110.0", "v0.157.0"},
+		index.Versions(t.Context(), config.KindReceiver, "otlp"))
 }

@@ -15,7 +15,7 @@ pkg/rule/                     what a rule is: the interface, the context and the
 pkg/rule/<rule-name>/         one rule and its tests, one package each
 pkg/rule/ruletest/            the fixtures a rule's tests are written against
 pkg/ruleset/                  the registry: every rule collected into one set
-pkg/lint/                     the engine and the output formatters
+pkg/lint/                     reusable preparation, the engine and output formatters
 pkg/diag/                     diagnostics, severities and positions
 pkg/quantity/                 Kubernetes memory quantities, parsed and printed back
 pkg/version/                  the linter's own version, stamped at build time
@@ -24,6 +24,19 @@ testdata/rules/               one invalid config per rule, with the run that sho
 action.yml                    the GitHub Action; Dockerfile wraps the released image it runs
 build/docker/Dockerfile       the distroless linter image releases publish
 ```
+
+## Library boundary
+
+`pkg/lint.Prepare` owns schema selection, fallback and built-in rule policy
+validation. Both the CLI and Go callers use it. Keep Cobra, settings discovery,
+flag precedence, logging and process exit codes in `pkg/cmd/`; preparation
+returns target metadata instead of printing a fallback warning.
+
+`pkg/lint.New` remains the lower-level constructor for resolved dependencies
+and custom rules. Preserve the distinction between invalid configuration and
+execution failure when changing result handling. Shared schemas and rule
+configuration must remain immutable during concurrent calls. See
+[the library guide](library.md) for the public contract and usage examples.
 
 ## Development
 
