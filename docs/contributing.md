@@ -61,23 +61,48 @@ so a tagged build reports its tag because it was built from that tag:
 
 ### Collector compatibility tests
 
-The compatibility test uses the official **otelcol v0.157.0** binary. Download
-the archive for your platform from the
-[upstream release](https://github.com/open-telemetry/opentelemetry-collector-releases/releases/tag/v0.157.0),
-extract `otelcol`, and run:
+The separate `collector-compatibility` CI job runs official **core (`otelcol`)**
+and **contrib (`otelcol-contrib`)** binaries at **v0.110.0** and **v0.157.0**, the
+two releases represented by the committed schema fixtures. It verifies the
+release archive's published SHA-256 checksum before extraction. Ordinary
+`make test` runs stay offline and do not need a Collector binary.
+
+To reproduce one matrix entry, download the archive and checksum file for your
+platform from the [upstream releases](https://github.com/open-telemetry/opentelemetry-collector-releases/releases),
+verify the checksum, extract the binary, and run from the repository root:
 
 ```sh
-OTELCOL_BINARY=/absolute/path/to/otelcol go test -tags=integration \
-  ./pkg/cmd/otelcol-config-lint -run TestDynamicServiceReferencesCollectorCompatibility -v
+OTELCOL_BINARY=/absolute/path/to/otelcol-contrib \
+OTELCOL_VERSION=v0.110.0 OTELCOL_DISTRIBUTION=contrib \
+  go test -race -tags=integration ./pkg/cmd/otelcol-config-lint \
+  -run CollectorCompatibility -count=1 -v
 ```
 
-The test replaces the valid agent fixture's pipeline and service extension
-references with environment provider expansions. It runs `otelcol validate`
-with an explicit environment containing only synthetic test values, checking
-both successful resolution and a runtime reference to an undeclared component.
-The linter leaves both cases unresolved. No user credentials or provider
-network calls are needed. The `collector-compatibility` CI job runs the same
-test against the pinned Linux binary.
+Repeat with both versions and distributions to reproduce the full matrix.
+`OTELCOL_VERSION` and `OTELCOL_DISTRIBUTION` default to `v0.157.0` and `core`.
+The test checks the binary's exact version and distribution before validation.
+
+The minimal corpus in `testdata/compatibility/` covers accepted and rejected
+configs: null/default handling, named identifiers, reference shapes, duration
+and verbosity decoding, a controlled environment endpoint, and Prometheus's
+custom configuration decoder (contrib only). Each fixture is checked against
+both `Collector validate --config` and the strict linter using the exact
+committed schema for that release and distribution. Expected exit codes must
+hold independently, so both tools unexpectedly accepting a rejected fixture
+also fails the job. Best-practice warnings remain visible but do not count as
+Collector rejection; `null-defaults.yaml` explicitly checks that distinction.
+
+The dynamic service reference tests also run for each matrix entry, with only
+synthetic environment values. Their intentional difference is asserted:
+Collector resolves an undeclared runtime reference and rejects it, while static
+linting leaves environment provider references unresolved. Any further
+exception needs an explicit, narrowly scoped expectation and an explanation;
+do not disable rules globally to make the corpus pass.
+
+Verbose output records binary identity, distribution, schema path and SHA-256,
+the minimal YAML, and both validation outputs. CI retains that output as a
+`collector-compatibility-<distribution>-<version>` artifact, including failures.
+No user credentials or provider network calls are needed by the tests.
 
 ### Go batch API
 
