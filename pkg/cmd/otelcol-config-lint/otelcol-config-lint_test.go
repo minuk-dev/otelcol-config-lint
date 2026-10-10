@@ -141,6 +141,78 @@ func TestDynamicReferencesKeepLiteralFailures(t *testing.T) {
 	}
 }
 
+func TestIdentifierValidation(t *testing.T) {
+	t.Parallel()
+
+	agent, err := os.ReadFile(filepath.Join(validConfig, "agent.yaml"))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		receiver  string
+		reference string
+		pipeline  string
+		wantRule  string
+		wantCount int
+	}{
+		{
+			name: "empty component name", receiver: "otlp/", reference: "otlp/", pipeline: "traces",
+			wantRule: "invalid-component-id", wantCount: 4,
+		},
+		{
+			name: "empty reference name", receiver: "otlp", reference: "otlp/", pipeline: "traces",
+			wantRule: "invalid-component-id", wantCount: 3,
+		},
+		{
+			name: "empty pipeline name", receiver: "otlp", reference: "otlp", pipeline: "traces/",
+			wantRule: "invalid-pipeline-key", wantCount: 1,
+		},
+		{
+			name: "invalid component character", receiver: "otlp/a+b", reference: "otlp/a+b", pipeline: "traces",
+			wantRule: "invalid-component-id", wantCount: 4,
+		},
+		{
+			name: "invalid pipeline character", receiver: "otlp", reference: "otlp", pipeline: "traces/a b",
+			wantRule: "invalid-pipeline-key", wantCount: 1,
+		},
+		{
+			name: "valid named instances", receiver: "otlp/내부/a-1", reference: "otlp/내부/a-1", pipeline: "traces/2",
+			wantRule: "", wantCount: 0,
+		},
+		{
+			name: "trimmed instances resolve", receiver: " otlp / internal ", reference: "otlp/internal",
+			pipeline: " traces / internal ", wantRule: "", wantCount: 0,
+		},
+	}
+
+	for _, version := range []string{"v0.110.0", "v0.157.0"} {
+		for _, tt := range tests {
+			t.Run(version+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				src := strings.ReplaceAll(string(agent), "  otlp:", "  "+strconv.Quote(tt.receiver)+":")
+				src = strings.ReplaceAll(src, "[otlp]", "["+strconv.Quote(tt.reference)+"]")
+				src = strings.ReplaceAll(src, "    traces:", "    "+strconv.Quote(tt.pipeline)+":")
+
+				code, out, errOut := lint(t, src, "--no-config", "--collector-version", version, "--output", "json", "-")
+				if tt.wantRule == "" {
+					assert.Equal(t, otelcolconfiglint.ExitOK, code, "%s\n%s", out, errOut)
+
+					return
+				}
+
+				assert.Equal(t, otelcolconfiglint.ExitInvalid, code, "%s\n%s", out, errOut)
+				lines := reportedLines(t, out, tt.wantRule)
+				require.Len(t, lines, tt.wantCount, "%s", out)
+
+				for _, line := range lines {
+					assert.Positive(t, line)
+				}
+			})
+		}
+	}
+}
+
 func TestPreCancelledRunCannotPass(t *testing.T) {
 	t.Parallel()
 

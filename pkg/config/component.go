@@ -62,14 +62,12 @@ type ID struct {
 	Name string
 }
 
-// ParseID splits a "type[/name]" key into its parts.
+// ParseID splits and trims a "type[/name]" key as the Collector does. Syntax
+// rules must validate the original YAML value, not the reconstructed String.
 func ParseID(s string) ID {
-	typ, name, found := strings.Cut(s, "/")
-	if !found {
-		return ID{Type: s}
-	}
+	typ, name, _ := strings.Cut(s, "/")
 
-	return ID{Type: typ, Name: name}
+	return ID{Type: strings.TrimSpace(typ), Name: strings.TrimSpace(name)}
 }
 
 // String renders the ID back into its config key form.

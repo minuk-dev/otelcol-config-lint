@@ -293,3 +293,10 @@ func TestParseID(t *testing.T) {
 		}
 	}
 }
+
+func TestParseIDTrimsEachPart(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, config.ID{Type: "otlp", Name: "internal"}, config.ParseID(" otlp / internal "))
+	assert.Equal(t, config.ID{Type: "otlp"}, config.ParseID(" otlp "))
+}

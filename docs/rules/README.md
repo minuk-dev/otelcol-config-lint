@@ -24,7 +24,8 @@ half of.
 | [`unknown-top-level-key`](unknown-top-level-key.md) | `error` | a root key other than the component sections and `service` |
 | [`service-required`](service-required.md) | `error` | no `service` block, or no pipelines in it |
 | [`unknown-service-key`](unknown-service-key.md) | `error` | a key inside `service` the collector does not read |
-| [`invalid-pipeline-key`](invalid-pipeline-key.md) | `error` | a pipeline named after no signal |
+| [`invalid-component-id`](invalid-component-id.md) | `error` | a malformed component declaration or reference |
+| [`invalid-pipeline-key`](invalid-pipeline-key.md) | `error` | a malformed pipeline ID or unknown signal |
 | [`empty-pipeline`](empty-pipeline.md) | `error` | a pipeline with no receivers or no exporters |
 | [`unknown-pipeline-key`](unknown-pipeline-key.md) | `error` | a pipeline slot other than the three |
 | [`duplicate-key`](duplicate-key.md) | `error` | a mapping key written twice, discarding the first value |

@@ -1,0 +1,5 @@
+rules:
+  enable:
+    - invalid-component-id
+  disable: []
+  settings: {}

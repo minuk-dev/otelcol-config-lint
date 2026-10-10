@@ -322,10 +322,10 @@ func telemetrySignal(e Entry) *TelemetrySignal {
 }
 
 func parsePipeline(e Entry) Pipeline {
-	signal, name, _ := strings.Cut(e.Key, "/")
+	id := ParseID(e.Key)
 
 	p := Pipeline{
-		Key: e.Key, Signal: Signal(signal), Name: name,
+		Key: e.Key, Signal: Signal(id.Type), Name: id.Name,
 		KeyNode: e.KeyNode, Node: e.Node,
 	}
 	for _, sub := range entries(e.Node, e.Path) {
