@@ -6,9 +6,110 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStoreLoadRecoversFromMalformedSchema(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "malformed YAML", body: "broken: [yaml"},
+		{name: "invalid component", body: "components: {receivers: {otlp: null}}"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			const url = "https://example.com/v0.157.0.yaml"
+
+			var calls int
+
+			body := tt.body
+			store := Store{
+				Locations: []string{"https://example.com/{{.Version}}.yaml"},
+				Fs:        afero.NewMemMapFs(),
+				CacheDir:  "/cache",
+				HTTPClient: &http.Client{Transport: schemaTransport(func(req *http.Request) (*http.Response, error) {
+					calls++
+
+					assert.Equal(t, url, req.URL.String())
+
+					response := httptest.NewRecorder()
+					response.Header().Set("ETag", `"schema"`)
+					_, _ = response.WriteString(body)
+
+					return response.Result(), nil
+				})},
+			}
+
+			_, err := store.Load(t.Context(), "v0.157.0")
+			require.ErrorContains(t, err, "decode schema")
+
+			_, _, cached := store.cache().load(url)
+			assert.False(t, cached, "malformed responses must not be retained")
+
+			body = "collectorVersion: v0.157.0\ncomponents: {}"
+			got, err := store.Load(t.Context(), "v0.157.0")
+			require.NoError(t, err)
+			assert.Equal(t, "v0.157.0", got.CollectorVersion)
+			assert.Equal(t, 2, calls)
+
+			_, err = store.Load(t.Context(), "v0.157.0")
+			require.NoError(t, err)
+			assert.Equal(t, 2, calls, "the corrected schema must remain immutable")
+		})
+	}
+}
+
+func TestStoreLoadRefetchesMalformedCachedSchema(t *testing.T) {
+	t.Parallel()
+
+	const url = "https://example.com/v0.157.0.yaml"
+
+	var calls int
+
+	body := "broken: [yaml"
+	store := Store{
+		Locations: []string{"https://example.com/{{.Version}}.yaml"},
+		Fs:        afero.NewMemMapFs(),
+		CacheDir:  "/cache",
+		HTTPClient: &http.Client{Transport: schemaTransport(func(req *http.Request) (*http.Response, error) {
+			calls++
+
+			assert.Empty(t, req.Header.Get("If-None-Match"), "a malformed cache cannot be revalidated")
+
+			response := httptest.NewRecorder()
+			_, _ = response.WriteString(body)
+
+			return response.Result(), nil
+		})},
+	}
+	cache := store.cache()
+	cache.save(url, []byte(body), `"broken"`)
+
+	_, err := store.Load(t.Context(), "v0.157.0")
+	require.ErrorContains(t, err, "decode schema")
+	assert.Equal(t, 1, calls, "a malformed cache must trigger a fresh request")
+
+	_, _, cached := cache.load(url)
+	assert.False(t, cached, "the malformed cache must be evicted even if the response is still broken")
+
+	body = "collectorVersion: v0.157.0\ncomponents: {}"
+	got, err := store.Load(t.Context(), "v0.157.0")
+	require.NoError(t, err)
+	assert.Equal(t, "v0.157.0", got.CollectorVersion)
+	assert.Equal(t, 2, calls)
+}
+
+type schemaTransport func(*http.Request) (*http.Response, error)
+
+func (transport schemaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return transport(req)
+}
 
 func TestFailedIndexReadDoesNotPoisonLaterLookup(t *testing.T) {
 	t.Setenv(cacheEnv, t.TempDir())

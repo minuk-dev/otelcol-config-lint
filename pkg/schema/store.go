@@ -658,12 +658,20 @@ func isInsecure(loc string) bool {
 
 // fetch reads a schema over the network.
 func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
-	body, err := s.get(ctx, url, immutable)
+	var c *Schema
+
+	_, err := s.getValidated(ctx, url, immutable, func(body []byte) error {
+		var err error
+
+		c, err = Read(bytes.NewReader(body))
+
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return Read(bytes.NewReader(body))
+	return c, nil
 }
 
 // get performs the request behind fetch and fetchIndex, and returns what the
@@ -674,6 +682,14 @@ func (s Store) fetch(ctx context.Context, url string) (*Schema, error) {
 // fetchAttempts times; see retry.go for which statuses earn one and how long
 // each wait is.
 func (s Store) get(ctx context.Context, url string, keep freshness) ([]byte, error) {
+	return s.getValidated(ctx, url, keep, nil)
+}
+
+// getValidated checks a schema before trusting or publishing its cached body.
+// Indexes use get instead, retaining their existing revalidation behavior.
+func (s Store) getValidated(
+	ctx context.Context, url string, keep freshness, validate func([]byte) error,
+) ([]byte, error) {
 	err := s.refuseInsecure(url)
 	if err != nil {
 		return nil, err
@@ -681,7 +697,7 @@ func (s Store) get(ctx context.Context, url string, keep freshness) ([]byte, err
 
 	cache := s.cache()
 
-	cached, etag := s.cached(cache, url, keep)
+	cached, etag := s.cached(cache, url, keep, validate)
 	if cached != nil && keep == immutable {
 		return cached, nil
 	}
@@ -689,22 +705,7 @@ func (s Store) get(ctx context.Context, url string, keep freshness) ([]byte, err
 	for attempt := 0; ; attempt++ {
 		answer, err := s.attempt(ctx, url, etag)
 		if err == nil {
-			if answer.notModified {
-				// Only what was offered can come back unmodified. An endpoint
-				// answering this to a request that offered nothing has served
-				// no body and named nothing to serve instead.
-				if cached == nil {
-					return nil, notModified(url)
-				}
-
-				return cached, nil
-			}
-
-			if cache != nil {
-				cache.save(url, answer.body, answer.etag)
-			}
-
-			return answer.body, nil
+			return answer.read(cache, url, cached, validate)
 		}
 
 		var status *statusError
@@ -740,7 +741,7 @@ func notModified(url string) error {
 // the registry with it. A location whose content cannot change under the same
 // URL is not revalidated, so it carries no validator: the point of caching a
 // published schema is that no request is made at all.
-func (s Store) cached(cache *diskCache, url string, keep freshness) ([]byte, string) {
+func (s Store) cached(cache *diskCache, url string, keep freshness, validate func([]byte) error) ([]byte, string) {
 	if cache == nil {
 		return nil, ""
 	}
@@ -751,6 +752,12 @@ func (s Store) cached(cache *diskCache, url string, keep freshness) ([]byte, str
 	}
 
 	if keep == immutable {
+		if validate != nil && validate(body) != nil {
+			_ = cache.fs.Remove(cache.path(url))
+
+			return nil, ""
+		}
+
 		return body, ""
 	}
 
@@ -777,6 +784,33 @@ type served struct {
 	// notModified says the endpoint recognised the validator that was offered,
 	// so the cached body is current and was not sent again.
 	notModified bool
+}
+
+// read validates a response before publishing it, or uses the revalidated body.
+func (answer served) read(cache *diskCache, url string, cached []byte, validate func([]byte) error) ([]byte, error) {
+	if answer.notModified {
+		// Only what was offered can come back unmodified. An endpoint
+		// answering this to a request that offered nothing has served
+		// no body and named nothing to serve instead.
+		if cached == nil {
+			return nil, notModified(url)
+		}
+
+		return cached, nil
+	}
+
+	if validate != nil {
+		err := validate(answer.body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if cache != nil {
+		cache.save(url, answer.body, answer.etag)
+	}
+
+	return answer.body, nil
 }
 
 // attempt makes one request and returns what it served, offering etag when
