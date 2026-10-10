@@ -152,12 +152,23 @@ The policy itself belongs in ` + settings.DefaultName + `, which is read from
 this directory or any parent above it; every flag here mirrors one of its keys.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := opts.prepare(cmd)
+			err := cmd.Context().Err()
+			if err != nil {
+				return fmt.Errorf("lint cancelled: %w", err)
+			}
+
+			err = opts.prepare(cmd)
 			if err != nil {
 				return err
 			}
 
 			err = opts.run(cmd, args)
+
+			ctxErr := cmd.Context().Err()
+			if ctxErr != nil {
+				return fmt.Errorf("lint cancelled: %w", ctxErr)
+			}
+
 			if err != nil {
 				return err
 			}
@@ -350,6 +361,11 @@ func (o *options) runLint(cmd *cobra.Command, paths []string) error {
 		return fmt.Errorf("collect files: %w", err)
 	}
 
+	err = cmd.Context().Err()
+	if err != nil {
+		return fmt.Errorf("lint cancelled: %w", err)
+	}
+
 	if files.Len() == 0 {
 		return fmt.Errorf("%w in %s", ErrNoYAMLFiles, strings.Join(paths, ", "))
 	}
@@ -411,18 +427,23 @@ func (o *options) lintAll(
 			r = linter.LintFile(cmd.Context(), f)
 		}
 
+		err := cmd.Context().Err()
+		if err != nil {
+			return fmt.Errorf("lint cancelled: %w", err)
+		}
+
 		summary.Add(r)
 
 		if sayEnvironment {
 			cmd.PrintErrf("otelcol-config-lint: %s: %s\n", r.Path, describeEnvironment(o.envPolicy.Resolve(r.Path)))
 		}
 
-		err := formatter.Result(r)
+		err = formatter.Result(r)
 		if err != nil {
 			return fmt.Errorf("report %s: %w", r.Path, err)
 		}
 
-		if o.exitOnError && (r.Status == lint.Invalid || r.Status == lint.Error) {
+		if o.exitOnError && summary.Failed() {
 			break
 		}
 	}

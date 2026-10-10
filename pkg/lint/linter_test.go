@@ -7,8 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/spf13/afero"
@@ -456,6 +459,147 @@ func TestLintAllVisitsEveryFile(t *testing.T) {
 
 	if len(seen) != len(paths) {
 		t.Errorf("want %d results, got %d", len(paths), len(seen))
+	}
+}
+
+type callbackRule struct {
+	rule.Base
+
+	check func()
+}
+
+func (r callbackRule) Check(_ *rule.Context) { r.check() }
+
+type watchedFS struct {
+	afero.Fs
+
+	opens atomic.Int64
+}
+
+func (f *watchedFS) Open(name string) (afero.File, error) {
+	f.opens.Add(1)
+
+	return f.Fs.Open(name)
+}
+
+func TestPreCancelledLintDoesNoWork(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	fsys := &watchedFS{Fs: afero.NewMemMapFs(), opens: atomic.Int64{}}
+	l := lint.New(lint.Options{Fs: fsys})
+
+	reader := strings.NewReader(good)
+	for name, result := range map[string]lint.Result{
+		"file":     l.LintFile(ctx, "agent.yaml"),
+		"reader":   l.LintReader(ctx, "stdin", reader),
+		"source":   l.Lint(ctx, "agent.yaml", []byte(good)),
+		"embedded": lint.New(lint.Options{Embedded: true}).Lint(ctx, "manifest.yaml", nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, lint.Error, result.Status)
+			require.ErrorIs(t, result.Err, context.Canceled)
+		})
+	}
+
+	assert.Zero(t, fsys.opens.Load())
+	assert.Equal(t, len(good), reader.Len())
+
+	for result := range l.LintAll(ctx, []string{"a.yaml", "b.yaml"}, 2) {
+		t.Errorf("unexpected result after cancellation: %+v", result)
+	}
+
+	assert.Zero(t, fsys.opens.Load())
+}
+
+func TestLintAllCancellationStopsWorkers(t *testing.T) {
+	t.Parallel()
+
+	for _, workers := range []int{1, 3} {
+		t.Run(strconv.Itoa(workers), func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+
+				entered := make(chan struct{}, workers)
+				release := make(chan struct{})
+				fsys := &watchedFS{Fs: afero.NewMemMapFs(), opens: atomic.Int64{}}
+				require.NoError(t, afero.WriteFile(fsys, "agent.yaml", []byte(good), 0o600))
+				l := lint.New(lint.Options{Fs: fsys, Rules: []rule.Rule{
+					callbackRule{Base: rule.NewBase("wait", "", diag.Error), check: func() {
+						entered <- struct{}{}
+
+						<-release
+					}},
+					callbackRule{Base: rule.NewBase("later", "", diag.Error), check: func() {
+						t.Error("a later rule ran after cancellation")
+					}},
+				}})
+
+				paths := make([]string, workers+10)
+				for i := range paths {
+					paths[i] = "agent.yaml"
+				}
+
+				results := l.LintAll(ctx, paths, workers)
+				for range workers {
+					<-entered
+				}
+
+				cancel()
+				close(release)
+
+				count := 0
+
+				for result := range results {
+					assert.Equal(t, lint.Error, result.Status)
+					require.ErrorIs(t, result.Err, context.Canceled)
+
+					count++
+				}
+
+				assert.Equal(t, workers, count)
+				assert.EqualValues(t, workers, fsys.opens.Load())
+			})
+		})
+	}
+}
+
+func TestCancellationInLastRuleCannotPass(t *testing.T) {
+	t.Parallel()
+
+	for _, embedded := range []bool{false, true} {
+		t.Run(strconv.FormatBool(embedded), func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			calls := 0
+			l := lint.New(lint.Options{Embedded: embedded, Rules: []rule.Rule{
+				callbackRule{Base: rule.NewBase("cancel", "", diag.Error), check: func() {
+					calls++
+
+					cancel()
+				}},
+			}})
+
+			src := "service: {}"
+			if embedded {
+				src = "kind: ConfigMap\ndata:\n  first: |\n    service:\n      pipelines: {}\n" +
+					"  second: |\n    service:\n      pipelines: {}\n---\nkind: ConfigMap\ndata:\n" +
+					"  third: |\n    service:\n      pipelines: {}\n"
+			}
+
+			result := l.Lint(ctx, "agent.yaml", []byte(src))
+			assert.Equal(t, lint.Error, result.Status)
+			require.ErrorIs(t, result.Err, context.Canceled)
+			assert.Equal(t, 1, calls)
+		})
 	}
 }
 
