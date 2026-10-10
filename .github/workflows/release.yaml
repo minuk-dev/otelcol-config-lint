@@ -70,29 +70,24 @@ jobs:
           name: goreleaser-assets
           path: dist/*
 
-      # The guard before the build checks that the pin names this release. This
-      # checks the other half: that the release actually published the image the
-      # pin names. The two are not the same failure. v0.1.0 passed nothing --
-      # the guard refused the tag, goreleaser never ran, and the repository was
-      # left advertising an action whose `FROM` line pulls a tag that does not
-      # exist. Nothing downstream noticed, because .github/workflows/action.yaml
-      # rewrites the pin to a locally built image before exercising the action,
-      # so CI stayed green while every consumer's workflow failed on `manifest
-      # unknown`. A release that cannot serve its own action is not a release.
-      - name: The release has to have published the image the action is pinned to
+      # Pull from the registry even though GoReleaser left local build images.
+      # Run the resolved digest so every check exercises the same published bytes.
+      - name: Pull the published release image
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           pinned="$(sed -nE 's|^FROM ghcr\.io/minuk-dev/otelcol-config-lint:([^ ]+).*|\1|p' Dockerfile)"
           image="ghcr.io/minuk-dev/otelcol-config-lint:${pinned}"
 
-          if ! docker manifest inspect "${image}" > /dev/null 2>&1; then
-            echo "::error title=release::${GITHUB_REF_NAME} published no ${image}." \
-              "The action's Dockerfile pulls that tag on every consumer's runner," \
-              "so the action is broken until it exists."
-            exit 1
-          fi
+          docker pull --platform linux/amd64 "${image}"
+          digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${image}")"
+          echo "Testing ${image} as ${digest}"
+          echo "OTELCOL_LINT_IMAGE=${digest}" >> "$GITHUB_ENV"
 
-          echo "${image} is published; the action resolves"
+      - name: Exercise the published image with mounted fixtures
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          OTELCOL_LINT_VERSION: ${{ github.ref_name }}
+        run: go test -tags=integration ./test/smoke -count=1 -v
 
       # A snapshot build does not publish, so push its images by hand to keep
       # ghcr.io tracking main between releases.

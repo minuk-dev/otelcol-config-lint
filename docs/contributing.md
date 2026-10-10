@@ -147,6 +147,45 @@ the minimal YAML, and both validation outputs. CI retains that output as a
 `collector-compatibility-<distribution>-<version>` artifact, including failures.
 No user credentials or provider network calls are needed by the tests.
 
+### CLI and release image smoke tests
+
+The `cli-smoke` job builds and executes a small CLI suite on each supported OS.
+It uses the committed schemas and configs, with spaces in the project, schema
+and input paths. It checks parent-directory settings discovery, directory
+exclusions, explicitly named files, JSON on stdout, diagnostics on stderr,
+version output, and exit codes 0 (valid), 1 (invalid) and 2 (usage error).
+
+| OS/architecture | Native CLI executed in CI | Release image executed | Cross-compiled |
+| --- | --- | --- | --- |
+| Linux/amd64 | `ubuntu-latest` | Yes, on tagged releases | Yes |
+| Linux/arm64 | No | No | Yes |
+| macOS/amd64 | No | N/A | Yes |
+| macOS/arm64 | `macos-15` | N/A | Yes |
+| Windows/amd64 | `windows-latest` | N/A | Yes |
+| Windows/arm64 | No | N/A | Yes |
+
+The runner architectures follow the [GitHub-hosted runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The ordinary unit/race suite and source-built Action tests stay on Linux/amd64.
+This matrix checks deployment behavior rather than repeating every unit test.
+The Action job also runs this smoke suite against its source-built distroless
+image so pull requests exercise the container test path before a release.
+
+Run the native suite locally (use an `.exe` output path on Windows):
+
+```sh
+go build -trimpath -ldflags='-s -w' -o /tmp/otelcol-config-lint ./cmd/otelcol-config-lint
+OTELCOL_LINT_BINARY=/tmp/otelcol-config-lint \
+  go test -tags=integration ./test/smoke -count=1 -v
+```
+
+On a tagged release, validation pulls the Action's pinned release tag from
+GHCR and runs the resolved digest as Linux/amd64. The same suite checks the
+exact release version and valid/invalid mounted inputs, including the image's
+default nonroot user's access to the read-only mount. Containers run with a
+read-only filesystem and no network. A failed check prevents the floating
+major Action tag from advancing; GoReleaser has already published the release
+assets at that point. Snapshot pushes do not run this published-image check.
+
 ### Go batch API
 
 `(*lint.Linter).LintAll` returns `([]lint.Result, error)` and waits for every

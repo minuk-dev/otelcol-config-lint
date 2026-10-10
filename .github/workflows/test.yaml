@@ -31,6 +31,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  cli-smoke:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: otelcol-config-lint
+          - os: macos-15
+            binary: otelcol-config-lint
+          - os: windows-latest
+            binary: otelcol-config-lint.exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.25
+      - name: Build the CLI
+        env:
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags="-s -w" -o "${{ runner.temp }}/${{ matrix.binary }}" ./cmd/otelcol-config-lint
+      - name: Exercise native paths, settings discovery, output and exit codes
+        env:
+          OTELCOL_LINT_BINARY: ${{ runner.temp }}/${{ matrix.binary }}
+        run: go test -tags=integration ./test/smoke -count=1 -v
+
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 10
