@@ -59,6 +59,49 @@ so a tagged build reports its tag because it was built from that tag:
 | a commit between tags | `b7dbdd5`, or `b7dbdd5-dirty` |
 | no repository, or `go run` | `devel` |
 
+### Fuzzing and regression benchmarks
+
+The four fuzz targets in `pkg/lint/linter_fuzz_test.go` exercise `config.Parse`,
+`settings.Parse`, `schema.Read`, and the complete rule set against the committed
+core v0.157.0 schema, without network access. Seeds include existing config,
+settings and schema fixtures plus malformed references, nulls, extra documents,
+merges and cyclic aliases. Inputs above 128 KiB are skipped. Targets check for
+panics, repeatable acceptance and decoded values, and deterministic lint results
+with valid diagnostic positions when a line is available, including yaml.v3's
+virtual next line at EOF for syntax diagnostics. Schema error text is
+not compared because map iteration can change which invalid field is found first.
+
+Run the same bounded smoke budget as CI, or increase `-fuzztime` locally:
+
+```sh
+for target in FuzzConfigParse FuzzSettingsParse FuzzSchemaRead FuzzLint; do
+  go test ./pkg/lint -run '^$' -fuzz "^${target}$" \
+    -fuzztime=15s -fuzzminimizetime=5s -parallel=2 -timeout=2m || exit 1
+done
+```
+
+Go fuzzing isolates mutations in worker processes. The ordinary cyclic-alias
+and amplification regressions also run in subprocesses with a 10-second limit,
+so a hang or fatal stack overflow cannot take down the parent test runner.
+Ordinary `go test` runs all committed seeds. CI uploads failing corpus files;
+download them into `pkg/lint/testdata/fuzz/<target>/`, reproduce with
+`go test ./pkg/lint -run '<target>/<hash>'`, and commit them with the fix so they
+remain regressions. See the [Go fuzzing guide](https://go.dev/doc/security/fuzz/)
+for corpus handling.
+
+Compare parsing and full lint costs for 1, 10, 100 and 1,000 component instances,
+using both ordinary mappings and a repeatedly aliased component body. The alias
+graph benchmark also reuses the amplification regression fixture at depths
+0, 2, 4 and 5 (six references per level, below the expansion limit):
+
+```sh
+go test ./pkg/lint -run '^$' -bench 'Benchmark(ConfigParse|Lint|AliasGraph)$' -benchmem -count=5
+```
+
+The benchmarks report input throughput, bytes and allocations per operation.
+Fixture generation and schema loading are outside the timed loop. Compare
+results on the same machine; CI does not enforce wall-clock thresholds.
+
 ### Collector compatibility tests
 
 The separate `collector-compatibility` CI job runs official **core (`otelcol`)**
