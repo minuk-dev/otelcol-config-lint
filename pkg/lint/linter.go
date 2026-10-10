@@ -4,6 +4,7 @@ package lint
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -51,7 +52,8 @@ func (r Result) Message() string {
 	return ""
 }
 
-// Options configures a Linter.
+// Options configures a Linter. Shared configuration, including schemas, maps,
+// rule settings and the Rules slice, must not be mutated during linting.
 type Options struct {
 	// Schema describes the collector release to check against. A nil schema or
 	// one with no components runs structural checks only; schema-dependent
@@ -198,52 +200,62 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 	return l.lintConfig(ctx, path, src)
 }
 
-// LintAll checks paths concurrently with up to n workers, sending results in
-// completion order. Cancellation stops dispatching paths; the channel closes
-// after all workers finish. Undispatched paths have no result.
-func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Result {
-	if n < 1 {
-		n = 1
+// LintAll checks paths concurrently and waits for every worker to finish.
+// On success it returns one result per input, in input order, including duplicate
+// paths. File errors stay in Result. Cancellation stops subsequent work, discards
+// all results and returns an error wrapping ctx.Err(). Empty input returns nil,
+// nil unless canceled.
+// Worker counts below one use one worker; counts above len(paths) are capped.
+func (l *Linter) LintAll(ctx context.Context, paths []string, n int) ([]Result, error) {
+	err := ctx.Err()
+	if err != nil {
+		return nil, fmt.Errorf("lint cancelled: %w", err)
 	}
 
-	out := make(chan Result, len(paths))
-	in := make(chan string)
+	if len(paths) == 0 {
+		return nil, nil
+	}
+
+	n = min(max(n, 1), len(paths))
+	results := make([]Result, len(paths))
+	in := make(chan int)
 
 	var workers sync.WaitGroup
 
 	for range n {
 		workers.Go(func() {
-			for p := range in {
+			for i := range in {
 				if ctx.Err() != nil {
 					return
 				}
 
-				out <- l.LintFile(ctx, p)
+				results[i] = l.LintFile(ctx, paths[i])
 			}
 		})
 	}
 
-	go func() {
-		defer func() {
-			close(in)
-			workers.Wait()
-			close(out)
-		}()
-
-		for _, p := range paths {
-			if ctx.Err() != nil {
-				return
-			}
-
-			select {
-			case <-ctx.Done():
-				return
-			case in <- p:
-			}
+dispatch:
+	for i := range paths {
+		if ctx.Err() != nil {
+			break
 		}
-	}()
 
-	return out
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case in <- i:
+		}
+	}
+
+	close(in)
+	workers.Wait()
+
+	err = ctx.Err()
+	if err != nil {
+		return nil, fmt.Errorf("lint cancelled: %w", err)
+	}
+
+	return results, nil
 }
 
 func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result {

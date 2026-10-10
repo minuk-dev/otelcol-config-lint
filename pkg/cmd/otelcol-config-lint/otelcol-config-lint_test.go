@@ -314,6 +314,34 @@ func TestStdin(t *testing.T) {
 	}
 }
 
+func TestStdinAndFilesKeepPathOrder(t *testing.T) {
+	t.Parallel()
+
+	for _, earlyExit := range []bool{false, true} {
+		t.Run(strconv.FormatBool(earlyExit), func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(validConfig, "agent.yaml")
+			src, err := os.ReadFile(path)
+			require.NoError(t, err)
+			code, out, errOut := lint(t, string(src), "--no-config", "--min-severity", "error",
+				"--output", "json", "--verbose", "--exit-on-error="+strconv.FormatBool(earlyExit), path, "-")
+			require.Zero(t, code, errOut)
+
+			var report struct {
+				Files []struct {
+					Filename string `json:"filename"`
+				} `json:"files"`
+			}
+
+			require.NoError(t, json.Unmarshal([]byte(out), &report))
+			require.Len(t, report.Files, 2)
+			assert.Equal(t, "stdin", report.Files[0].Filename)
+			assert.Equal(t, path, report.Files[1].Filename)
+		})
+	}
+}
+
 func TestJSONOutput(t *testing.T) {
 	t.Parallel()
 
