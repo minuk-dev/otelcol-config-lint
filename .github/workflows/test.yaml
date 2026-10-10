@@ -31,6 +31,32 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [FuzzConfigParse, FuzzSettingsParse, FuzzSchemaRead, FuzzLint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.25
+      - name: Run bounded fuzz smoke test
+        run: >-
+          go test ./pkg/lint -run '^$' -fuzz '^${{ matrix.target }}$'
+          -fuzztime=15s -fuzzminimizetime=5s -parallel=2 -timeout=2m
+      - name: Retain failing corpus
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: pkg/lint/testdata/fuzz/
+          if-no-files-found: ignore
+
   collector-compatibility:
     runs-on: ubuntu-latest
     steps:
