@@ -2,6 +2,7 @@ package otelcolconfiglint_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -107,6 +109,30 @@ func TestValidDirectoryPasses(t *testing.T) {
 	}
 }
 
+func TestPreCancelledRunCannotPass(t *testing.T) {
+	t.Parallel()
+
+	for _, earlyExit := range []bool{false, true} {
+		t.Run(strconv.FormatBool(earlyExit), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			var stdout bytes.Buffer
+
+			cmd := otelcolconfiglint.NewCommand(nil)
+			cmd.SetArgs([]string{"run", "--no-config", "--schema-location", repoSchemas,
+				"--exit-on-error=" + strconv.FormatBool(earlyExit), filepath.Join(validConfig, "agent.yaml")})
+			cmd.SetOut(&stdout)
+			cmd.SetErr(&bytes.Buffer{})
+			err := cmd.ExecuteContext(ctx)
+			require.ErrorIs(t, err, context.Canceled)
+			assert.Equal(t, otelcolconfiglint.ExitUsage, otelcolconfiglint.ExitCode(err))
+			assert.Empty(t, stdout.String())
+		})
+	}
+}
+
 func TestEmbeddedFlagAnnotatesConfigMap(t *testing.T) {
 	t.Parallel()
 
@@ -200,6 +226,56 @@ func (f *countedFS) Open(name string) (afero.File, error) {
 	}
 
 	return f.Fs.Open(name)
+}
+
+type cancelOnOpenFS struct {
+	afero.Fs
+
+	path   string
+	cancel context.CancelFunc
+}
+
+func (f *cancelOnOpenFS) Open(name string) (afero.File, error) {
+	if name == f.path {
+		f.cancel()
+	}
+
+	return f.Fs.Open(name)
+}
+
+func TestCancelledRunStopsReadingLaterFiles(t *testing.T) {
+	t.Parallel()
+
+	for _, earlyExit := range []bool{false, true} {
+		t.Run(strconv.FormatBool(earlyExit), func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			first := filepath.Join(validConfig, "agent.yaml")
+			later := filepath.Join(t.TempDir(), "later.yaml")
+			require.NoError(t, os.WriteFile(later, []byte("service: {}\n"), 0o600))
+			fsys := &countedFS{
+				Fs:    &cancelOnOpenFS{Fs: afero.NewOsFs(), path: first, cancel: cancel},
+				path:  later,
+				opens: atomic.Int64{},
+			}
+
+			var stdout bytes.Buffer
+
+			cmd := otelcolconfiglint.NewCommand(&otelcolconfiglint.GlobalCmdOptions{Fs: fsys})
+			cmd.SetArgs([]string{"run", "--no-config", "--schema-location", repoSchemas,
+				"--concurrency=1", "--exit-on-error=" + strconv.FormatBool(earlyExit), first, later})
+			cmd.SetOut(&stdout)
+			cmd.SetErr(&bytes.Buffer{})
+			err := cmd.ExecuteContext(ctx)
+			require.ErrorIs(t, err, context.Canceled)
+			assert.Equal(t, otelcolconfiglint.ExitUsage, otelcolconfiglint.ExitCode(err))
+			assert.Zero(t, fsys.opens.Load())
+			assert.Empty(t, stdout.String())
+		})
+	}
 }
 
 func TestExitOnErrorStopsReadingLaterFiles(t *testing.T) {

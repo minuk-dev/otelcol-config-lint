@@ -27,7 +27,7 @@ const (
 	Valid Status = "valid"
 	// Invalid means the file was checked and found wanting.
 	Invalid Status = "invalid"
-	// Error means the file could not be read or parsed at all.
+	// Error means the file could not be read, parsed or fully checked.
 	Error Status = "error"
 	// Skipped means the file was not a config the linter handles.
 	Skipped Status = "skipped"
@@ -155,6 +155,11 @@ func (l *Linter) SeverityFor(r rule.Rule) diag.Severity {
 
 // LintFile reads and checks a single config file.
 func (l *Linter) LintFile(ctx context.Context, path string) Result {
+	err := ctx.Err()
+	if err != nil {
+		return Result{Path: path, Status: Error, Err: err}
+	}
+
 	src, err := afero.ReadFile(l.fs(), path)
 	if err != nil {
 		return Result{Path: path, Status: Error, Err: err}
@@ -165,6 +170,11 @@ func (l *Linter) LintFile(ctx context.Context, path string) Result {
 
 // LintReader checks config read from r, reporting it under name.
 func (l *Linter) LintReader(ctx context.Context, name string, r io.Reader) Result {
+	err := ctx.Err()
+	if err != nil {
+		return Result{Path: name, Status: Error, Err: err}
+	}
+
 	src, err := io.ReadAll(r)
 	if err != nil {
 		return Result{Path: name, Status: Error, Err: err}
@@ -173,10 +183,14 @@ func (l *Linter) LintReader(ctx context.Context, name string, r io.Reader) Resul
 	return l.Lint(ctx, name, src)
 }
 
-// Lint checks config source that was read from path. The context is what the
-// schema lookups a rule may make run under, so a run that is cancelled does
-// not leave one waiting on a registry.
+// Lint checks config source that was read from path. Cancellation is checked
+// between parsing and rules; schema lookups also run under this context.
 func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
+	err := ctx.Err()
+	if err != nil {
+		return Result{Path: path, Status: Error, Err: err}
+	}
+
 	if l.opts.Embedded {
 		return l.lintEmbedded(ctx, path, src)
 	}
@@ -185,7 +199,8 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 }
 
 // LintAll checks paths concurrently with up to n workers, sending results in
-// completion order. It closes the returned channel when every path is done.
+// completion order. Cancellation stops dispatching paths; the channel closes
+// after all workers finish. Undispatched paths have no result.
 func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Result {
 	if n < 1 {
 		n = 1
@@ -199,19 +214,33 @@ func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Resu
 	for range n {
 		workers.Go(func() {
 			for p := range in {
+				if ctx.Err() != nil {
+					return
+				}
+
 				out <- l.LintFile(ctx, p)
 			}
 		})
 	}
 
 	go func() {
-		for _, p := range paths {
-			in <- p
-		}
+		defer func() {
+			close(in)
+			workers.Wait()
+			close(out)
+		}()
 
-		close(in)
-		workers.Wait()
-		close(out)
+		for _, p := range paths {
+			if ctx.Err() != nil {
+				return
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case in <- p:
+			}
+		}
 	}()
 
 	return out
@@ -219,14 +248,15 @@ func (l *Linter) LintAll(ctx context.Context, paths []string, n int) <-chan Resu
 
 func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result {
 	f, err := config.Parse(path, src)
+
+	if ctx.Err() != nil {
+		return Result{Path: path, Status: Error, Err: ctx.Err()}
+	}
+
 	if err != nil {
 		var syn *config.SyntaxError
 		if ok := asSyntaxError(err, &syn); ok {
-			return Result{
-				Path: path, Status: Invalid,
-				Diagnostics: syn.Diagnostics(),
-				Err:         err,
-			}
+			return Result{Path: path, Status: Invalid, Diagnostics: syn.Diagnostics(), Err: err}
 		}
 
 		return Result{Path: path, Status: Error, Err: err}
@@ -236,8 +266,6 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 		File:   f,
 		Schema: l.opts.Schema,
 		Index:  rule.NewIndex(f, l.opts.Schema),
-		Avail:  nil,
-		Dists:  nil,
 		Strict: l.opts.Strict,
 		Env:    l.environment(path),
 	}
@@ -260,6 +288,10 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 	res := Result{Path: path, Status: Valid}
 
 	for _, r := range l.rules {
+		if ctx.Err() != nil {
+			break
+		}
+
 		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
 			if d.Severity.AtLeast(l.opts.FailOn) {
 				res.Status = Invalid
@@ -269,6 +301,10 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 				res.Diagnostics = append(res.Diagnostics, d)
 			}
 		}
+	}
+
+	if ctx.Err() != nil {
+		return Result{Path: path, Status: Error, Err: ctx.Err()}
 	}
 
 	res.Diagnostics.Sort()
@@ -284,9 +320,19 @@ func (l *Linter) lintEmbedded(ctx context.Context, path string, src []byte) Resu
 	dec := yaml.NewDecoder(strings.NewReader(string(src)))
 
 	for {
+		err := ctx.Err()
+		if err != nil {
+			return Result{Path: path, Status: Error, Err: err}
+		}
+
 		var doc yaml.Node
 
-		err := dec.Decode(&doc)
+		err = dec.Decode(&doc)
+
+		if ctx.Err() != nil {
+			return Result{Path: path, Status: Error, Err: ctx.Err()}
+		}
+
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -330,6 +376,10 @@ func (l *Linter) lintConfigMap(ctx context.Context, path string, lines []string,
 	}
 
 	for i := 0; i+1 < len(data.Content); i += 2 {
+		if ctx.Err() != nil {
+			return
+		}
+
 		key, block := data.Content[i], data.Content[i+1]
 
 		if block.Kind != yaml.ScalarNode || block.Style&yaml.LiteralStyle == 0 || !collectorBlock(block.Value) {
