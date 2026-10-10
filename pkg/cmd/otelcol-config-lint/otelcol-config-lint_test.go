@@ -133,7 +133,7 @@ func TestPreCancelledRunCannotPass(t *testing.T) {
 	}
 }
 
-func TestEmbeddedFlagAnnotatesConfigMap(t *testing.T) {
+func TestEmbeddedFlagAnnotatesMultipleConfigMaps(t *testing.T) {
 	t.Parallel()
 
 	src := `kind: ConfigMap
@@ -149,10 +149,50 @@ data:
           receivers: [missing]
           exporters: [debug]
 `
+	src += "---\n" + strings.Replace(src, "name: agent", "name: gateway", 1)
 	code, out, errOut := lint(t, src, "--embedded", "--output", "github", "-")
 	require.Equal(t, 1, code, errOut)
 	assert.Contains(t, out, "file=stdin,line=11,col=23")
 	assert.Contains(t, out, "agent/config")
+	assert.Contains(t, out, "gateway/config")
+}
+
+func TestTrailingConfigDocumentsFail(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile(filepath.Join(validConfig, "agent.yaml"))
+	require.NoError(t, err)
+
+	for name, trailing := range map[string]string{
+		"valid": "service: {}\n", "empty": "", "malformed": "this is: [broken\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			content := string(src) + "\n---\n" + trailing
+			file, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
+			require.NoError(t, err)
+			_, err = file.WriteString(content)
+			require.NoError(t, err)
+			require.NoError(t, file.Close())
+
+			for inputName, input := range map[string]string{"file": file.Name(), "stdin": "-"} {
+				t.Run(inputName, func(t *testing.T) {
+					t.Parallel()
+
+					code, out, errOut := lint(t, content, "--no-config", input)
+					assert.Equal(t, 1, code, errOut)
+					assert.Contains(t, out, "yaml-syntax")
+
+					if name == "malformed" {
+						assert.Contains(t, out, "expected")
+					} else {
+						assert.Contains(t, out, "more than one document")
+					}
+				})
+			}
+		})
+	}
 }
 
 func TestInvalidFileFails(t *testing.T) {

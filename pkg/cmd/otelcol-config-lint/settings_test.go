@@ -315,6 +315,30 @@ func TestASettingsFileFromAnotherVersionIsReported(t *testing.T) {
 	assert.Contains(t, errOut, settings.Version)
 }
 
+func TestTrailingSettingsDocumentsAreUsageErrors(t *testing.T) {
+	t.Parallel()
+
+	for name, trailing := range map[string]string{
+		"valid": "version: \"1\"\n", "empty": "", "malformed": "this is: [broken\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			path := writeSettings(t, "version: \"1\"\n---\n"+trailing)
+			code, _, errOut := lint(t, "", "--config", path, validConfig)
+
+			assert.Equal(t, 2, code)
+			assert.Contains(t, errOut, path)
+
+			if name == "malformed" {
+				assert.Contains(t, errOut, "yaml: line")
+			} else {
+				assert.Contains(t, errOut, "more than one document")
+			}
+		})
+	}
+}
+
 // TestConcurrencyKeepsItsOldShorthand guards the rename: -n was the whole flag
 // before it took golangci-lint's name for it, and workflows still spell it that
 // way.

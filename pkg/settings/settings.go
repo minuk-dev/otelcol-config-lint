@@ -18,6 +18,8 @@ import (
 // release does not know.
 var ErrUnknownVersion = errors.New("unknown settings version")
 
+var errMultiDocumentSettings = errors.New("settings must contain no more than one document")
+
 // Version is the schema the settings file is read as. A file may state it to be
 // explicit; a file that does not is read as this version. It exists so a later
 // schema can be told apart from this one rather than guessed at.
@@ -311,8 +313,8 @@ func (s *File) foldLists() []string {
 	return used
 }
 
-// Parse decodes a settings file, rejecting keys it does not know: a misspelled
-// key is policy that silently did not apply.
+// Parse decodes a single settings document, rejecting keys it does not know:
+// a misspelled key is policy that silently did not apply.
 func Parse(src []byte) (*File, error) {
 	var s File
 
@@ -321,6 +323,17 @@ func Parse(src []byte) (*File, error) {
 
 	err := dec.Decode(&s)
 	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err //nolint:wrapcheck // the caller names the file
+	}
+
+	var extra yaml.Node
+
+	err = dec.Decode(&extra)
+	if err == nil {
+		return nil, errMultiDocumentSettings
+	}
+
+	if !errors.Is(err, io.EOF) {
 		return nil, err //nolint:wrapcheck // the caller names the file
 	}
 
