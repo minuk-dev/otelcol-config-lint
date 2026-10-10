@@ -433,32 +433,56 @@ func TestIgnoreMissingSchemasSilencesUnknownComponents(t *testing.T) {
 	}
 }
 
-func TestLintAllVisitsEveryFile(t *testing.T) {
+func TestLintAllPreservesInputOrder(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	for _, workers := range []int{-1, 0, 1, 3, 100} {
+		t.Run(strconv.Itoa(workers), func(t *testing.T) {
+			t.Parallel()
 
-	names := []string{"a.yaml", "b.yaml", "c.yaml", "d.yaml"}
-	paths := make([]string, 0, len(names))
+			synctest.Test(t, func(t *testing.T) {
+				fsys := afero.NewMemMapFs()
+				require.NoError(t, afero.WriteFile(fsys, "slow.yaml", []byte(good), 0o600))
+				require.NoError(t, afero.WriteFile(fsys, "bad.yaml", []byte(bad), 0o600))
+				require.NoError(t, afero.WriteFile(fsys, "syntax.yaml", []byte("receivers: ["), 0o600))
+				l := newLinter(t, lint.Options{Fs: fsys, Environment: func(path string) rule.Environment {
+					if path == "slow.yaml" {
+						time.Sleep(time.Second)
+					}
 
-	for _, name := range names {
-		p := filepath.Join(dir, name)
+					return rule.Environment{}
+				}})
+				paths := []string{"slow.yaml", "missing.yaml", "bad.yaml", "slow.yaml", "syntax.yaml"}
+				want := []lint.Status{lint.Valid, lint.Error, lint.Invalid, lint.Valid, lint.Invalid}
 
-		err := os.WriteFile(p, []byte(good), 0o600)
-		if err != nil {
-			t.Fatal(err)
-		}
+				results, err := l.LintAll(t.Context(), paths, workers)
+				require.NoError(t, err)
+				require.Len(t, results, len(paths))
 
-		paths = append(paths, p)
+				for i, result := range results {
+					assert.Equal(t, paths[i], result.Path)
+					assert.Equal(t, want[i], result.Status)
+				}
+
+				require.ErrorIs(t, results[1].Err, os.ErrNotExist)
+			})
+		})
 	}
+}
 
-	seen := map[string]bool{}
-	for r := range newLinter(t, lint.Options{}).LintAll(t.Context(), paths, 3) {
-		seen[r.Path] = true
-	}
+func TestLintAllEmptyInput(t *testing.T) {
+	t.Parallel()
 
-	if len(seen) != len(paths) {
-		t.Errorf("want %d results, got %d", len(paths), len(seen))
+	l := lint.New(lint.Options{})
+
+	for _, workers := range []int{-1, 0, 1, 100} {
+		t.Run(strconv.Itoa(workers), func(t *testing.T) {
+			t.Parallel()
+
+			results, err := l.LintAll(t.Context(), nil, workers)
+			require.NoError(t, err)
+			assert.Nil(t, results)
+		})
 	}
 }
 
@@ -508,8 +532,15 @@ func TestPreCancelledLintDoesNoWork(t *testing.T) {
 	assert.Zero(t, fsys.opens.Load())
 	assert.Equal(t, len(good), reader.Len())
 
-	for result := range l.LintAll(ctx, []string{"a.yaml", "b.yaml"}, 2) {
-		t.Errorf("unexpected result after cancellation: %+v", result)
+	for name, paths := range map[string][]string{"files": {"a.yaml", "b.yaml"}, "empty": nil} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			results, err := l.LintAll(ctx, paths, 2)
+			require.ErrorIs(t, err, context.Canceled)
+			assert.Nil(t, results)
+			assert.Zero(t, fsys.opens.Load())
+		})
 	}
 
 	assert.Zero(t, fsys.opens.Load())
@@ -545,28 +576,62 @@ func TestLintAllCancellationStopsWorkers(t *testing.T) {
 					paths[i] = "agent.yaml"
 				}
 
-				results := l.LintAll(ctx, paths, workers)
+				done := make(chan struct{})
+
+				go func() {
+					defer close(done)
+
+					results, err := l.LintAll(ctx, paths, workers)
+					assert.ErrorIs(t, err, context.Canceled)
+					assert.Nil(t, results)
+				}()
+
 				for range workers {
 					<-entered
 				}
 
 				cancel()
-				close(release)
+				synctest.Wait()
 
-				count := 0
-
-				for result := range results {
-					assert.Equal(t, lint.Error, result.Status)
-					require.ErrorIs(t, result.Err, context.Canceled)
-
-					count++
+				select {
+				case <-done:
+					t.Fatal("LintAll returned before its workers finished")
+				default:
 				}
 
-				assert.Equal(t, workers, count)
+				close(release)
+				<-done
+
 				assert.EqualValues(t, workers, fsys.opens.Load())
 			})
 		})
 	}
+}
+
+func TestLintAllCancellationInLastRuleCannotPass(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	fsys := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(fsys, "agent.yaml", []byte(good), 0o600))
+
+	calls := 0
+	l := lint.New(lint.Options{Fs: fsys, Rules: []rule.Rule{
+		callbackRule{Base: rule.NewBase("cancel", "", diag.Error), check: func() {
+			calls++
+
+			if calls == 2 {
+				cancel()
+			}
+		}},
+	}})
+
+	results, err := l.LintAll(ctx, []string{"agent.yaml", "agent.yaml"}, 1)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, results)
+	assert.Equal(t, 2, calls)
 }
 
 func TestCancellationInLastRuleCannotPass(t *testing.T) {

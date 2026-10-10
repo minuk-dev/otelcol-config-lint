@@ -46,6 +46,30 @@ so a tagged build reports its tag because it was built from that tag:
 | a commit between tags | `b7dbdd5`, or `b7dbdd5-dirty` |
 | no repository, or `go run` | `devel` |
 
+### Go batch API
+
+`(*lint.Linter).LintAll` returns `([]lint.Result, error)` and waits for every
+worker to exit. Results follow input order, including duplicate paths. File
+read, parse and validation failures stay in each `Result`; cancellation discards
+the whole batch and returns the context error. Shared schemas, maps and rule
+settings must remain unchanged during linting, and a rule's `Check` method must
+support concurrent calls on the same instance.
+
+This replaces the exported `<-chan lint.Result` return type and is a source
+breaking change for Go callers, including callers outside this repository.
+When updating from v0.1.0, replace channel iteration with an error check followed
+by slice iteration:
+
+```go
+results, err := linter.LintAll(ctx, paths, workers)
+if err != nil {
+    return err
+}
+for _, result := range results {
+    // Report the completed result.
+}
+```
+
 ### CI
 
 This repository's own CI runs the tests with coverage reported on the pull

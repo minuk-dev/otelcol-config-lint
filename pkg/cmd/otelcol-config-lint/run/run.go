@@ -412,14 +412,16 @@ func (o *options) lintAll(
 
 	if !o.exitOnError {
 		onDisk := sets.List(files.Difference(sets.New(scanner.StdinMarker)))
-		for r := range linter.LintAll(cmd.Context(), onDisk, o.concurrency) {
+
+		batch, err := linter.LintAll(cmd.Context(), onDisk, o.concurrency)
+		if err != nil {
+			return err
+		}
+
+		for _, r := range batch {
 			results[r.Path] = r
 		}
 	}
-
-	// An environment decides whether some rules run at all, so a verbose run
-	// says which one each file resolved to.
-	sayEnvironment := o.verbose && o.envPolicy.Configured()
 
 	for _, f := range sets.List(files) {
 		r := results[f]
@@ -427,21 +429,12 @@ func (o *options) lintAll(
 			r = linter.LintFile(cmd.Context(), f)
 		}
 
-		err := cmd.Context().Err()
+		err := o.reportResult(cmd, formatter, r)
 		if err != nil {
-			return fmt.Errorf("lint cancelled: %w", err)
+			return err
 		}
 
 		summary.Add(r)
-
-		if sayEnvironment {
-			cmd.PrintErrf("otelcol-config-lint: %s: %s\n", r.Path, describeEnvironment(o.envPolicy.Resolve(r.Path)))
-		}
-
-		err = formatter.Result(r)
-		if err != nil {
-			return fmt.Errorf("report %s: %w", r.Path, err)
-		}
 
 		if o.exitOnError && summary.Failed() {
 			break
@@ -455,6 +448,24 @@ func (o *options) lintAll(
 
 	if summary.Failed() {
 		return ErrFilesInvalid
+	}
+
+	return nil
+}
+
+func (o *options) reportResult(cmd *cobra.Command, formatter lint.Formatter, r lint.Result) error {
+	err := cmd.Context().Err()
+	if err != nil {
+		return fmt.Errorf("lint cancelled: %w", err)
+	}
+
+	if o.verbose && o.envPolicy.Configured() {
+		cmd.PrintErrf("otelcol-config-lint: %s: %s\n", r.Path, describeEnvironment(o.envPolicy.Resolve(r.Path)))
+	}
+
+	err = formatter.Result(r)
+	if err != nil {
+		return fmt.Errorf("report %s: %w", r.Path, err)
 	}
 
 	return nil
