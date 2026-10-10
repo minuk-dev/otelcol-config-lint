@@ -31,6 +31,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/emptypipeline"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/hardcodedsecret"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/insecuretls"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/invalidcomponentid"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/invalidpipelinekey"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/invalidvalue"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/memorylimiterconfig"
@@ -64,6 +65,7 @@ func All() []rule.Rule {
 		unknowntoplevelkey.New(),
 		servicerequired.New(),
 		unknownservicekey.New(),
+		invalidcomponentid.New(),
 		invalidpipelinekey.New(),
 		emptypipeline.New(),
 		unknownpipelinekey.New(),

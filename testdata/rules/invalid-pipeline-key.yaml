@@ -17,6 +17,10 @@ exporters:
       enabled: false
 service:
   pipelines:
+    traces/: # invalid-pipeline-key: the name after / must not be empty
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]
     tracez: # invalid-pipeline-key: a pipeline key must be <signal> or <signal>/<name>
       receivers: [otlp]
       processors: [memory_limiter, batch]

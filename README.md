@@ -29,7 +29,7 @@ becomes lintable as soon as its schema is committed — no linter upgrade. Point
 
 | | |
 | --- | --- |
-| [Rules](docs/rules/README.md) | all 35 rules, one page each: what they report and why |
+| [Rules](docs/rules/README.md) | all 36 rules, one page each: what they report and why |
 | [Settings file](docs/configuration.md) | `.otelcol-config-lint.yaml`, rule selection, the deployment environment |
 | [Schemas](docs/schemas.md) | the registry, caching, and generating a schema for your own distribution |
 | [Working on the linter](docs/contributing.md) | layout, development, adding a rule |
@@ -247,13 +247,13 @@ interfaces, result handling, cancellation and concurrent use.
 
 ## What it checks
 
-35 rules, listed by `otelcol-config-lint list rules` and documented one page
+36 rules, listed by `otelcol-config-lint list rules` and documented one page
 each under [docs/rules/](docs/rules/README.md).
 
 - **[Structure](docs/rules/README.md#structure)** — the config the collector
   refuses to load, or loads while silently ignoring half of.
   `unknown-top-level-key`, `service-required`, `unknown-service-key`,
-  `invalid-pipeline-key`, `empty-pipeline`, `unknown-pipeline-key`,
+  `invalid-component-id`, `invalid-pipeline-key`, `empty-pipeline`, `unknown-pipeline-key`,
   `duplicate-key`, `wrong-node-type`.
 - **[Wiring](docs/rules/README.md#wiring)** — whether what is declared and what
   is referenced add up. `undefined-reference`,

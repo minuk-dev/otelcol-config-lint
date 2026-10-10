@@ -7,8 +7,13 @@ collector carries: `traces`, `metrics`, `logs` or `profiles`.
 
 ## What it reports
 
-A pipeline whose key names no known signal — `tracez`, `trace`, `metric/1`. The
-name after the slash is free-form and never reported.
+A pipeline whose key names no known signal — `tracez`, `trace`, `metric/1` — or
+whose identifier is malformed, such as `traces/` or `logs/a b`.
+
+An explicitly present name must be nonempty after trimming, at most 1024 bytes,
+and contain no Unicode separators, control characters or symbols. Unicode
+letters, digits, punctuation and additional slashes are allowed. The original
+key is retained in diagnostics.
 
 ## Example
 
@@ -29,8 +34,10 @@ config.yaml:20:5: error: pipeline "tracez" does not name a known signal [invalid
 
 ## Notes
 
-[`signal-support`](signal-support.md) stands down for a pipeline this rule
-reports: without a signal there is nothing to check a component against.
+[`signal-support`](signal-support.md) stands down when the signal is unknown.
+Names follow the Collector's
+[`pipeline.ID.UnmarshalText` contract at v0.157.0](https://github.com/open-telemetry/opentelemetry-collector/blob/v0.157.0/pipeline/pipeline.go),
+also used at v0.110.0. The 1024 limit counts bytes in upstream's implementation.
 
 ## See also
 
