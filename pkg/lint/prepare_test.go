@@ -78,6 +78,11 @@ func TestPrepareTargets(t *testing.T) {
 			}
 
 			assert.Equal(t, distribution, target.Distribution)
+
+			result := linter.Lint(t.Context(), "config.yaml", []byte(good))
+			require.NotNil(t, result.Coverage)
+			assert.Equal(t, target.CollectorVersion, result.Coverage.CollectorVersion)
+			assert.Equal(t, target.Distribution, result.Coverage.Distribution)
 		})
 	}
 }

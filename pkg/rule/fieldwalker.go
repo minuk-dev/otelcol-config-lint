@@ -35,6 +35,8 @@ type FieldWalker struct {
 	// OnDeprecated is called for a key upstream has replaced, with the note
 	// saying what replaces it.
 	OnDeprecated func(key string, node *yaml.Node, path, note string)
+	// OnSkipped reports missing or open field schemas, independently of findings.
+	OnSkipped func(path, reason string)
 }
 
 // WalkComponents validates every declared component that has a field schema.
@@ -52,12 +54,16 @@ func (w FieldWalker) WalkComponents() {
 		}
 
 		for _, c := range sec.Components {
+			path := kind.Section() + "." + c.ID.String()
+
 			comp, ok := w.Ctx.Schema.Lookup(kind, c.ID.Type)
 			if !ok || comp.Fields == nil {
+				w.skipped(path, "missing_schema")
+
 				continue
 			}
 
-			w.walk(comp.Fields, c.ValueNode, kind.Section()+"."+c.ID.String())
+			w.walk(comp.Fields, c.ValueNode, path)
 		}
 	}
 }
@@ -74,6 +80,11 @@ func (w FieldWalker) walk(field *schema.Field, node *yaml.Node, path string) {
 	node = ResolveAlias(node)
 	if node == nil || node.Kind == yaml.AliasNode {
 		return
+	}
+
+	if field.Open || (field.Type == "" && len(field.Children) == 0) ||
+		(field.Type == typeMap && len(field.Children) == 0) {
+		w.skipped(path, "open_schema")
 	}
 
 	if IsNull(node) {
@@ -133,6 +144,8 @@ func (w FieldWalker) walkList(field *schema.Field, node *yaml.Node, path string)
 
 	item := field.Children["item"]
 	if item == nil {
+		w.skipped(path, "missing_schema")
+
 		return
 	}
 
@@ -235,5 +248,11 @@ func describeType(field *schema.Field) string {
 		return "a list"
 	default:
 		return "a " + field.Type
+	}
+}
+
+func (w FieldWalker) skipped(path, reason string) {
+	if w.OnSkipped != nil {
+		w.OnSkipped(path, reason)
 	}
 }

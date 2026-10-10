@@ -36,6 +36,7 @@ func TestWalkFollowsAWholeAliasChain(t *testing.T) {
 					got = append(got, path+": "+want)
 				},
 				OnDeprecated: nil,
+				OnSkipped:    nil,
 			}
 			w.walk(&schema.Field{Type: "string"}, node, "receivers.otlp.endpoint")
 
@@ -122,6 +123,7 @@ func TestAFieldStatingNoShapeIsNotReported(t *testing.T) {
 					got = append(got, path+": "+want)
 				},
 				OnDeprecated: nil,
+				OnSkipped:    nil,
 			}
 			w.walk(tt.field, scalar, "processors.resource.attributes[0].value")
 

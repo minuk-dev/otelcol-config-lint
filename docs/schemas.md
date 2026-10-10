@@ -86,6 +86,70 @@ refused unless `--insecure-schema-location` says otherwise, which is there for a
 registry served on localhost. One download is capped at 32 MiB, so a registry
 that is hostile or merely broken cannot stream the linter out of memory.
 
+## Validation coverage in reports
+
+A `valid` result means no enabled rule found a problem at the configured failure
+threshold. It does not guarantee Collector startup. Field validation can be
+incomplete when a component has no field schema, a schema is open or
+unconstrained, or a value is resolved at runtime by a confmap provider.
+
+JSON file results now include an optional `coverage` object:
+
+```json
+{
+  "filename": "config.yaml",
+  "status": "valid",
+  "coverage": {
+    "status": "partial",
+    "collectorVersion": "v0.157.0",
+    "distribution": "contrib",
+    "fieldRules": ["invalid-value"],
+    "skipped": [
+      {"path": "exporters.otlp.endpoint", "reason": "runtime_value"}
+    ]
+  }
+}
+```
+
+The version and distribution describe the schema actually used, including
+`latest` resolution and an opted-in nearest-version fallback. Legacy schemas
+without a distribution report `contrib`. `fieldRules` lists the enabled built-in
+field rules after severity overrides; rules set to `off` are excluded.
+
+Coverage status is `complete` when no coverage gaps were found for those field
+rules, `partial` when some component/field coverage is unavailable, and
+`not_checked` when no field rules are enabled or a library caller uses
+`lint.New` without a component inventory. It describes component field-schema
+coverage and unresolved runtime values, not every Collector validation or
+whether a rule's findings passed. Disabling a rule narrows what `complete` means.
+A detected type/enum error remains a diagnostic, not a coverage gap.
+
+Each skipped path identifies a component, field, or container; a container gap
+also covers its descendants. Reasons are `missing_schema` (including list item
+schemas), `open_schema` (including unconstrained fields), `runtime_value`, or
+`unresolved_structure` (a cyclic alias or a runtime-value scan beyond 16 nesting
+levels). Runtime values in service references are included too. Values and
+provider expressions are never copied into coverage metadata. Embedded
+ConfigMap gaps include `block`, the ConfigMap name/data key. An empty path means
+the whole config has no schema coverage. Paths outside skipped containers can
+be interpreted against the listed field rules; `complete` is not a promise of
+successful Collector startup.
+
+Text output emits one coverage line per affected file, grouping repeated reasons
+by count and pointing to JSON for paths. `--summary` adds the number of files
+with incomplete coverage. Coverage is independent of diagnostic filtering,
+`--ignore-missing-schemas`, validity, and exit codes. Empty inventories still
+fail in the CLI and `lint.Prepare` before any report is emitted.
+
+Compatibility: `coverage` and the nonzero `summary.incomplete` count are JSON
+additions. Existing status, diagnostic and summary fields keep their meaning.
+Parsed lint results now appear in JSON `files` even when valid, without needing
+`--verbose`, so consumers can inspect complete coverage and the resolved target.
+Consumers must tolerate additional fields and must not treat membership in
+`files` as a failure; inspect `status`. Read/parse failures and skipped inputs
+have no coverage object. Older reports can omit coverage; absence means coverage
+was not reported, not that validation was complete.
+
 ## Which releases have a component
 
 An unknown component is worth explaining — `"logging" exists in v0.110.0 but not

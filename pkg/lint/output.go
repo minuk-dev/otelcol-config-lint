@@ -106,7 +106,7 @@ func (f *textFormatter) Result(r Result) error {
 	case Invalid:
 		// Diagnostics are printed below.
 	case Valid:
-		if len(r.Diagnostics) == 0 {
+		if len(r.Diagnostics) == 0 && (r.Coverage == nil || r.Coverage.Status == coverageComplete) {
 			if !f.opts.Verbose {
 				return nil
 			}
@@ -124,6 +124,10 @@ func (f *textFormatter) Result(r Result) error {
 		}
 	}
 
+	if r.Coverage != nil && r.Coverage.Status != coverageComplete {
+		return writef(f.w, "%s: %s\n", r.Path, r.Coverage.description())
+	}
+
 	return nil
 }
 
@@ -134,9 +138,15 @@ func (f *textFormatter) Finish(s Summary) error {
 
 	total := s.Valid + s.Invalid + s.Errors + s.Skipped
 
-	return writef(f.w,
+	err := writef(f.w,
 		"Summary: %d file(s) checked, %d valid, %d invalid, %d error(s), %d skipped (%d warning(s), %d info)\n",
 		total, s.Valid, s.Invalid, s.Errors, s.Skipped, s.Warnings, s.Infos)
+	if err != nil || s.Incomplete == 0 {
+		return err
+	}
+
+	return writef(f.w, "Validation coverage incomplete for %d file(s); validity only reflects enabled rules.\n",
+		s.Incomplete)
 }
 
 func (f *textFormatter) color(code, s string) string {
@@ -186,6 +196,7 @@ type jsonFile struct {
 	Status      Status           `json:"status"`
 	Message     string           `json:"msg,omitempty"`
 	Diagnostics diag.Diagnostics `json:"diagnostics,omitempty"`
+	Coverage    *Coverage        `json:"coverage,omitempty"`
 }
 
 type jsonFormatter struct {
@@ -195,12 +206,12 @@ type jsonFormatter struct {
 }
 
 func (f *jsonFormatter) Result(r Result) error {
-	if r.Status == Valid && len(r.Diagnostics) == 0 && !f.opts.Verbose {
+	if r.Status == Valid && len(r.Diagnostics) == 0 && r.Coverage == nil && !f.opts.Verbose {
 		return nil
 	}
 
 	f.rep.Files = append(f.rep.Files, jsonFile{
-		Filename: r.Path, Status: r.Status, Message: r.Message(), Diagnostics: r.Diagnostics,
+		Filename: r.Path, Status: r.Status, Message: r.Message(), Diagnostics: r.Diagnostics, Coverage: r.Coverage,
 	})
 
 	return nil

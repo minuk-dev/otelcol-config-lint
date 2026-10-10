@@ -137,8 +137,12 @@ Inspect `Status` before interpreting `Err`: a YAML syntax failure is `Invalid`
 and can also carry `Err`. Diagnostics retain rule, severity, YAML path, line,
 column, hint and documentation link. `Result.Err` is excluded from JSON; use
 `Result.Message()` if your response envelope needs an error message. The CLI
-JSON formatter is a report format and may omit passing inputs; an API can
-serialize results directly instead.
+JSON formatter includes parsed results with coverage even when they pass;
+an API can also serialize results directly. `Result.Coverage` records the actual
+schema target, enabled field rules, and unavailable validation paths independently
+of status. It is nil for read/parse failures and skipped inputs. See
+[validation coverage](schemas.md#validation-coverage-in-reports) for statuses,
+reason codes, and JSON compatibility.
 
 ## Sharing engines and deployment information
 

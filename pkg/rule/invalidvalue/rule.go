@@ -29,5 +29,6 @@ func (r invalidValue) Check(ctx *rule.Context) {
 		OnUnknown:    nil,
 		OnRequired:   nil,
 		OnDeprecated: nil,
+		OnSkipped:    nil,
 	}.WalkComponents()
 }
