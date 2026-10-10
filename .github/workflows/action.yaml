@@ -50,6 +50,14 @@ jobs:
             Dockerfile
           git --no-pager diff -- Dockerfile
 
+      - name: Smoke test the distroless image with mounted fixtures
+        env:
+          OTELCOL_LINT_IMAGE: otelcol-config-lint:source
+        run: |
+          OTELCOL_LINT_VERSION="$(dist/action/otelcol-config-lint version | cut -d ' ' -f 2)"
+          export OTELCOL_LINT_VERSION
+          go test -tags=integration ./test/smoke -count=1 -v
+
       - name: Boolean and string inputs override settings only when explicit
         run: PATH="$PWD/dist/action:$PATH" bash build/docker/action-entrypoint_test.sh
 
