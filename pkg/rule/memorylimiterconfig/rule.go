@@ -7,10 +7,8 @@
 package memorylimiterconfig
 
 import (
-	"slices"
 	"time"
 
-	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 )
@@ -51,13 +49,6 @@ func (r memoryLimiterConfig) checkInterval(ctx *rule.Context, lim rule.MemoryLim
 
 	switch {
 	case !lim.CheckInterval.Present:
-		// The field schema marks check_interval required on every release that
-		// describes the component, and required-field reports it there. Saying
-		// it twice about one line helps nobody.
-		if schemaRequires(ctx, rule.MemoryLimiterType, "check_interval") {
-			return
-		}
-
 		ctx.Report(rule.Finding{
 			Node: lim.Node, Path: path,
 			Message: lim.Name() + " has no check_interval, and its default of 0s is rejected: " +
@@ -154,19 +145,4 @@ func (r memoryLimiterConfig) checkPercentages(ctx *rule.Context, lim rule.Memory
 			})
 		}
 	}
-}
-
-// schemaRequires reports whether the targeted release's field schema already
-// marks a processor setting required.
-func schemaRequires(ctx *rule.Context, typ, field string) bool {
-	if !ctx.SchemaReady() {
-		return false
-	}
-
-	comp, ok := ctx.Schema.Lookup(config.KindProcessor, typ)
-	if !ok || comp.Fields == nil {
-		return false
-	}
-
-	return slices.Contains(comp.Fields.Required, field)
 }

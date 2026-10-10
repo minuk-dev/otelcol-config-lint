@@ -23,7 +23,9 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/hardcodedsecret"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/servicerequired"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -836,24 +838,77 @@ func TestVersionIndexFindsRemovedComponents(t *testing.T) {
 	}
 }
 
-// TestAMissingCheckIntervalIsReportedOnce pins that memory-limiter-config
-// stands down where the field schema already marks check_interval required:
-// one missing key, one finding, not two about the same line.
-func TestAMissingCheckIntervalIsReportedOnce(t *testing.T) {
+func TestMemoryLimiterMissingIntervalRuleSelection(t *testing.T) {
 	t.Parallel()
 
-	src := strings.Replace(good, "    check_interval: 1s\n", "", 1)
-
-	var about []string
-
-	for _, d := range newLinter(t, lint.Options{}).Lint(t.Context(), "x.yaml", []byte(src)).Diagnostics {
-		if strings.Contains(d.Message, "check_interval") {
-			about = append(about, d.Rule)
-		}
+	tests := []struct {
+		name      string
+		selection ruleset.Selection
+		wantRules []string
+	}{
+		{
+			name: "memory-limiter-config alone",
+			selection: ruleset.Selection{
+				Default: ruleset.DefaultNone, Enable: []string{"memory-limiter-config"},
+			},
+			wantRules: []string{"memory-limiter-config"},
+		},
+		{
+			name: "required-field enabled",
+			selection: ruleset.Selection{
+				Default: ruleset.DefaultNone, Enable: []string{"memory-limiter-config", "required-field"},
+			},
+			wantRules: []string{"memory-limiter-config", "required-field"},
+		},
+		{
+			name:      "required-field disabled",
+			selection: ruleset.Selection{Disable: []string{"required-field"}},
+			wantRules: []string{"memory-limiter-config"},
+		},
+		{
+			name:      "required-field explicitly off",
+			selection: ruleset.Selection{Severity: []string{"required-field=off"}},
+			wantRules: []string{"memory-limiter-config"},
+		},
+		{
+			name:      "all rules report both diagnostics",
+			selection: ruleset.Selection{},
+			wantRules: []string{"memory-limiter-config", "required-field"},
+		},
 	}
 
-	if len(about) != 1 {
-		t.Errorf("want one finding about check_interval, got %v", about)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sch := ruletest.Schema()
+			sch.Components[config.KindProcessor]["memory_limiter"].Fields = &schema.Field{
+				Type: "map", Required: []string{"check_interval"},
+				Children: map[string]*schema.Field{
+					"check_interval":  {Type: "duration"},
+					"limit_mib":       {Type: "int"},
+					"spike_limit_mib": {Type: "int"},
+				},
+			}
+			resolved, err := ruleset.Resolve(tt.selection)
+			require.NoError(t, err)
+
+			linter := lint.New(lint.Options{Schema: sch, Rules: resolved.Rules, Severities: resolved.Severities})
+			src := strings.Replace(ruletest.Clean, "    check_interval: 1s\n", "", 1)
+			result := linter.Lint(t.Context(), "config.yaml", []byte(src))
+			require.NoError(t, result.Err)
+			assert.Equal(t, lint.Invalid, result.Status)
+
+			var gotRules []string
+
+			for _, d := range result.Diagnostics {
+				gotRules = append(gotRules, d.Rule)
+				assert.Equal(t, "processors.memory_limiter.check_interval", d.Path)
+				assert.Equal(t, diag.Error, d.Severity)
+			}
+
+			assert.ElementsMatch(t, tt.wantRules, gotRules)
+		})
 	}
 }
 

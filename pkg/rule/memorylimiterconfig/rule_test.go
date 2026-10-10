@@ -6,9 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/memorylimiterconfig"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // check runs the rule over src, which every test in this package starts from.
@@ -120,6 +122,27 @@ func TestMemoryLimiterConfigAcceptsAWorkingLimiter(t *testing.T) {
 	if found := check(t, limiter("memory_limiter", settings)); len(found) > 0 {
 		t.Errorf("a percentage memory_limiter should be quiet, got %+v", found)
 	}
+}
+
+func TestMemoryLimiterConfigReportsMissingSchemaRequiredInterval(t *testing.T) {
+	t.Parallel()
+
+	sch := ruletest.Schema()
+	sch.Components[config.KindProcessor]["memory_limiter"].Fields = &schema.Field{
+		Type: "map", Required: []string{"check_interval"},
+		Children: map[string]*schema.Field{
+			"check_interval": {Type: "duration"},
+			"limit_mib":      {Type: "int"},
+		},
+	}
+	found, err := ruletest.RunWith(memorylimiterconfig.New(),
+		limiter("memory_limiter", "    limit_mib: 512"), ruletest.Options{Schema: sch})
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	require.Equal(t, diag.Error, found[0].Severity)
+	require.Equal(t, "processors.memory_limiter.check_interval", found[0].Path)
+	require.Contains(t, found[0].Message, "has no check_interval")
+	require.Contains(t, found[0].Hint, "set check_interval: 1s")
 }
 
 func TestMemoryLimiterConfigMatchesOnType(t *testing.T) {

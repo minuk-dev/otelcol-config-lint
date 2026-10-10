@@ -1972,8 +1972,9 @@ func TestMemoryLimiterRequiredInterval(t *testing.T) {
 				return
 			}
 
-			require.Len(t, found, 1)
-			assert.Equal(t, "required-field", found[0].Rule)
+			require.Len(t, found, 2)
+			assert.ElementsMatch(t, []string{"memory-limiter-config", "required-field"},
+				[]string{found[0].Rule, found[1].Rule})
 		})
 	}
 }

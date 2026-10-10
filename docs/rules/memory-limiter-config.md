@@ -30,6 +30,10 @@ collector will say.
 A value only the collector can resolve — an expansion — is left alone rather
 than guessed at.
 
+The missing `check_interval` diagnostic is reported independently of
+[`required-field`](required-field.md). When both rules are enabled and the
+schema marks `check_interval` required, each rule reports its own error.
+
 ## Example
 
 ```yaml
