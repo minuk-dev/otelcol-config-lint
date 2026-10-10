@@ -34,5 +34,6 @@ func (r unknownField) Check(ctx *rule.Context) {
 		OnRequired:   nil,
 		OnInvalid:    nil,
 		OnDeprecated: nil,
+		OnSkipped:    nil,
 	}.WalkComponents()
 }

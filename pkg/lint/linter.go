@@ -30,7 +30,7 @@ const (
 	Valid Status = "valid"
 	// Invalid means the file was checked and found wanting.
 	Invalid Status = "invalid"
-	// Error means the file could not be read, parsed or fully checked.
+	// Error means an execution failure prevented checking the file.
 	Error Status = "error"
 	// Skipped means the file was not a config the linter handles.
 	Skipped Status = "skipped"
@@ -41,6 +41,8 @@ type Result struct {
 	Path        string           `json:"filename"`
 	Status      Status           `json:"status"`
 	Diagnostics diag.Diagnostics `json:"diagnostics,omitempty"`
+	// Coverage describes the checks that could run, independently of Status.
+	Coverage *Coverage `json:"coverage,omitempty"`
 	// Err explains Error results and may also accompany Invalid YAML syntax.
 	// Inspect Status to distinguish invalid input from an execution failure.
 	Err error `json:"-"`
@@ -308,7 +310,7 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 		})
 	}
 
-	res := Result{Path: path, Status: Valid}
+	res := Result{Path: path, Status: Valid, Coverage: l.coverage(&ruleCtx)}
 
 	for _, r := range l.rules {
 		if ctx.Err() != nil {
@@ -416,6 +418,8 @@ func (l *Linter) lintConfigMap(ctx context.Context, path string, lines []string,
 			res.Status = checked.Status
 		}
 
+		addCoverage(res, checked.Coverage, name+"/"+key.Value)
+
 		for _, d := range checked.Diagnostics {
 			if d.Position.Line > 0 {
 				d.Position.Line += block.Line
@@ -518,12 +522,13 @@ func (l *Linter) environment(path string) rule.Environment {
 
 // Summary counts results by status and diagnostics by severity.
 type Summary struct {
-	Valid    int `json:"valid"`
-	Invalid  int `json:"invalid"`
-	Errors   int `json:"errors"`
-	Skipped  int `json:"skipped"`
-	Warnings int `json:"warnings,omitempty"`
-	Infos    int `json:"infos,omitempty"`
+	Valid      int `json:"valid"`
+	Invalid    int `json:"invalid"`
+	Errors     int `json:"errors"`
+	Skipped    int `json:"skipped"`
+	Warnings   int `json:"warnings,omitempty"`
+	Infos      int `json:"infos,omitempty"`
+	Incomplete int `json:"incomplete,omitempty"`
 }
 
 // Add folds one result into the summary.
@@ -537,6 +542,10 @@ func (s *Summary) Add(r Result) {
 		s.Errors++
 	case Skipped:
 		s.Skipped++
+	}
+
+	if r.Coverage != nil && r.Coverage.Status != coverageComplete {
+		s.Incomplete++
 	}
 
 	s.Warnings += r.Diagnostics.Count(diag.Warning)
