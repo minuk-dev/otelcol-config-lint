@@ -67,7 +67,8 @@ core v0.157.0 schema, without network access. Seeds include existing config,
 settings and schema fixtures plus malformed references, nulls, extra documents,
 merges and cyclic aliases. Inputs above 128 KiB are skipped. Targets check for
 panics, repeatable acceptance and decoded values, and deterministic lint results
-with valid diagnostic positions when a line is available. Schema error text is
+with valid diagnostic positions when a line is available, including yaml.v3's
+virtual next line at EOF for syntax diagnostics. Schema error text is
 not compared because map iteration can change which invalid field is found first.
 
 Run the same bounded smoke budget as CI, or increase `-fuzztime` locally:

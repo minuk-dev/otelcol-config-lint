@@ -171,13 +171,17 @@ func FuzzLint(f *testing.F) {
 			require.GreaterOrEqual(t, d.Position.Line, 0)
 			require.GreaterOrEqual(t, d.Position.Column, 0)
 
-			if d.Position.Line > 0 {
-				require.LessOrEqual(t, d.Position.Line, lineCount)
+			if d.Rule == "yaml-syntax" {
+				// yaml.v3 can report EOF on a virtual next line, without a column.
+				require.LessOrEqual(t, d.Position.Line, lineCount+1)
 
-				// yaml.v3 syntax errors can carry a line without a column.
-				if d.Rule != "yaml-syntax" {
-					assert.Positive(t, d.Position.Column)
-				}
+				continue
+			}
+
+			require.LessOrEqual(t, d.Position.Line, lineCount)
+
+			if d.Position.Line > 0 {
+				assert.Positive(t, d.Position.Column)
 			}
 		}
 	})
