@@ -17,6 +17,10 @@ type missingMemoryLimiter struct{ rule.Base }
 
 func (r missingMemoryLimiter) Check(ctx *rule.Context) {
 	for _, p := range ctx.File.Service.Pipelines {
+		if rule.IsExpansion(p.ProcessorsNode) {
+			continue
+		}
+
 		if rule.HasProcessorType(p, rule.MemoryLimiterType) || rule.HasDynamicRefs(p.Processors) || len(p.Receivers) == 0 {
 			continue
 		}

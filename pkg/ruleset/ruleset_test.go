@@ -106,6 +106,10 @@ func TestDynamicServiceReferences(t *testing.T) {
 
 	for _, tt := range []struct{ name, from, to string }{
 		{"receiver", "receivers: [otlp]", `receivers: ["${env:RECEIVER_ID}"]`},
+		{"receiver list", "receivers: [otlp]", `receivers: ${env:RECEIVERS}`},
+		{"processor list", "processors: [memory_limiter, batch]", `processors: ${env:PROCESSORS}`},
+		{"exporter list", "exporters: [otlp]", `exporters: ${env:EXPORTERS}`},
+		{"extension list", "extensions: [zpages]", `extensions: ${env:EXTENSIONS}`},
 		{"processors", "processors: [memory_limiter, batch]", `processors: ["${env:PROCESSOR_ID}"]`},
 		{"exporter", "exporters: [otlp]", `exporters: ["${env:EXPORTER_ID}"]`},
 		{"extension", "extensions: [zpages]", `extensions: ["${env:EXTENSION_ID}"]`},
@@ -121,6 +125,36 @@ func TestDynamicServiceReferences(t *testing.T) {
 			assert.Empty(t, check(t, strings.Replace(ruletest.Clean, tt.from, tt.to, 1)))
 		})
 	}
+}
+
+func TestDynamicPipelineStructures(t *testing.T) {
+	t.Parallel()
+
+	declarations, _, found := strings.Cut(ruletest.Clean, "service:")
+	require.True(t, found)
+
+	for _, tt := range []struct{ name, service string }{
+		{"service", "service: ${env:SERVICE}"},
+		{"pipelines", "service: {extensions: [zpages], pipelines: '${env:PIPELINES}'}"},
+		{"pipeline", "service: {extensions: [zpages], pipelines: {traces: '${env:PIPELINE}'}}"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Empty(t, check(t, declarations+tt.service))
+		})
+	}
+
+	// An unresolved sibling cannot hide a missing end in a literal pipeline.
+	src := declarations + `service:
+  extensions: [zpages]
+  pipelines:
+    traces: ${env:PIPELINE}
+    traces/broken: {receivers: [otlp]}
+`
+	foundEnds := checkRule(t, "empty-pipeline", src)
+	require.Len(t, foundEnds, 1)
+	assert.Equal(t, "service.pipelines.traces/broken.exporters", foundEnds[0].Path)
 }
 
 func TestDynamicReferencesPreserveLiteralChecks(t *testing.T) {
@@ -187,6 +221,10 @@ service:
 `
 	assert.Empty(t, checkRule(t, "connector-wiring", src))
 	assert.Empty(t, checkRule(t, "unused-component", src))
+
+	wholeList := strings.Replace(src, `exporters: ["${env:ID}"]`, `exporters: "${env:EXPORTERS}"`, 1)
+	assert.Empty(t, checkRule(t, "connector-wiring", wholeList))
+	assert.Empty(t, checkRule(t, "unused-component", wholeList))
 
 	src = strings.Replace(src, `exporters: ["${env:ID}"]`, "exporters: [spanmetrics]", 1)
 	src = strings.Replace(src, "receivers: [spanmetrics]", `receivers: ["${env:ID}"]`, 1)

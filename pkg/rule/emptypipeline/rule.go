@@ -16,15 +16,19 @@ type emptyPipeline struct{ rule.Base }
 
 func (r emptyPipeline) Check(ctx *rule.Context) {
 	for _, p := range ctx.File.Service.Pipelines {
+		if rule.IsExpansion(p.Node) {
+			continue
+		}
+
 		path := "service.pipelines." + p.Key
-		if len(p.Receivers) == 0 {
+		if len(p.Receivers) == 0 && !rule.IsExpansion(p.ReceiversNode) {
 			ctx.Report(rule.Finding{
 				Node: rule.NodeOr(p.ReceiversNode, p.KeyNode), Path: path + ".receivers",
 				Message: "pipeline " + rule.Quote(p.Key) + " has no receivers",
 			})
 		}
 
-		if len(p.Exporters) == 0 {
+		if len(p.Exporters) == 0 && !rule.IsExpansion(p.ExportersNode) {
 			ctx.Report(rule.Finding{
 				Node: rule.NodeOr(p.ExportersNode, p.KeyNode), Path: path + ".exporters",
 				Message: "pipeline " + rule.Quote(p.Key) + " has no exporters",
