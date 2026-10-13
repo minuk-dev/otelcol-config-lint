@@ -1,0 +1,22 @@
+# Negative control: both tools must reject this static reference.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+    spike_limit_mib: 48
+  batch:
+    timeout: 5s
+exporters:
+  otlp_grpc:
+    endpoint: gateway.example.invalid:4317
+service:
+  pipelines:
+    traces:
+      receivers: [missing]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

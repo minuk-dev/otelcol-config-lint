@@ -1,0 +1,56 @@
+[
+  {
+    "filename": "testdata/rollout/configs/agent.yaml",
+    "status": "valid",
+    "findings": [
+      {
+        "rule": "no-persistent-queue",
+        "severity": "info",
+        "path": "exporters.otlp_grpc.sending_queue"
+      }
+    ]
+  },
+  {
+    "filename": "testdata/rollout/configs/gateway-configmap.yaml",
+    "status": "valid",
+    "findings": [
+      {
+        "rule": "no-persistent-queue",
+        "severity": "info",
+        "path": "exporters.otlp_grpc.sending_queue"
+      }
+    ]
+  },
+  {
+    "filename": "testdata/rollout/configs/invalid-reference.yaml",
+    "status": "invalid",
+    "findings": [
+      {
+        "rule": "unused-component",
+        "severity": "warning",
+        "path": "receivers.otlp"
+      },
+      {
+        "rule": "no-persistent-queue",
+        "severity": "info",
+        "path": "exporters.otlp_grpc.sending_queue"
+      },
+      {
+        "rule": "undefined-reference",
+        "severity": "error",
+        "path": "service.pipelines.traces.receivers[0]"
+      }
+    ]
+  },
+  {
+    "filename": "testdata/rollout/configs/provider.yaml",
+    "status": "valid",
+    "findings": [
+      {
+        "rule": "no-persistent-queue",
+        "severity": "info",
+        "path": "exporters.otlp_grpc.sending_queue"
+      }
+    ]
+  }
+]

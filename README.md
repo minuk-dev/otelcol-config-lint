@@ -32,6 +32,7 @@ becomes lintable as soon as its schema is committed — no linter upgrade. Point
 | [Rules](docs/rules/README.md) | all 36 rules, one page each: what they report and why |
 | [Settings file](docs/configuration.md) | `.otelcol-config-lint.yaml`, rule selection, the deployment environment |
 | [Schemas](docs/schemas.md) | the registry, caching, and generating a schema for your own distribution |
+| [Rollout validation](docs/rollout-validation.md) | pinned offline observation example, expected findings and adoption decisions |
 | [Working on the linter](docs/contributing.md) | layout, development, adding a rule |
 
 ## Install

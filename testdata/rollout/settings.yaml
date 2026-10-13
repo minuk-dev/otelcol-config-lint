@@ -1,0 +1,25 @@
+version: "1"
+run:
+  collectorVersion: v0.157.0
+  distribution: contrib
+  strict: true
+  embedded: false
+  noCache: true
+  schemaLocations:
+    - testdata/schemas/contrib/v0.157.0.json
+  kubernetes:
+    memoryRequest: 256Mi
+    memoryLimit: 256Mi
+    overrides:
+      - paths: [gateway-configmap.yaml]
+        memoryRequest: 512Mi
+        memoryLimit: 512Mi
+rules:
+  default: all
+issues:
+  minSeverity: info
+  failOn: error
+output:
+  format: json
+  verbose: true
+  color: false
