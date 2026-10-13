@@ -484,13 +484,13 @@ service:
 			want: "invalid-value",
 		},
 		{
-			name: "duration written as a bare number",
+			name: "duration written as a quoted unitless number",
 			src: `
 receivers: {otlp: }
 exporters:
   otlp:
     endpoint: backend:4317
-    timeout: 5
+    timeout: "5"
 service:
   pipelines:
     traces: {receivers: [otlp], exporters: [otlp]}

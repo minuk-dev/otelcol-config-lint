@@ -8,7 +8,7 @@ accepts.
 ## What it reports
 
 Every value the [field schema](../schemas.md#field-schemas) types that the
-config writes as something else — a nonzero duration without a unit, a string where a
+config writes as something else — a nonzero duration string without a unit, a string where a
 list belongs, an enum value that is not one of the enum's — saying what it must
 be instead.
 
@@ -18,7 +18,7 @@ be instead.
 exporters:
   otlp_grpc:
     endpoint: backend:4317
-    timeout: 5                     # a duration needs a unit, so this is not 5 seconds
+    timeout: "5"                   # a nonzero duration string needs a unit
 ```
 
 ```console
@@ -26,12 +26,13 @@ $ otelcol-config-lint run config.yaml
 config.yaml:16:14: error: "timeout" must be a duration such as 5s, 200ms or 1m30s [invalid-value]
 ```
 
-The bare `5` is the one worth having the rule for. It parses, and it is not five
-seconds.
+The quoted `"5"` is a string with no duration unit. Use `5s` for five seconds.
+An unquoted `5` is valid numeric input, but means five nanoseconds.
 
 ## Notes
 
-Durations use Go's `time.ParseDuration`, matching the Collector's decoder.
+Duration strings use Go's `time.ParseDuration`, matching the Collector's decoder.
+Numeric YAML values specify nanoseconds; fractional nanoseconds are truncated.
 Values such as `.5s`, `1.s`, `+1s`, `0`, and `1μs` are valid; values outside
 the range of `time.Duration` are reported.
 

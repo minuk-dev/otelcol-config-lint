@@ -8,7 +8,7 @@ receivers:
 
 processors:
   batch:
-    timeout: 5        # invalid-value: not a duration
+    timeout: "5"        # invalid-value: not a duration
     send_batch_siz: 1 # unknown-field
 
 exporters:

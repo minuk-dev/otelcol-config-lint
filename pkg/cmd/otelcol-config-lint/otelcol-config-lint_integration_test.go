@@ -135,6 +135,9 @@ func TestCollectorCompatibility(t *testing.T) {
 		name, distribution, rejection string
 		collectorCode, lintCode       int
 	}{
+		{name: "numeric-duration", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "fractional-duration", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "negative-numeric-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
 		{name: "provider-lists", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "provider-pipelines", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "null-defaults", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},

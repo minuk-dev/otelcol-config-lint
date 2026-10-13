@@ -13,7 +13,7 @@ processors:
 exporters:
   otlp_grpc:
     endpoint: backend:4317
-    timeout: 5 # invalid-value: a duration needs a unit, so this is not 5 seconds
+    timeout: "5" # invalid-value: a nonzero duration string needs a unit
     sending_queue:
       enabled: false
 service:
