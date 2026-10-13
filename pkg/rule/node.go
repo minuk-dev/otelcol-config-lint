@@ -169,6 +169,13 @@ func IndexPath(path string, i int) string {
 
 var expansionRE = regexp.MustCompile(`\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 
+// IsExpansion reports a scalar whose value or shape is supplied at runtime.
+func IsExpansion(n *yaml.Node) bool {
+	n = ResolveAlias(n)
+
+	return n != nil && n.Kind == yaml.ScalarNode && HasExpansion(n.Value)
+}
+
 // HasExpansion reports whether a scalar contains a confmap expansion such as
 // ${env:HOST}, whose value is unknown until the collector starts.
 func HasExpansion(s string) bool { return expansionRE.MatchString(s) }

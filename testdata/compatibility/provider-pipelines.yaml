@@ -1,0 +1,12 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
+processors:
+  batch:
+    timeout: 5s
+exporters:
+  debug: {}
+service:
+  pipelines: ${env:COMPAT_PIPELINES}

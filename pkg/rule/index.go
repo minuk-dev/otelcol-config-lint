@@ -39,7 +39,7 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 		File:       f,
 		declared:   map[config.Kind]map[config.ID]config.Component{},
 		used:       map[config.Kind]map[config.ID]bool{},
-		dynamic:    map[config.Kind]bool{config.KindExtension: HasDynamicRefs(f.Service.Extensions)},
+		dynamic:    dynamicReferences(f.Service),
 		enabled:    map[config.ID]bool{},
 		extRefs:    extensionRefs(f, sch),
 		asReceiver: map[config.ID][]config.Pipeline{},
@@ -73,8 +73,6 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 
 	for _, p := range f.Service.Pipelines {
 		for _, slot := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
-			idx.dynamic[slot] = idx.dynamic[slot] || HasDynamicRefs(p.Refs(slot))
-
 			for _, ref := range p.Refs(slot) {
 				c, ok := idx.Resolve(slot, ref.ID)
 				if !ok {
@@ -99,6 +97,25 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 	}
 
 	return idx
+}
+
+// dynamicReferences records which service slots may be supplied by providers.
+func dynamicReferences(svc *config.Service) map[config.Kind]bool {
+	pipelines := IsExpansion(svc.Node) || IsExpansion(svc.PipelinesNode)
+	dynamic := map[config.Kind]bool{
+		config.KindExtension: IsExpansion(svc.Node) || IsExpansion(svc.ExtensionsNode) || HasDynamicRefs(svc.Extensions),
+		config.KindReceiver:  pipelines, config.KindProcessor: pipelines, config.KindExporter: pipelines,
+	}
+
+	for _, p := range svc.Pipelines {
+		for slot, node := range map[config.Kind]*yaml.Node{
+			config.KindReceiver: p.ReceiversNode, config.KindProcessor: p.ProcessorsNode, config.KindExporter: p.ExportersNode,
+		} {
+			dynamic[slot] = dynamic[slot] || IsExpansion(p.Node) || IsExpansion(node) || HasDynamicRefs(p.Refs(slot))
+		}
+	}
+
+	return dynamic
 }
 
 // Declared returns the component declared under the given kind.

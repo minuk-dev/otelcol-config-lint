@@ -16,6 +16,10 @@ type serviceRequired struct{ rule.Base }
 
 func (r serviceRequired) Check(ctx *rule.Context) {
 	svc := ctx.File.Service
+	if rule.IsExpansion(svc.Node) || rule.IsExpansion(svc.PipelinesNode) {
+		return
+	}
+
 	if svc.Node == nil {
 		ctx.Report(rule.Finding{
 			Node: ctx.File.Root, Path: "service",
