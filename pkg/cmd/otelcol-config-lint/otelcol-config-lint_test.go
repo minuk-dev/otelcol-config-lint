@@ -104,9 +104,10 @@ func TestValidDirectoryPasses(t *testing.T) {
 		t.Fatalf("exit %d, stdout=%q stderr=%q", code, out, errOut)
 	}
 
-	if out != "" {
-		t.Errorf("a clean run should print nothing, got %q", out)
-	}
+	assert.Contains(t, out, "agent.yaml: validation coverage partial")
+	assert.Contains(t, out, "2 runtime value(s)")
+	assert.Equal(t, 1, strings.Count(out, "validation coverage"), "group repeated gaps once per file")
+	assert.NotContains(t, out, "error:")
 }
 
 func TestDynamicReferencesKeepLiteralFailures(t *testing.T) {
@@ -1021,9 +1022,8 @@ func TestAnEmptySettingsFileKeepsTheDefaults(t *testing.T) {
 		t.Fatalf("exit %d, stdout=%q stderr=%q", code, out, errOut)
 	}
 
-	if out != "" {
-		t.Errorf("the default text output should stay in force, got %q", out)
-	}
+	assert.Contains(t, out, "agent.yaml: validation coverage partial")
+	assert.NotContains(t, out, `"files":`, "the default output stays text")
 }
 
 // TestOptionsFsRunsEntirelyInMemory pins that Options.Fs governs every file the

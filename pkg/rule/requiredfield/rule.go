@@ -28,5 +28,6 @@ func (r requiredField) Check(ctx *rule.Context) {
 		OnUnknown:    nil,
 		OnInvalid:    nil,
 		OnDeprecated: nil,
+		OnSkipped:    nil,
 	}.WalkComponents()
 }
