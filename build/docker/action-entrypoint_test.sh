@@ -57,7 +57,8 @@ for flag in strict embedded ignore-missing-schemas verbose exit-on-error \
       setting='output: {verbose: VALUE}'
       files=(testdata/valid/agent.yaml)
       when_first='.files | length == 1'
-      when_second='.files | length == 0'
+      # Parsed passing files carry coverage even without verbose output.
+      when_second="${when_first}"
       ;;
     exit-on-error)
       setting='issues: {exitOnError: VALUE}'
@@ -129,7 +130,7 @@ for flag in strict embedded ignore-missing-schemas verbose exit-on-error \
       fi
 
       cli_code=0
-      otelcol-config-lint "${cli[@]}" "${files[@]}" >"${work}/cli.json" || cli_code=$?
+      otelcol-config-lint "${cli[@]}" "${files[@]}" >"${work}/cli.json" 2>"${work}/cli.stderr" || cli_code=$?
       test "${cli_code}" -le 1
       predicate="${when_first}"
       if [ "${effective}" = "${policies[1]}" ]; then
@@ -137,12 +138,21 @@ for flag in strict embedded ignore-missing-schemas verbose exit-on-error \
       fi
       jq -e "${predicate}" "${work}/cli.json" >/dev/null
 
+      if [ "${flag}" = verbose ]; then
+        if [ "${effective}" = true ]; then
+          grep -Fq "settings read from ${work}/policy.yaml" "${work}/cli.stderr"
+        else
+          test ! -s "${work}/cli.stderr"
+        fi
+      fi
+
       action_code=0
       : >"${work}/outputs"
       GITHUB_OUTPUT="${work}/outputs" bash build/docker/action-entrypoint.sh \
-        "${action[@]}" >"${work}/action.json" || action_code=$?
+        "${action[@]}" >"${work}/action.json" 2>"${work}/action.stderr" || action_code=$?
       test "${action_code}" -eq "${cli_code}"
       diff -u "${work}/cli.json" "${work}/action.json"
+      diff -u "${work}/cli.stderr" "${work}/action.stderr"
       grep -Fqx "exit-code=${cli_code}" "${work}/outputs"
     done
   done
