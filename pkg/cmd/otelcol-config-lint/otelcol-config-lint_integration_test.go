@@ -72,10 +72,11 @@ func TestDynamicServiceReferencesCollectorCompatibility(t *testing.T) {
 			t.Log("explained difference: static linting does not resolve environment provider references")
 			code, stdout, stderr := lint(t, dynamic,
 				"--no-config", "--collector-version", version, "--distribution", distribution,
-				"--min-severity", "warning", "-")
+				"--min-severity", "warning", "--output", "json", "-")
 			t.Logf("linter: exit=%d\n%s\n%s", code, stdout, stderr)
 			assert.Equal(t, 0, code, "%s\n%s", stdout, stderr)
-			assert.Empty(t, stdout)
+			assert.Empty(t, findings(t, stdout)["stdin"])
+			assert.Contains(t, stdout, `"status": "partial"`)
 			assert.Empty(t, stderr)
 		})
 	}
@@ -142,6 +143,7 @@ func TestCollectorCompatibility(t *testing.T) {
 		{name: "undefined-reference", distribution: "", rejection: "missing", collectorCode: 1, lintCode: 1},
 		{name: "reference-shape", distribution: "", rejection: "receivers", collectorCode: 1, lintCode: 1},
 		{name: "invalid-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
+		{name: "escaped-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
 		{name: "invalid-verbosity", distribution: "", rejection: "verbosity", collectorCode: 1, lintCode: 1},
 		{name: "prometheus-custom-config", distribution: "contrib", rejection: "", collectorCode: 0, lintCode: 0},
 	} {

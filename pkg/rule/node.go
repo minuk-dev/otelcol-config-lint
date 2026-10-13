@@ -167,16 +167,31 @@ func IndexPath(path string, i int) string {
 	return path + "[" + Itoa(i) + "]"
 }
 
-var expansionRE = regexp.MustCompile(`\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
+var expansionRE = regexp.MustCompile(`\$\$|\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 
 // HasExpansion reports whether a scalar contains a confmap expansion such as
-// ${env:HOST}, whose value is unknown until the collector starts.
-func HasExpansion(s string) bool { return expansionRE.MatchString(s) }
+// ${env:HOST}, whose value is unknown until the collector starts. Dollar pairs
+// escape an expansion and must be consumed before matching its opening dollar.
+func HasExpansion(s string) bool {
+	for _, match := range expansionRE.FindAllString(s, -1) {
+		if match != "$$" {
+			return true
+		}
+	}
+
+	return false
+}
 
 // MaskExpansions replaces every confmap expansion in a value with mask, so text
 // carrying one can be taken apart by something that cannot see past it. The
 // mask stands for a value nobody knows yet rather than for nothing, which is
 // what lets the caller tell "the port is an expansion" from "there is no port".
 func MaskExpansions(value, mask string) string {
-	return expansionRE.ReplaceAllString(value, mask)
+	return expansionRE.ReplaceAllStringFunc(value, func(match string) string {
+		if match == "$$" {
+			return match
+		}
+
+		return mask
+	})
 }
