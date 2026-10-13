@@ -72,10 +72,11 @@ func TestDynamicServiceReferencesCollectorCompatibility(t *testing.T) {
 			t.Log("explained difference: static linting does not resolve environment provider references")
 			code, stdout, stderr := lint(t, dynamic,
 				"--no-config", "--collector-version", version, "--distribution", distribution,
-				"--min-severity", "warning", "-")
+				"--min-severity", "warning", "--output", "json", "-")
 			t.Logf("linter: exit=%d\n%s\n%s", code, stdout, stderr)
 			assert.Equal(t, 0, code, "%s\n%s", stdout, stderr)
-			assert.Empty(t, stdout)
+			assert.Empty(t, findings(t, stdout)["stdin"])
+			assert.Contains(t, stdout, `"status": "partial"`)
 			assert.Empty(t, stderr)
 		})
 	}
@@ -138,6 +139,8 @@ func TestCollectorCompatibility(t *testing.T) {
 		{name: "named-identifiers", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "custom-verbosity", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "environment-endpoint", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "invalid-yaml-tag", distribution: "", rejection: "cannot resolve the configuration", collectorCode: 1, lintCode: 1},
+		{name: "invalid-yaml-merge", distribution: "", rejection: "cannot resolve the configuration", collectorCode: 1, lintCode: 1},
 		{name: "invalid-identifier", distribution: "", rejection: "part after /", collectorCode: 1, lintCode: 1},
 		{name: "undefined-reference", distribution: "", rejection: "missing", collectorCode: 1, lintCode: 1},
 		{name: "reference-shape", distribution: "", rejection: "receivers", collectorCode: 1, lintCode: 1},

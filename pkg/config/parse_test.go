@@ -300,3 +300,45 @@ func TestParseIDTrimsEachPart(t *testing.T) {
 	assert.Equal(t, config.ID{Type: "otlp", Name: "internal"}, config.ParseID(" otlp / internal "))
 	assert.Equal(t, config.ID{Type: "otlp"}, config.ParseID(" otlp "))
 }
+
+func TestExplicitScalarTags(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, value string
+		valid       bool
+	}{
+		{name: "invalid int", value: "!!int banana", valid: false},
+		{name: "invalid bool", value: "!!bool banana", valid: false},
+		{name: "invalid float", value: "!!float banana", valid: false},
+		{name: "invalid binary", value: "!!binary '%not-base64'", valid: false},
+		{name: "invalid timestamp", value: "!!timestamp banana", valid: false},
+		{name: "valid int", value: "!!int 0x10", valid: true},
+		{name: "valid bool", value: "!!bool true", valid: true},
+		{name: "valid float", value: "!!float 1.5", valid: true},
+		{name: "valid binary", value: "!!binary YQ==", valid: true},
+		{name: "quoted string", value: "!!str banana", valid: true},
+		{name: "custom tag", value: "!custom banana", valid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := config.Parse("tag.yaml", []byte("value: "+tt.value+"\n"))
+			if tt.valid {
+				require.NoError(t, err)
+				require.NotNil(t, f)
+
+				return
+			}
+
+			var syn *config.SyntaxError
+
+			require.ErrorAs(t, err, &syn)
+			assert.Nil(t, f)
+			assert.Equal(t, "tag.yaml", syn.Path)
+			assert.Equal(t, 1, syn.Line)
+			assert.Equal(t, 8, syn.Column)
+			assert.Equal(t, "yaml-syntax", syn.Diagnostic().Rule)
+		})
+	}
+}

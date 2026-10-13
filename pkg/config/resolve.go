@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -9,7 +10,7 @@ import (
 // maxExpandedNodes bounds downstream tree walks, including repeated aliases.
 const maxExpandedNodes = 100_000
 
-// expandedSize counts the tree before alias sharing and merge deduplication.
+// expandedSize validates nodes and counts the tree before alias sharing and merge deduplication.
 // Memoized subtree sizes bound this check to the written graph's size; -1 marks
 // an unfinished subtree so cycles are rejected at the alias that closes them.
 func expandedSize(path string, n *yaml.Node, sizes map[*yaml.Node]int) (int, error) {
@@ -48,9 +49,65 @@ func expandedSize(path string, n *yaml.Node, sizes map[*yaml.Node]int) (int, err
 		}
 	}
 
+	err := validateNode(path, n)
+	if err != nil {
+		return 0, err
+	}
+
 	sizes[n] = size
 
 	return size, nil
+}
+
+// validateNode checks decode constraints without materializing aliases or rejecting duplicate keys.
+func validateNode(path string, n *yaml.Node) error {
+	switch n.Kind {
+	case yaml.ScalarNode:
+		if n.Style&yaml.TaggedStyle == 0 {
+			return nil
+		}
+
+		var value any
+
+		err := n.Decode(&value)
+		if err != nil {
+			return &SyntaxError{Path: path, Line: n.Line, Column: n.Column,
+				Msg: strings.TrimPrefix(err.Error(), "yaml: ")}
+		}
+	case yaml.MappingNode:
+		for _, e := range entries(n, "") {
+			if e.KeyNode.Tag != MergeTag {
+				continue
+			}
+
+			value := aliasTarget(e.Node)
+
+			sources := []*yaml.Node{value}
+			if value.Kind == yaml.SequenceNode {
+				sources = value.Content
+			}
+
+			for _, source := range sources {
+				if aliasTarget(source).Kind != yaml.MappingNode {
+					return &SyntaxError{Path: path, Line: e.Node.Line, Column: e.Node.Column,
+						Msg: "map merge requires map or sequence of maps as the value"}
+				}
+			}
+		}
+	default:
+		// Aliases and containers are checked through their children.
+	}
+
+	return nil
+}
+
+// aliasTarget is called only after expandedSize has rejected cycles.
+func aliasTarget(n *yaml.Node) *yaml.Node {
+	for n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+
+	return n
 }
 
 // MergeTag is the tag yaml.v3 gives the YAML merge key, "<<". The tag rather
@@ -152,38 +209,18 @@ func (r *resolver) mapping(n *yaml.Node) {
 
 // mergeSources returns the mappings an entry merges in, and whether the entry
 // is a merge at all.
-//
-// A merge whose value is neither a mapping nor a list of them is not one the
-// collector can load -- yaml.v3 fails the decode outright -- so it is left in
-// place as the key it was written as, where the rules can say something about
-// it rather than the linter quietly dropping it.
+// The preflight has already checked that every source is a mapping.
 func (r *resolver) mergeSources(k, v *yaml.Node) ([]*yaml.Node, bool) {
 	if k.Tag != MergeTag {
 		return nil, false
 	}
 
 	val := r.value(v)
-
-	switch {
-	case val == nil:
-		return nil, false
-	case val.Kind == yaml.MappingNode:
+	if val.Kind == yaml.MappingNode {
 		return []*yaml.Node{val}, true
-	case val.Kind != yaml.SequenceNode:
-		return nil, false
 	}
 
-	out := make([]*yaml.Node, 0, len(val.Content))
-
-	for _, item := range val.Content {
-		if item.Kind != yaml.MappingNode {
-			return nil, false
-		}
-
-		out = append(out, item)
-	}
-
-	return out, true
+	return val.Content, true
 }
 
 // mergedEntries returns the key/value pairs the merges supply that the mapping
