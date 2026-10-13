@@ -77,3 +77,55 @@ func TestValidReferenceListItems(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, found)
 }
+
+func TestTelemetryMappings(t *testing.T) {
+	t.Parallel()
+
+	for _, block := range []string{"telemetry", "logs", "metrics", "traces"} {
+		for _, tt := range []struct {
+			name, value string
+			valid       bool
+		}{
+			{name: "scalar", value: "nonsense", valid: false},
+			{name: "number", value: "42", valid: false},
+			{name: "list", value: "[{}]", valid: false},
+			{name: "empty list", value: "[]", valid: false},
+			{name: "mapping", value: "{}", valid: true},
+			{name: "null", value: "null", valid: true},
+			{name: "empty", value: "", valid: true},
+			{name: "provider", value: "${env:TELEMETRY}", valid: true},
+			{name: "aliased scalar", value: "*scalar", valid: false},
+			{name: "aliased mapping", value: "*mapping", valid: true},
+		} {
+			t.Run(block+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				path := "service.telemetry"
+				prefix := "service:\n  telemetry: "
+
+				if block != "telemetry" {
+					path += "." + block
+					prefix = "service:\n  telemetry:\n    " + block + ": "
+				}
+
+				src := "scalar: &scalar nonsense\nmapping: &mapping {}\n" + prefix + tt.value + "\n"
+				found, err := ruletest.Run(wrongnodetype.New(), src)
+				require.NoError(t, err)
+
+				if tt.valid {
+					assert.Empty(t, found)
+
+					return
+				}
+
+				require.Len(t, found, 1)
+				assert.Equal(t, "wrong-node-type", found[0].Rule)
+				assert.Equal(t, diag.Error, found[0].Severity)
+				assert.Equal(t, path, found[0].Path)
+				assert.Contains(t, found[0].Message, "must be a mapping")
+				assert.Positive(t, found[0].Position.Line)
+				assert.Positive(t, found[0].Position.Column)
+			})
+		}
+	}
+}

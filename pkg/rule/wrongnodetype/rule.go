@@ -21,6 +21,7 @@ type wrongNodeType struct{ rule.Base }
 func (r wrongNodeType) Check(ctx *rule.Context) {
 	r.checkSections(ctx)
 	r.checkService(ctx)
+	r.checkTelemetry(ctx)
 }
 
 // checkSections reports a component section written as anything but a mapping
@@ -93,4 +94,30 @@ func (r wrongNodeType) checkReferenceItems(ctx *rule.Context, n *yaml.Node, path
 			Message: "component reference must be a scalar, got " + rule.NodeKind(item),
 		})
 	}
+}
+
+func (r wrongNodeType) checkTelemetry(ctx *rule.Context) {
+	tel := ctx.File.Service.Telemetry
+	r.checkMapping(ctx, tel.Node, "service.telemetry")
+
+	for _, signal := range []*config.TelemetrySignal{tel.Logs, tel.Metrics, tel.Traces} {
+		if signal != nil {
+			r.checkMapping(ctx, signal.Node, "service.telemetry."+signal.Key)
+		}
+	}
+}
+
+func (r wrongNodeType) checkMapping(ctx *rule.Context, node *yaml.Node, path string) {
+	if rule.IsNull(node) || node.Kind == yaml.MappingNode {
+		return
+	}
+
+	if node.Kind == yaml.ScalarNode && rule.HasExpansion(node.Value) {
+		return
+	}
+
+	ctx.Report(rule.Finding{
+		Node: node, Path: path,
+		Message: path + " must be a mapping, got " + rule.NodeKind(node),
+	})
 }

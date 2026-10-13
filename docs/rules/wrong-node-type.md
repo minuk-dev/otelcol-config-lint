@@ -14,11 +14,13 @@ including items supplied by YAML aliases.
 | --- | --- |
 | `receivers`, `processors`, `exporters`, `connectors`, `extensions` | a mapping |
 | `service.extensions` | a list |
+| `service.telemetry` and its `logs`, `metrics`, `traces` blocks | a mapping |
 | a pipeline's `receivers`, `processors`, `exporters` | a list |
 | each item in those service reference lists | a scalar component id |
 
 A null node — a key written with nothing under it — is not reported: that is how
-a component with no settings is declared.
+a component with no settings is declared. Telemetry blocks supplied by provider
+expansions are left unresolved, since their shape is only known at startup.
 
 ## Example
 
