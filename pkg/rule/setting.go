@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"math"
 	"strconv"
 	"time"
 
@@ -8,6 +9,8 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
+
+const intTag = "!!int"
 
 // Setting is one value read out of a component's settings block, for the rules
 // that compare one setting against another rather than against a schema.
@@ -58,7 +61,7 @@ func ReadInt(node *yaml.Node) Setting {
 }
 
 // ReadDuration reads a duration setting, holding it in nanoseconds.
-// Null is a known zero as it is in ReadInt.
+// Numbers are nanoseconds (fractional values truncate), and null is a known zero.
 func ReadDuration(node *yaml.Node) Setting {
 	if node == nil {
 		return Absent()
@@ -66,6 +69,23 @@ func ReadDuration(node *yaml.Node) Setting {
 
 	out := Setting{Node: node, Present: true, Known: IsNull(node), Num: 0}
 	if out.Known || node.Kind != yaml.ScalarNode || HasExpansion(node.Value) {
+		return out
+	}
+
+	switch node.Tag {
+	case intTag:
+		out.Known = node.Decode(&out.Num) == nil
+
+		return out
+	case "!!float":
+		var num float64
+
+		// The upper bound is exclusive: float64 rounds MaxInt64 up to 2^63.
+		err := node.Decode(&num)
+		if err == nil && num >= math.MinInt64 && num < math.MaxInt64 {
+			out.Known, out.Num = true, int64(num)
+		}
+
 		return out
 	}
 

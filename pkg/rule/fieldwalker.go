@@ -228,9 +228,9 @@ func matchesType(field *schema.Field, node *yaml.Node) bool {
 	case "bool":
 		return node.Tag == BoolTag
 	case "int":
-		return node.Tag == "!!int"
+		return node.Tag == intTag
 	case "float":
-		return node.Tag == "!!float" || node.Tag == "!!int"
+		return node.Tag == "!!float" || node.Tag == intTag
 	case "duration":
 		return ReadDuration(node).Known
 	default:

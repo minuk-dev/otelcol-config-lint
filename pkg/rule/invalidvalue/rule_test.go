@@ -93,7 +93,7 @@ func TestDurationValidation(t *testing.T) {
 		{name: "hours overflow", value: "'9223372036854775808h'", invalid: true},
 		{name: "compound overflow", value: "'9223372036854775807ns1ns'", invalid: true},
 		{name: "missing unit", value: "'5'", invalid: true},
-		{name: "bare number", value: "5", invalid: true},
+		{name: "bare number", value: "5", invalid: false},
 		{name: "empty string", value: "''", invalid: true},
 		{name: "unsupported unit", value: "'1d'", invalid: true},
 		{name: "whitespace", value: "' 1s'", invalid: true},
