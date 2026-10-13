@@ -81,6 +81,10 @@ resolves to: a rule that will not run is listed at severity `off`.
 
 See [the rule reference](rules/README.md) for what each one does.
 
+Before choosing deployment blockers, use the [rollout validation
+example](rollout-validation.md) to record findings and compare them with the
+actual Collector on a sanitized representative corpus.
+
 ## Per-rule settings
 
 `rules.settings` is where a rule's own knobs go, keyed by rule name, the way

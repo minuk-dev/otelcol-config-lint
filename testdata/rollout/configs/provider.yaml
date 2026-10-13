@@ -1,0 +1,23 @@
+# Synthetic environment provider; memory request/limit: 256Mi/256Mi.
+# ROLLOUT_ENDPOINT=127.0.0.1:4317; ROLLOUT_RECEIVER=otlp for validation.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: ${env:ROLLOUT_ENDPOINT}
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+    spike_limit_mib: 48
+  batch:
+    timeout: 5s
+exporters:
+  otlp_grpc:
+    endpoint: gateway.example.invalid:4317
+service:
+  pipelines:
+    traces:
+      receivers: ["${env:ROLLOUT_RECEIVER}"]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc]

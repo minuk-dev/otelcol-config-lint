@@ -1,0 +1,28 @@
+# Synthetic gateway; memory request/limit: 512Mi/512Mi.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rollout-gateway
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 127.0.0.1:4317
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 384
+        spike_limit_mib: 96
+      batch:
+        timeout: 5s
+    exporters:
+      otlp_grpc:
+        endpoint: backend.example.invalid:4317
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp_grpc]

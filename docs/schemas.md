@@ -38,6 +38,10 @@ to run without network access, point at a checkout:
 otelcol-config-lint run --schema-location ../otelcol-config-schemas config.yaml
 ```
 
+The [rollout validation example](rollout-validation.md) pins an existing
+vendored schema with its SHA-256 checksum and records expected verdicts alongside
+the linter and Collector versions.
+
 A location is one of:
 
 - a registry directory or URL — one holding `index.json`, laid out as
