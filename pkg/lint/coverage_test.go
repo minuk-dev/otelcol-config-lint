@@ -53,6 +53,13 @@ func TestCoverage(t *testing.T) {
 		{name: "runtime scalar", fields: &schema.Field{Type: "int"}, src: "${env:PORT}",
 			status: lint.Valid, missing: false,
 			skipped: []lint.CoverageSkip{{Path: "receivers.custom", Reason: "runtime_value", Block: ""}}},
+		{name: "escaped scalar", fields: &schema.Field{Type: "int"}, src: "$${env:PORT}",
+			status: lint.Invalid, missing: false, skipped: nil},
+		{name: "escaped string", fields: &schema.Field{Type: "string"}, src: "$${env:PORT}",
+			status: lint.Valid, missing: false, skipped: nil},
+		{name: "escaped and runtime scalar", fields: &schema.Field{Type: "int"}, src: "$${env:PORT}${env:SUFFIX}",
+			status: lint.Valid, missing: false,
+			skipped: []lint.CoverageSkip{{Path: "receivers.custom", Reason: "runtime_value", Block: ""}}},
 		{name: "runtime subtree", fields: &schema.Field{Type: "map"}, src: "${file:secret.yaml}",
 			status: lint.Valid, missing: false,
 			skipped: []lint.CoverageSkip{

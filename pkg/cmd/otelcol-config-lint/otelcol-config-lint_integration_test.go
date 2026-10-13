@@ -153,6 +153,7 @@ func TestCollectorCompatibility(t *testing.T) {
 		{name: "undefined-reference", distribution: "", rejection: "missing", collectorCode: 1, lintCode: 1},
 		{name: "reference-shape", distribution: "", rejection: "receivers", collectorCode: 1, lintCode: 1},
 		{name: "invalid-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
+		{name: "escaped-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
 		{name: "invalid-verbosity", distribution: "", rejection: "verbosity", collectorCode: 1, lintCode: 1},
 		{name: "prometheus-custom-config", distribution: "contrib", rejection: "", collectorCode: 0, lintCode: 0},
 	} {

@@ -102,6 +102,9 @@ func TestDurationValidation(t *testing.T) {
 		{name: "environment expansion", value: "'${env:TIMEOUT}'", invalid: false},
 		{name: "short environment expansion", value: "'$TIMEOUT'", invalid: false},
 		{name: "embedded expansion", value: "'${env:SECONDS}s'", invalid: false},
+		{name: "escaped environment expansion", value: "'$${env:TIMEOUT}'", invalid: true},
+		{name: "escaped short expansion", value: "'$$TIMEOUT'", invalid: true},
+		{name: "escaped and real expansion", value: "'$${env:TIMEOUT}${env:SUFFIX}'", invalid: false},
 	}
 
 	for _, tt := range tests {
