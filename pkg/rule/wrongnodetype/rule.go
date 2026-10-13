@@ -44,7 +44,8 @@ func (r wrongNodeType) checkSections(ctx *rule.Context) {
 // else: the extensions it enables, and the three slots of every pipeline.
 func (r wrongNodeType) checkService(ctx *rule.Context) {
 	svc := ctx.File.Service
-	if svc.ExtensionsNode != nil && !rule.IsNull(svc.ExtensionsNode) && svc.ExtensionsNode.Kind != yaml.SequenceNode {
+	if !rule.IsNull(svc.ExtensionsNode) && !rule.IsExpansion(svc.ExtensionsNode) &&
+		svc.ExtensionsNode.Kind != yaml.SequenceNode {
 		ctx.Report(rule.Finding{
 			Node: svc.ExtensionsNode, Path: "service.extensions",
 			Message: "service.extensions must be a list, got " + rule.NodeKind(svc.ExtensionsNode),
@@ -65,7 +66,7 @@ func (r wrongNodeType) checkService(ctx *rule.Context) {
 			path := "service.pipelines." + p.Key + "." + slot.name
 			r.checkReferenceItems(ctx, slot.node, path)
 
-			if slot.node == nil || rule.IsNull(slot.node) || slot.node.Kind == yaml.SequenceNode {
+			if rule.IsNull(slot.node) || rule.IsExpansion(slot.node) || slot.node.Kind == yaml.SequenceNode {
 				continue
 			}
 

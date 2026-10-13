@@ -138,6 +138,8 @@ func TestCollectorCompatibility(t *testing.T) {
 		{name: "numeric-duration", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "fractional-duration", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "negative-numeric-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
+		{name: "provider-lists", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "provider-pipelines", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "null-defaults", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "named-identifiers", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "custom-verbosity", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
@@ -169,7 +171,11 @@ func TestCollectorCompatibility(t *testing.T) {
 			//nolint:gosec // the developer selects the Collector binary for this integration test
 			cmd := exec.CommandContext(ctx, binary, "validate", "--config", path)
 			cmd.Dir = t.TempDir()
-			cmd.Env = []string{"COMPAT_ENDPOINT=127.0.0.1:4317"}
+			cmd.Env = []string{
+				"COMPAT_ENDPOINT=127.0.0.1:4317", "COMPAT_RECEIVERS=[otlp]", "COMPAT_PROCESSORS=[batch]",
+				"COMPAT_EXPORTERS=[debug]", "COMPAT_EXTENSIONS=[zpages]",
+				"COMPAT_PIPELINES={traces: {receivers: [otlp], processors: [batch], exporters: [debug]}}",
+			}
 			output, err := cmd.CombinedOutput()
 			t.Logf("Collector environment=%v validate: err=%v\n%s", cmd.Env, err, output)
 			require.NoError(t, ctx.Err(), "collector validation timed out")
@@ -191,6 +197,11 @@ func TestCollectorCompatibility(t *testing.T) {
 
 			if tt.rejection != "" {
 				assert.Contains(t, string(output), tt.rejection)
+			}
+
+			if strings.HasPrefix(tt.name, "provider-") {
+				assert.Contains(t, stdout, `"status": "partial"`)
+				assert.Contains(t, stdout, `"reason": "runtime_value"`)
 			}
 
 			if tt.name == "null-defaults" {
