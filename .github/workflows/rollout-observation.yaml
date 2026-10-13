@@ -1,0 +1,59 @@
+name: rollout observation
+
+# Observation only; do not make this a required deployment check.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout corpus and policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Checkout pinned candidate linter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 31b4bfaa52710d7fa0b25f37f1698e42d103f9e3
+          path: .rollout-linter
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: 1.25.4
+      - name: Build pinned candidate
+        working-directory: .rollout-linter
+        run: go build -trimpath -o "$RUNNER_TEMP/rollout-linter" ./cmd/otelcol-config-lint
+      - name: Download and verify pinned Collector
+        run: |
+          cd "$RUNNER_TEMP"
+          archive=otelcol-contrib_0.157.0_linux_amd64.tar.gz
+          curl --fail --location --retry 3 \
+            "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.157.0/$archive" \
+            --output "$archive"
+          echo "d33177515a244a2393f03ffd66ab3e68a8fc11a56bc145ec4d0ca2644ee95504  $archive" | sha256sum --check -
+          tar -xzf "$archive" otelcol-contrib
+      - name: Compare findings and Collector validation
+        env:
+          LINTER: ${{ runner.temp }}/rollout-linter
+          COLLECTOR: ${{ runner.temp }}/otelcol-contrib
+          ROLLOUT_REPORT_DIR: ${{ runner.temp }}/rollout-report
+        run: bash testdata/rollout/check.sh 2>&1 | tee "$RUNNER_TEMP/rollout-validation.log"
+      - name: Retain observation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rollout-observation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/rollout-report/
+            ${{ runner.temp }}/rollout-validation.log
+          if-no-files-found: warn
+          retention-days: 30

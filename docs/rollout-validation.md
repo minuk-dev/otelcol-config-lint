@@ -11,7 +11,7 @@ approve a release and blocking policy before completing that issue.
 | Input | Pin used in this record |
 | --- | --- |
 | Published linter baseline | `v0.1.0`, source commit `a4f6cb28985ecb0601587d921dd7d5e5a143f2ce` |
-| Candidate linter | `ca70f938a6e5c549d97bba004c4fba8703d6569c` (unreleased source snapshot) |
+| Candidate linter | `31b4bfaa52710d7fa0b25f37f1698e42d103f9e3` (unreleased source snapshot) |
 | Collector | Official `otelcol-contrib v0.157.0` |
 | Offline schema | `testdata/schemas/contrib/v0.157.0.json` from the candidate commit |
 | Schema SHA-256 | `169c93378297fec8bf1d1cc0d54aa6ad029835228e5bb7e96796d89cd40454db` |
@@ -61,7 +61,7 @@ keeping this checkout's corpus and policy in place:
 
 ```sh
 source_dir=$(mktemp -d)
-git worktree add --detach "$source_dir" ca70f938a6e5c549d97bba004c4fba8703d6569c
+git worktree add --detach "$source_dir" 31b4bfaa52710d7fa0b25f37f1698e42d103f9e3
 (cd "$source_dir" && go build -trimpath -o /tmp/rollout-linter ./cmd/otelcol-config-lint)
 export LINTER=/tmp/rollout-linter
 ```
@@ -95,6 +95,48 @@ fails the expectation diff. Plain configs and ConfigMaps run separately because
 `--embedded` skips plain configs. Its literal-block extraction is specific to
 this single ConfigMap fixture; extract each data key properly for a real corpus.
 
+To keep raw findings and Collector logs, set `ROLLOUT_REPORT_DIR` to a new
+directory before running `check.sh`. Its parent must exist; the script refuses
+an existing directory to avoid overwriting earlier evidence. Without the variable,
+the script keeps its original temporary-directory cleanup behavior.
+
+```sh
+report_parent=$(mktemp -d)
+ROLLOUT_REPORT_DIR="$report_parent/evidence" bash testdata/rollout/check.sh \
+  > "$report_parent/validation.log" 2>&1
+```
+
+The report includes the corpus revision and working-tree status, binary versions,
+SHA-256 hashes of both binaries and all validation inputs, raw lint JSON,
+normalized findings, expected/actual exit codes, the extracted gateway config,
+and Collector output for accepted and rejected cases. An empty Collector log means `validate` emitted
+nothing; the script still asserts its exit code. Keep `validation.log` alongside
+the report, especially on failure: a partial report is not a successful run.
+
+### Manual GitHub Actions observation
+
+The committed [rollout observation workflow](../.github/workflows/rollout-observation.yaml)
+runs this same CLI example with a fixed candidate source commit, Go `1.25.4`,
+Collector `v0.157.0` with a pinned Linux archive checksum, and the offline schema.
+Supporting Actions use full commit pins. This builds the candidate CLI directly;
+the published baseline Action still has the release prerequisites described above.
+The workflow has only a `workflow_dispatch` trigger and read-only permissions.
+After it reaches the default branch, select **Actions → rollout observation →
+Run workflow** and select the reviewed corpus revision. The downloaded artifact
+is named `rollout-observation-<corpus commit>` and retained for 30 days, including
+partial evidence from failed checks. Archive it longer before the retention
+period expires if it is used for an adoption decision.
+
+The workflow fails on unexpected findings or validation errors, while the
+intentional invalid-reference and memory-policy controls must return their
+expected nonzero codes. It uses no `continue-on-error`; observation means this
+job is optional and independent of deployment, not that failures disappear.
+Binary acquisition and Go dependency downloads need network access; the checks
+themselves use the vendored schema. Record both the workflow/corpus commit and
+candidate commit when comparing runs, and review expectations after changing pins.
+
+### Published baseline comparison
+
 For the published baseline comparison, build/install the pinned release and run
 the plain cases without candidate-only settings:
 
@@ -112,8 +154,9 @@ GOBIN="$baseline_dir" go install github.com/minuk-dev/otelcol-config-lint/cmd/ot
 
 ## Validation record and exception decisions
 
-Local observation on **2026-10-13**, macOS/arm64: `check.sh` passed against the
-candidate and official contrib Collector above. Archive SHA-256:
+Original observation on **2026-10-13**, macOS/arm64: `check.sh` passed against
+candidate `ca70f938a6e5c549d97bba004c4fba8703d6569c` and official contrib Collector
+above. Archive SHA-256:
 `6c03308935573712a795b4229f756bc4288bbbb13850604f3c7287868af84d4b`;
 extracted Collector SHA-256:
 `5caadd3c5f99484b70c2cc204422956942ea8151d6ad1baf5f226b10332b2f19`.
@@ -121,6 +164,14 @@ The baseline comparison was also run from archived `v0.1.0` source at the commit
 above: agent passed; static invalid reference and the valid provider case failed.
 This records configuration validation, not successful startup, delivery,
 resource behavior under load, or a production false-positive rate.
+
+On **2026-10-14**, the same corpus and expectations passed locally on macOS/arm64
+with candidate `31b4bfaa52710d7fa0b25f37f1698e42d103f9e3` and the same Collector
+binary. The report-preserving mode retained raw JSON, Collector logs, input
+checksums and exit-code evidence. The workflow passed `actionlint` and the runner
+passed `shellcheck` and `bash -n`; the manual workflow has not yet run on GitHub.
+This updates the candidate pin without changing the observation policy or
+approving any production exception.
 
 | Finding or disagreement | Decision for this observation |
 | --- | --- |
