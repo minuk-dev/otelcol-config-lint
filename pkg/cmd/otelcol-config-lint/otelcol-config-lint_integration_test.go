@@ -144,6 +144,8 @@ func TestCollectorCompatibility(t *testing.T) {
 		{name: "named-identifiers", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "custom-verbosity", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "environment-endpoint", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "invalid-yaml-tag", distribution: "", rejection: "cannot resolve the configuration", collectorCode: 1, lintCode: 1},
+		{name: "invalid-yaml-merge", distribution: "", rejection: "cannot resolve the configuration", collectorCode: 1, lintCode: 1},
 		{name: "invalid-identifier", distribution: "", rejection: "part after /", collectorCode: 1, lintCode: 1},
 		{name: "undefined-reference", distribution: "", rejection: "missing", collectorCode: 1, lintCode: 1},
 		{name: "reference-shape", distribution: "", rejection: "receivers", collectorCode: 1, lintCode: 1},

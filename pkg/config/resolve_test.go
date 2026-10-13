@@ -179,15 +179,34 @@ func TestAQuotedMergeKeyIsAKeyOfItsOwn(t *testing.T) {
 		"a quoted key is not a merge key")
 }
 
-// TestAMergeOfSomethingThatIsNotAMappingIsLeftAlone pins the one merge the
-// collector cannot load either: yaml.v3 fails the decode outright, so dropping
-// the key quietly would leave nothing for a rule to report.
-func TestAMergeOfSomethingThatIsNotAMappingIsLeftAlone(t *testing.T) {
+func TestInvalidMergeOperandsAreRejected(t *testing.T) {
 	t.Parallel()
 
-	f := parse(t, "processors:\n  batch:\n    <<: hello\n")
+	for _, tt := range []struct{ name, value string }{
+		{"scalar", "hello"},
+		{"null", "null"},
+		{"mixed sequence", "[{}, hello]"},
+		{"nested sequence", "[[{}]]"},
+		{"aliased scalar", "*scalar"},
+		{"aliased invalid sequence", "*sequence"},
+		{"scalar alias in sequence", "[{}, *scalar]"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.Contains(t, settings(t, f, "batch"), "<<")
+			src := "scalar: &scalar hello\nsequence: &sequence [{}, hello]\nheaders: {<<: " + tt.value + "}\n"
+			f, err := config.Parse("bad.yaml", []byte(src))
+
+			var syn *config.SyntaxError
+
+			require.ErrorAs(t, err, &syn)
+			assert.Nil(t, f)
+			assert.Equal(t, "bad.yaml", syn.Path)
+			assert.Equal(t, 3, syn.Line)
+			assert.Positive(t, syn.Column)
+			assert.Contains(t, syn.Msg, "map merge requires map or sequence of maps")
+		})
+	}
 }
 
 func TestCyclicAliasesAreRejected(t *testing.T) {

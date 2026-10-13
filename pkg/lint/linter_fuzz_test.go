@@ -48,6 +48,8 @@ func addConfigSeeds(f *testing.F) {
 		"processors:\n  batch: &loop {nested: *loop}\n",
 		"processors:\n  batch/base: &base {timeout: 5s}\n  batch: {<<: *base}\n",
 		"exporters: {debug: null}\nservice: {pipelines: null}\n",
+		"processors: {batch: {send_batch_size: !!int banana}}",
+		"receivers: {otlp: {protocols: {http: {response_headers: {<<: 5}}}}}",
 		"service:\r  pipelines: null\r", "service:\u0085  pipelines: null\u0085",
 	} {
 		f.Add([]byte(src))
