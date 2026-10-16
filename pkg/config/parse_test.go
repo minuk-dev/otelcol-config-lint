@@ -342,3 +342,34 @@ func TestExplicitScalarTags(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRejectsComplexMappingKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		valid     bool
+	}{
+		{name: "sequence", src: "exporters: {debug: {? [verbosity]: basic}}", valid: false},
+		{name: "mapping", src: "exporters: {debug: {? {verbosity: basic}: basic}}", valid: false},
+		{name: "sequence alias", src: "anchor: &key [verbosity]\nexporters: {debug: {? *key: basic}}", valid: false},
+		{name: "scalar alias", src: "anchor: &key verbosity\nexporters: {debug: {? *key: basic}}", valid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := config.Parse("config.yaml", []byte(tt.src))
+			if tt.valid {
+				require.NoError(t, err)
+
+				return
+			}
+
+			var syn *config.SyntaxError
+			require.ErrorAs(t, err, &syn)
+			assert.Contains(t, syn.Msg, "map key")
+			assert.Positive(t, syn.Line)
+			assert.Positive(t, syn.Column)
+		})
+	}
+}

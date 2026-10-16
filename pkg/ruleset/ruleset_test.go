@@ -1100,3 +1100,44 @@ func TestWrongNodeTypeReportsWhatAnAliasResolvesTo(t *testing.T) {
 	require.Len(t, found, 1)
 	assert.Contains(t, found[0].Message, "got a scalar")
 }
+
+func TestDynamicComponentDeclarations(t *testing.T) {
+	t.Parallel()
+
+	for _, section := range []string{"receivers", "processors", "exporters", "extensions", "connectors"} {
+		t.Run(section, func(t *testing.T) {
+			t.Parallel()
+
+			src := `receivers: {otlp: }
+processors: {batch: }
+exporters: {otlp: {endpoint: localhost:4317, auth: {authenticator: zpages}}}
+extensions: {zpages: }
+connectors: {spanmetrics: }
+service:
+  extensions: [zpages]
+  pipelines:
+    traces: {receivers: [otlp], processors: [batch], exporters: [otlp, spanmetrics]}
+    metrics: {receivers: [spanmetrics], exporters: [otlp]}
+`
+			start := strings.Index(src, section+":")
+			end := start + strings.Index(src[start:], "\n")
+
+			src = src[:start] + section + ": ${env:COMPONENTS}" + src[end:]
+			for _, name := range []string{"wrong-node-type", "undefined-reference", "undefined-extension-reference"} {
+				assert.Empty(t, checkRule(t, name, src), name)
+			}
+			// Unknown declarations in one section do not hide missing processors elsewhere.
+			if section != "processors" {
+				bad := strings.Replace(src, "processors: [batch]", "processors: [missing]", 1)
+				assert.Len(t, checkRule(t, "undefined-reference", bad), 1)
+			}
+
+			if section == "extensions" {
+				bad := strings.Replace(src, "extensions: [zpages]", "extensions: []", 1)
+				found := checkRule(t, "undefined-extension-reference", bad)
+				require.Len(t, found, 1)
+				assert.Contains(t, found[0].Message, "missing from service.extensions")
+			}
+		})
+	}
+}

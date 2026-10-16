@@ -170,11 +170,17 @@ func isHardcodedSecret(key, value string, inHeaders bool) bool {
 // it is the whole value. The ${...} form is unambiguous and counts wherever it
 // appears, including in a value that is only partly expanded.
 func resolvedAtRuntime(value string) bool {
-	return braceExpansionRE.MatchString(value) || shorthandExpansionRE.MatchString(value)
+	for _, match := range braceExpansionRE.FindAllString(value, -1) {
+		if match != "$$" {
+			return true
+		}
+	}
+
+	return shorthandExpansionRE.MatchString(value)
 }
 
 var (
-	braceExpansionRE     = regexp.MustCompile(`\$\{[^}]*\}`)
+	braceExpansionRE     = regexp.MustCompile(`\$\$|\$\{[^}]*\}`)
 	shorthandExpansionRE = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
