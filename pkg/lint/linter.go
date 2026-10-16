@@ -312,18 +312,16 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 
 	res := Result{Path: path, Status: Valid, Coverage: l.coverage(&ruleCtx)}
 
+	suppressed := suppressions(f, l.rules, &res, l.opts)
+
 	for _, r := range l.rules {
 		if ctx.Err() != nil {
 			break
 		}
 
 		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
-			if d.Severity.AtLeast(l.opts.FailOn) {
-				res.Status = Invalid
-			}
-
-			if d.Severity.AtLeast(l.opts.MinSeverity) {
-				res.Diagnostics = append(res.Diagnostics, d)
+			if suppressed[d.Position.Line] != d.Rule {
+				addFinding(&res, d, l.opts)
 			}
 		}
 	}
