@@ -1,0 +1,11 @@
+receivers: ${env:COMPAT_RECEIVER_SECTION}
+processors: ${env:COMPAT_PROCESSOR_SECTION}
+exporters: ${env:COMPAT_EXPORTER_SECTION}
+extensions: ${env:COMPAT_EXTENSION_SECTION}
+service:
+  extensions: [zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

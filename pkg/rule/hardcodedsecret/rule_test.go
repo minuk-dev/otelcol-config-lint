@@ -66,7 +66,13 @@ func TestHardcodedSecret(t *testing.T) {
 		"prometheus credentials": {settings: "    credentials: abc123def456", want: true},
 		// The $VAR shorthand is an expansion only as the whole value; a
 		// generated password containing one is still a password.
-		"a password containing a dollar": {settings: `    password: pa$sw0rd`, want: true},
+		"escaped braces":                     {settings: `    password: pa$${literal}ss`, want: true},
+		"escaped shorthand":                  {settings: `    password: $$TOKEN`, want: true},
+		"escaped braces and password dollar": {settings: `    password: $${env:TOKEN}pa$sw0rd`, want: true},
+		"escaped then real expansion":        {settings: `    password: $${literal}${env:TOKEN}`, want: false},
+		"odd dollar prefix":                  {settings: `    password: $$${env:TOKEN}`, want: false},
+		"even dollar prefix":                 {settings: `    password: $$$${env:TOKEN}`, want: true},
+		"a password containing a dollar":     {settings: `    password: pa$sw0rd`, want: true},
 
 		// The public half of a keypair is not a credential.
 		"an inline certificate": {settings: "    cert_pem: BEGIN CERTIFICATE", want: false},
