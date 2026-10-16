@@ -128,7 +128,7 @@ jobs:
             -run CollectorCompatibility -count=1 -v 2>&1 | tee "$RUNNER_TEMP/collector-compatibility.log"
       - name: Retain compatibility results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: collector-compatibility-${{ matrix.distribution }}-${{ matrix.version }}
           path: ${{ runner.temp }}/collector-compatibility.log
