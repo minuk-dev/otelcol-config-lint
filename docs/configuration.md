@@ -189,3 +189,24 @@ The keys the first release put at the top level — `collectorVersion`,
 still read, and folded into the blocks above. A run that finds one says which
 keys to move. `output: json` is not one of them: a bare format name is still the
 shorthand for `output: {format: json}`.
+
+## File-specific rule exceptions
+
+```yaml
+rules:
+  overrides:
+    - paths: ["sink-*.yaml"]
+      disable: [debug-exporter-verbosity]
+      severity:
+        missing-batch: warning
+```
+
+Patterns use the same filesystem-path and basename matching as `run.exclude`.
+The first matching entry overlays global policy. These are file paths, not
+pipeline names or YAML paths. Embedded configs use their outer file's path;
+stdin uses global policy only. An override cannot enable a globally disabled
+rule. Explicit CLI enables/disables bypass file exceptions for those rule names,
+and explicit `--severity` wins over both settings and file exceptions. Explicit
+severity also overrides a rule's per-finding default, before failure and output
+thresholds are evaluated. Invalid patterns, rule names and severities fail before
+any input is linted.
