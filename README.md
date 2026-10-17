@@ -308,6 +308,11 @@ see [docs/schemas.md](docs/schemas.md).
 [docs/contributing.md](docs/contributing.md) has the repository layout, the
 `make` targets, how releases are cut, and what adding a rule takes.
 
+Directory runs skip Kubernetes manifest documents outside `--embedded` mode.
+Use `--verbose` to see each skip reason, or JSON output for structured skipped
+results. `--embedded` continues to lint collector configs in ConfigMap data.
+Malformed or mixed manifest/collector streams are still reported.
+
 Text `--summary` includes findings per rule, ordered by descending count and
 then rule name. Counts include only displayed diagnostics after severity
 filtering; file errors and skipped files remain in the file summary. JSON and

@@ -97,13 +97,7 @@ func (f *textFormatter) Result(r Result) error {
 
 		return err
 	case Skipped:
-		if !f.opts.Verbose {
-			return nil
-		}
-
-		err := writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, "skipped"))
-
-		return err
+		return f.skipped(r)
 	case Invalid:
 		// Diagnostics are printed below.
 	case Valid:
@@ -159,6 +153,19 @@ func (f *textFormatter) Finish(s Summary) error {
 	}
 
 	return f.ruleSummary()
+}
+
+func (f *textFormatter) skipped(r Result) error {
+	if !f.opts.Verbose {
+		return nil
+	}
+
+	message := "skipped"
+	if r.SkipReason != "" {
+		message += ": " + r.SkipReason
+	}
+
+	return writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, message))
 }
 
 func (f *textFormatter) color(code, s string) string {
