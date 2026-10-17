@@ -45,3 +45,12 @@ container.
 ## See also
 
 - [`../../testdata/rules/missing-memory-limiter.yaml`](../../testdata/rules/missing-memory-limiter.yaml)
+
+A downstream pipeline fed entirely through synchronous `forward` or `routing`
+connectors does not need another finding when every known ingress path already
+passes through a declared `memory_limiter`. This follows same-signal producers
+across multiple connector hops. Mixed external ingress, an unprotected fan-in,
+unknown/dynamic references, missing producers, signal changes, and cycles do not
+establish protection. Other connector types retain the per-pipeline diagnostic.
+This recognizes upstream admission control; it does not promise a hard bound on
+all downstream allocations or replace limiter configuration/sizing checks.
