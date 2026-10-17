@@ -409,3 +409,25 @@ func TestListRulesHonoursTheRuleBlock(t *testing.T) {
 		assert.Contains(t, rest, "off", "%q should be listed as off under default: none", name)
 	}
 }
+
+func TestAlphaReportingSettings(t *testing.T) {
+	t.Parallel()
+
+	source := `receivers: {filelog: {}}
+exporters: {debug: {}}
+service:
+  pipelines:
+    logs: {receivers: [filelog], exporters: [debug]}
+`
+
+	for _, enabled := range []string{"true", "false"} {
+		t.Run(enabled, func(t *testing.T) {
+			t.Parallel()
+			path := writeSettings(t, "rules:\n  default: none\n  enable: [component-stability]\n"+
+				"  settings:\n    component-stability:\n      report_alpha: "+enabled+"\n")
+			code, out, errOut := lint(t, source, "--config", path, "-")
+			require.Equal(t, 0, code, errOut)
+			assert.Equal(t, enabled == "true", strings.Contains(out, "is alpha"), out)
+		})
+	}
+}

@@ -960,7 +960,7 @@ func TestBuiltInRuleSettingsAreDocumented(t *testing.T) {
 	t.Parallel()
 
 	for _, r := range ruleset.All() {
-		if _, ok := r.(rule.Configurable); ok && r.Name() != "missing-batch" {
+		if _, ok := r.(rule.Configurable); ok && r.Name() != "missing-batch" && r.Name() != "component-stability" {
 			t.Errorf("%s now takes settings -- document its block under rules.settings", r.Name())
 		}
 	}

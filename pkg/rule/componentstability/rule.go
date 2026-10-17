@@ -10,11 +10,15 @@ import (
 
 // New builds the rule.
 func New() rule.Rule {
-	return componentStability{rule.NewBase("component-stability",
-		"components below beta stability can change or break without notice", diag.Info)}
+	return componentStability{Base: rule.NewBase("component-stability",
+		"components below beta stability can change or break without notice", diag.Info), reportAlpha: true}
 }
 
-type componentStability struct{ rule.Base }
+type componentStability struct {
+	rule.Base
+
+	reportAlpha bool
+}
 
 func (r componentStability) Check(ctx *rule.Context) {
 	if !ctx.SchemaReady() {
@@ -46,6 +50,10 @@ func (r componentStability) report(ctx *rule.Context, c config.Component, comp *
 				Severity: diag.Warning,
 			})
 		case schema.Alpha:
+			if !r.reportAlpha {
+				continue
+			}
+
 			ctx.Report(rule.Finding{
 				Node: c.KeyNode, Path: path,
 				Message: subject + " is alpha; its configuration can change between releases",
@@ -53,6 +61,7 @@ func (r componentStability) report(ctx *rule.Context, c config.Component, comp *
 		default:
 			// Beta and above are what a config should be built on, and
 			// deprecated-component covers the other end.
+			continue
 		}
 
 		return // one finding per component is enough
