@@ -194,6 +194,15 @@ still read, and folded into the blocks above. A run that finds one says which
 keys to move. `output: json` is not one of them: a bare format name is still the
 shorthand for `output: {format: json}`.
 
+To omit alpha notices while retaining development warnings:
+
+```yaml
+rules:
+  settings:
+    component-stability:
+      report_alpha: false # default: true
+```
+
 ## Suppressing one diagnostic line
 
 Place a standalone directive immediately before the line reported by a rule:

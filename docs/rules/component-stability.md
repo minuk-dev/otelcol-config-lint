@@ -48,3 +48,19 @@ config.yaml:19:3: warning: extension "remotetap" is in development and may chang
 ## See also
 
 - [`../../testdata/rules/component-stability.yaml`](../../testdata/rules/component-stability.yaml)
+
+## Settings
+
+Alpha findings are enabled by default. To reduce repetition across a repository
+while retaining development warnings, configure:
+
+```yaml
+rules:
+  settings:
+    component-stability:
+      report_alpha: false
+```
+
+This policy is applied per file, so results remain deterministic across worker
+counts and output formats. Deprecated/unmaintained findings belong to
+`deprecated-component` and are unaffected.
