@@ -118,6 +118,9 @@ type RunBlock struct {
 // RulesBlock is the "rules" block: which rules run, at what level, and with
 // what settings of their own.
 type RulesBlock struct {
+	// Overrides applies the first matching filesystem-path rule exception.
+	Overrides []RuleOverride `yaml:"overrides"`
+
 	// Default is the set to start from: "all", every registered rule, or
 	// "none", which runs only what enable names.
 	Default string `yaml:"default"`
@@ -133,6 +136,13 @@ type RulesBlock struct {
 	// reads no settings reports a block written for it rather than ignoring
 	// it -- see rule.Configurable.
 	Settings map[string]yaml.Node `yaml:"settings"`
+}
+
+// RuleOverride changes rule policy for matching files without enabling disabled rules.
+type RuleOverride struct {
+	Paths    []string          `yaml:"paths"`
+	Disable  []string          `yaml:"disable"`
+	Severity map[string]string `yaml:"severity"`
 }
 
 // Kubernetes is the "kubernetes" block of a settings file: what the pods these

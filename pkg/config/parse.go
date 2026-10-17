@@ -20,6 +20,8 @@ type File struct {
 	Path string
 	// Root is the top-level mapping node, or nil for an empty document.
 	Root *yaml.Node
+	// HeadComments holds standalone YAML comments preceding nodes, by source line.
+	HeadComments map[int]string
 
 	// Sections holds the declared components of each kind, in file order.
 	Sections map[Kind]*Section
@@ -235,6 +237,8 @@ func Parse(path string, src []byte) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	f.HeadComments = headComments(root, strings.Split(string(src), "\n"))
 
 	// Duplicates are collected from the document as written, before anything
 	// is merged into it: a key the config writes itself replaces one a merge

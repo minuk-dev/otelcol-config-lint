@@ -176,15 +176,30 @@ func (r batchSizeBounds) checkRange(ctx *rule.Context, proc batchProcessor) bool
 		{key: "send_batch_size", val: proc.sendBatchSize},
 		{key: "send_batch_max_size", val: proc.sendBatchMaxSize},
 	} {
-		if !size.val.Known || (size.val.Num >= 0 && size.val.Num <= maxBatchSize) {
+		negative := size.val.Num < 0
+		if size.val.Node != nil && size.val.Node.Tag == "!!float" {
+			var num float64
+
+			err := size.val.Node.Decode(&num)
+			if err == nil {
+				negative = num < 0
+			}
+		}
+
+		if !size.val.Known || (!negative && size.val.Num <= maxBatchSize) {
 			continue
 		}
 
 		found = true
 
+		value := rule.Itoa64(size.val.Num)
+		if negative && size.val.Num == 0 {
+			value = size.val.Node.Value
+		}
+
 		ctx.Report(rule.Finding{
 			Node: proc.at(size.val), Path: rule.JoinPath(proc.path, size.key),
-			Message: proc.name() + " sets " + size.key + " to " + rule.Itoa64(size.val.Num) +
+			Message: proc.name() + " sets " + size.key + " to " + value +
 				", which the field cannot hold: it counts items as a uint32, " +
 				"so the collector fails to load the config before it validates it",
 			Hint: "write a whole number between 0 and " + rule.Itoa64(maxBatchSize),

@@ -27,7 +27,8 @@ func (r undefinedExtensionReference) Check(ctx *rule.Context) {
 		subject := string(ref.Component.Kind) + " " + rule.Quote(ref.Component.ID.String()) +
 			" references " + ref.Subject() + " " + rule.Quote(ref.ID.String())
 
-		if _, declared := ctx.Index.Declared(config.KindExtension, ref.ID); !declared {
+		if _, declared := ctx.Index.Declared(config.KindExtension, ref.ID); !declared &&
+			!ctx.Index.HasDynamicDeclarations(config.KindExtension) {
 			// A name declared under another section lands here too; the hint
 			// is what tells that apart from a name nothing declares at all.
 			ctx.Report(rule.Finding{
@@ -46,9 +47,14 @@ func (r undefinedExtensionReference) Check(ctx *rule.Context) {
 			continue
 		}
 
+		state := " which is declared but missing from service.extensions, "
+		if ctx.Index.HasDynamicDeclarations(config.KindExtension) {
+			state = " which is missing from service.extensions, "
+		}
+
 		ctx.Report(rule.Finding{
 			Node: ref.Node, Path: ref.Path,
-			Message: subject + " which is declared but missing from service.extensions, " +
+			Message: subject + state +
 				"so the collector never starts it",
 			Hint: "add " + rule.Quote(ref.ID.String()) + " to service.extensions",
 			Docs: ref.Docs,

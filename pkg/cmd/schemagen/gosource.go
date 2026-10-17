@@ -201,7 +201,7 @@ func (g *goIndex) fields(key string, seen []string, depth int) *schema.Field {
 	unfilled := false
 
 	for _, f := range decl.strukt.Fields.List {
-		if !g.addStructField(out, decl, f, append(seen, key), depth) {
+		if !g.addStructField(out, decl, f, append(seen, key), depth) && !httpBookkeeping(declaredAt, f) {
 			unfilled = true
 		}
 	}
@@ -528,4 +528,37 @@ func attachSourceFields(cat *schema.Schema, index *goIndex) int {
 	}
 
 	return n
+}
+
+// httpBookkeeping recognizes only the non-config fields audited against Collector
+// 23e90b7fc273f0ff7a6c89a184f6afbc5573e52f. HTTP Unmarshal migrates tagged
+// keepalive keys; these fields store warnings or prevent unkeyed literals.
+// Additional unfilled fields must still leave the decoder open.
+func httpBookkeeping(key string, field *ast.Field) bool {
+	if key != coreModuleRoot+"/config/confighttp.ClientConfig" &&
+		key != coreModuleRoot+"/config/confighttp.ServerConfig" {
+		return false
+	}
+
+	if len(field.Names) != 1 || field.Tag != nil {
+		return false
+	}
+
+	switch field.Names[0].Name {
+	case "_":
+		typ, ok := field.Type.(*ast.StructType)
+
+		return ok && len(typ.Fields.List) == 0
+	case "deprecationWarnings":
+		typ, ok := field.Type.(*ast.ArrayType)
+		if !ok || typ.Len != nil {
+			return false
+		}
+
+		item, ok := typ.Elt.(*ast.Ident)
+
+		return ok && item.Name == typeString
+	default:
+		return false
+	}
 }
