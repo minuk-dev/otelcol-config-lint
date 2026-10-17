@@ -115,7 +115,8 @@ type options struct {
 	// store is where the schemas are read from.
 	store schema.Store
 	// selection combines rule flags with the settings file.
-	selection ruleset.Selection
+	selection  ruleset.Selection
+	rulePolicy func(string) map[string]diag.Severity
 	// envPolicy resolves the environment of each file linted.
 	envPolicy lint.EnvironmentPolicy
 	// kubernetesEnabled is what the flag or the settings file said about
@@ -262,13 +263,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 
 	o.kubernetesOverrides = file.Run.Kubernetes.Overrides
 
-	// The rules are validated here rather than at the first lint, so a rule
-	// named that does not exist is reported where every other bad flag is.
-	o.selection = file.RuleSelection(ruleset.Selection{
-		Default: o.ruleDefault, Enable: o.enable, Disable: o.disable, Severity: o.severity,
-	})
-
-	_, err = ruleset.Resolve(o.selection)
+	err = o.prepareRules(file)
 	if err != nil {
 		return err
 	}
@@ -480,6 +475,7 @@ func (o *options) newLinter(cmd *cobra.Command) (*lint.Linter, error) {
 		AllowNearestFallback: o.allowNearestFallback,
 		Fs:                   o.FS(),
 		Rules:                o.selection,
+		RulePolicy:           o.rulePolicy,
 		Environment:          o.envPolicy.Resolve,
 		Strict:               o.strict,
 		Embedded:             o.embedded,
@@ -512,4 +508,24 @@ func defaultWorkers() int {
 	}
 
 	return maxDefaultWorkers
+}
+
+func (o *options) prepareRules(file *settings.File) error {
+	// The rules are validated here rather than at the first lint, so a rule
+	// named that does not exist is reported where every other bad flag is.
+	o.selection = file.RuleSelection(ruleset.Selection{
+		Default: o.ruleDefault, Enable: o.enable, Disable: o.disable, Severity: o.severity,
+	})
+
+	_, err := ruleset.Resolve(o.selection)
+	if err != nil {
+		return err
+	}
+
+	o.rulePolicy, err = file.RulePolicy(ruleset.Selection{Enable: o.enable, Disable: o.disable, Severity: o.severity})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

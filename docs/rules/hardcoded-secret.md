@@ -69,3 +69,10 @@ legitimate and this rule will meet plenty of them.
 ## See also
 
 - [`../../testdata/rules/hardcoded-secret.yaml`](../../testdata/rules/hardcoded-secret.yaml)
+
+Configuration keys ending in `_env`, `_type`, `_mode`, or `_format` describe
+credential metadata and are excluded, like `_file`, `_path`, `_url`, `_uri`,
+and `_name`. For example, `default_logstore_token_env: prod` is not a token.
+The new metadata exclusions do not apply to HTTP header names: a header such
+as `x-auth-token-env` may still contain a credential. These suffixes are a
+naming heuristic; custom settings should use names that reflect their values.

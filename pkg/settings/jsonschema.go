@@ -204,6 +204,7 @@ func rulesSchema() object {
 			"propertyNames":        ref("#/$defs/rule", ""),
 			"additionalProperties": ref("#/$defs/severity", ""),
 		},
+		"overrides": ruleOverridesSchema(),
 		"settings": object{
 			"description": "Each rule's own settings, keyed by rule name. " +
 				"Rules that do not support settings reject a block.",
@@ -364,4 +365,16 @@ func ref(target, description string) object {
 	}
 
 	return out
+}
+
+func ruleOverridesSchema() object {
+	item := block("First matching entry overlays global rule policy; explicit CLI flags win.", object{
+		"paths":   object{"type": "array", "minItems": 1, "items": object{"type": "string", "minLength": 1}},
+		"disable": object{"type": "array", "items": ref("#/$defs/rule", "")},
+		"severity": object{"type": "object", "propertyNames": ref("#/$defs/rule", ""),
+			"additionalProperties": ref("#/$defs/severity", "")},
+	})
+	item["required"] = []any{"paths"}
+
+	return object{"type": "array", "items": item}
 }

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
@@ -72,6 +74,7 @@ func (o *GlobalOptions) Prepare(cmd *cobra.Command) error {
 	// The flat first-release keys are folded into the blocks here rather than
 	// in each command, so a file is normalised once and reported once.
 	legacy := file.Normalize()
+	resolveSchemaLocations(file, path)
 
 	o.file, o.path = file, path
 
@@ -159,4 +162,20 @@ func workingDir() string {
 	}
 
 	return dir
+}
+
+// resolveSchemaLocations anchors settings-owned paths before CLI flags are
+// folded in, so explicit --schema-location values retain cwd semantics.
+func resolveSchemaLocations(file *settings.File, settingsPath string) {
+	if settingsPath == "" {
+		return
+	}
+
+	for i, location := range file.Run.SchemaLocations {
+		if location == schema.Default || filepath.IsAbs(location) || strings.Contains(location, "://") {
+			continue
+		}
+
+		file.Run.SchemaLocations[i] = filepath.Join(filepath.Dir(settingsPath), location)
+	}
 }

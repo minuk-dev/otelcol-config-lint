@@ -3,6 +3,8 @@
 package insecuretls
 
 import (
+	"strings"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
@@ -27,21 +29,29 @@ func (r insecureTLS) Check(ctx *rule.Context) {
 
 		for _, c := range sec.Components {
 			for _, hit := range findInsecure(c.ValueNode, kind.Section()+"."+c.ID.String()) {
-				ctx.Report(rule.Finding{
+				finding := rule.Finding{
 					Node: hit.node, Path: hit.path,
 					Message: rule.Quote(rule.ShortPath(hit.path)) + " disables TLS verification for " +
 						string(kind) + " " + rule.Quote(c.ID.String()),
-					Hint: "supply ca_file/cert_file instead of skipping verification outside local testing",
+					Hint: "configure trusted CA certificates and enable verification outside local testing",
 					Docs: rule.TLSDocs,
-				})
+				}
+				if hit.hasCA {
+					finding.Message += " despite a configured ca_file"
+					finding.Hint = "remove insecure_skip_verify or set it to false to verify the server " +
+						"using the configured CA; the CA file is still loaded while verification is skipped"
+				}
+
+				ctx.Report(finding)
 			}
 		}
 	}
 }
 
 type tlsHit struct {
-	node *yaml.Node
-	path string
+	node  *yaml.Node
+	path  string
+	hasCA bool
 }
 
 // findInsecure walks a component's settings for tls.insecure or
@@ -60,7 +70,7 @@ func findInsecure(n *yaml.Node, path string) []tlsHit {
 			switch e.Key {
 			case "insecure", "insecure_skip_verify":
 				if e.Node.Tag == rule.BoolTag && e.Node.Value == "true" {
-					out = append(out, tlsHit{node: e.Node, path: e.Path})
+					out = append(out, tlsHit{node: e.Node, path: e.Path, hasCA: e.Key == "insecure_skip_verify" && configuredCA(n)})
 				}
 			default:
 				out = append(out, findInsecure(e.Node, e.Path)...)
@@ -75,4 +85,12 @@ func findInsecure(n *yaml.Node, path string) []tlsHit {
 	}
 
 	return out
+}
+
+func configuredCA(node *yaml.Node) bool {
+	ca, _ := rule.ChildNode(node, "ca_file")
+	ca = rule.ResolveAlias(ca)
+
+	return ca != nil && ca.Kind == yaml.ScalarNode && ca.Tag == "!!str" &&
+		strings.TrimSpace(ca.Value) != "" && !rule.HasExpansion(ca.Value)
 }

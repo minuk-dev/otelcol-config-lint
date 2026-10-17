@@ -29,6 +29,9 @@ type PrepareOptions struct {
 	Rules ruleset.Selection
 	// Fs is the filesystem LintFile reads from, independent of Store.Fs.
 	Fs afero.Fs
+	// RulePolicy returns explicit per-file severities. It must be safe for concurrent calls.
+	// It cannot enable a rule disabled by the global selection.
+	RulePolicy func(path string) map[string]diag.Severity
 	// Environment resolves deployment information for each input name.
 	Environment func(path string) rule.Environment
 	// Strict reports lenient findings at their strict severity.
@@ -92,6 +95,7 @@ func Prepare(ctx context.Context, opts PrepareOptions) (*Linter, Target, error) 
 		Rules:                resolved.Rules,
 		Severities:           resolved.Severities,
 		Environment:          opts.Environment,
+		RulePolicy:           opts.RulePolicy,
 		Strict:               opts.Strict,
 		IgnoreMissingSchemas: opts.IgnoreMissingSchemas,
 		MinSeverity:          minSeverity,

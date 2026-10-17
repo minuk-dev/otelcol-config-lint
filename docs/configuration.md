@@ -40,6 +40,11 @@ output:
   color: true
 ```
 
+Relative `run.schemaLocations` paths (including legacy top-level
+`schemaLocations`) resolve from the settings file directory. URLs, absolute
+paths, and `default` keep their meaning. Explicit `--schema-location` paths
+resolve from the current working directory.
+
 Every block is optional, as is every key in it: what a file does not state keeps
 its default. A key the linter does not know is an error rather than a line that
 quietly does nothing.
@@ -197,3 +202,49 @@ rules:
     component-stability:
       report_alpha: false # default: true
 ```
+
+## Suppressing one diagnostic line
+
+Place a standalone directive immediately before the line reported by a rule:
+
+```yaml
+service:
+  pipelines:
+    logs/mismatch:
+      exporters:
+        # otelcol-config-lint:disable-next-line debug-exporter-verbosity
+        - debug/mismatch
+```
+
+The directive affects only that rule on the next physical line. It does not
+suppress an entire mapping or pipeline, and an intervening blank line means it
+will not target the next YAML node. Use one registered rule name. Misspelled
+names and unsupported directive syntax produce `invalid-suppression` errors.
+Comments inside quoted strings or block scalar values are data, not directives;
+inside an extracted ConfigMap Collector config they are parsed as inner YAML.
+
+Suppression happens before failure and output thresholds are evaluated, for all
+output formats. Aliases and merges retain the source positions the parser uses
+for diagnostics: place the comment at the reported source line, which can be
+an anchor definition. Other references and other rules remain checked.
+
+## File-specific rule exceptions
+
+```yaml
+rules:
+  overrides:
+    - paths: ["sink-*.yaml"]
+      disable: [debug-exporter-verbosity]
+      severity:
+        missing-batch: warning
+```
+
+Patterns use the same filesystem-path and basename matching as `run.exclude`.
+The first matching entry overlays global policy. These are file paths, not
+pipeline names or YAML paths. Embedded configs use their outer file's path;
+stdin uses global policy only. An override cannot enable a globally disabled
+rule. Explicit CLI enables/disables bypass file exceptions for those rule names,
+and explicit `--severity` wins over both settings and file exceptions. Explicit
+severity also overrides a rule's per-finding default, before failure and output
+thresholds are evaluated. Invalid patterns, rule names and severities fail before
+any input is linted.

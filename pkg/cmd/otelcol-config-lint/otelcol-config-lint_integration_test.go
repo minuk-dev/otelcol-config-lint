@@ -135,6 +135,10 @@ func TestCollectorCompatibility(t *testing.T) {
 		name, distribution, rejection string
 		collectorCode, lintCode       int
 	}{
+		{name: "fractional-integer", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "invalid-fractional-batch-size", distribution: "", rejection: "overflows uint", collectorCode: 1, lintCode: 1},
+		{name: "invalid-yaml-key", distribution: "", rejection: "cannot resolve the configuration", collectorCode: 1, lintCode: 1},
+		{name: "provider-sections", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "numeric-duration", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "fractional-duration", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "negative-numeric-duration", distribution: "", rejection: "timeout", collectorCode: 1, lintCode: 1},
@@ -179,6 +183,9 @@ func TestCollectorCompatibility(t *testing.T) {
 			cmd.Dir = t.TempDir()
 			cmd.Env = []string{
 				"COMPAT_ENDPOINT=127.0.0.1:4317", "COMPAT_RECEIVERS=[otlp]", "COMPAT_PROCESSORS=[batch]",
+				"COMPAT_RECEIVER_SECTION={otlp: {protocols: {grpc: {endpoint: '127.0.0.1:4317'}}}}",
+				"COMPAT_PROCESSOR_SECTION={batch: {}}", "COMPAT_EXPORTER_SECTION={debug: {}}",
+				"COMPAT_EXTENSION_SECTION={zpages: {endpoint: 'localhost:55679'}}",
 				"COMPAT_EXPORTERS=[debug]", "COMPAT_EXTENSIONS=[zpages]",
 				"COMPAT_PIPELINES={traces: {receivers: [otlp], processors: [batch], exporters: [debug]}}",
 			}

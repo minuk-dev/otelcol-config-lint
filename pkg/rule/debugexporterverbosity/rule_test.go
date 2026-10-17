@@ -120,7 +120,7 @@ func TestDebugExporterVerbosityReadsAsASentence(t *testing.T) {
 	assert.Equal(t, `exporter "debug" runs at verbosity: detailed in pipeline "traces", `+
 		"logging every record it receives", detailed[0].Message)
 	assert.Equal(t, "set verbosity: basic, or remove the exporter from service.pipelines.traces.exporters; "+
-		"sampling_initial and sampling_thereafter bound the rate if it has to stay at detailed",
+		"sampling_initial and sampling_thereafter can reduce output frequency if it stays at detailed",
 		detailed[0].Hint)
 	assert.Equal(t, "service.pipelines.traces.exporters[0]", detailed[0].Path)
 	assert.Contains(t, detailed[0].Docs, "exporter/debugexporter/README.md")
@@ -213,4 +213,44 @@ exporters:
 			assert.Empty(t, check(t, src))
 		})
 	}
+}
+
+func TestDetailedDebugSampling(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, initial, thereafter string
+		want                      diag.Severity
+	}{
+		{name: "sampled", initial: "5", thereafter: "200", want: diag.Info},
+		{name: "zero initial", initial: "0", thereafter: "200", want: diag.Info},
+		{name: "sampling disabled", initial: "2", thereafter: "1", want: diag.Warning},
+		{name: "zero thereafter", initial: "2", thereafter: "0", want: diag.Warning},
+		{name: "negative initial", initial: "-1", thereafter: "200", want: diag.Warning},
+		{name: "negative thereafter", initial: "2", thereafter: "-1", want: diag.Warning},
+		{name: "null initial", initial: "null", thereafter: "200", want: diag.Warning},
+		{name: "unknown initial", initial: "${env:INITIAL}", thereafter: "200", want: diag.Warning},
+		{name: "unknown thereafter", initial: "2", thereafter: "${env:RATE}", want: diag.Warning},
+		{name: "invalid", initial: "two", thereafter: "200", want: diag.Warning},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			found := check(t, debugging("    verbosity: detailed\n    sampling_initial: "+tt.initial+
+				"\n    sampling_thereafter: "+tt.thereafter))
+			require.Len(t, found, 1)
+			assert.Equal(t, tt.want, found[0].Severity)
+
+			if tt.want == diag.Info {
+				assert.Contains(t, found[0].Message, "sampled detailed")
+				assert.NotContains(t, found[0].Hint, "sampling_initial")
+			}
+		})
+	}
+
+	t.Run("merged sampling", func(t *testing.T) {
+		t.Parallel()
+		found := check(t, debugging("    <<: {sampling_initial: 5, sampling_thereafter: 200}\n    verbosity: detailed"))
+		require.Len(t, found, 1)
+		assert.Equal(t, diag.Info, found[0].Severity)
+	})
 }

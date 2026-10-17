@@ -56,7 +56,7 @@ type FormatterOptions struct {
 func NewFormatter(name string, w io.Writer, opts FormatterOptions) (Formatter, error) {
 	switch name {
 	case "", "text":
-		return &textFormatter{w: w, opts: opts}, nil
+		return &textFormatter{w: w, opts: opts, ruleCounts: map[string]int{}}, nil
 	case "json":
 		return &jsonFormatter{w: w, opts: opts, rep: jsonReport{Files: nil, Summary: Summary{}}}, nil
 	case "junit":
@@ -85,8 +85,9 @@ const (
 )
 
 type textFormatter struct {
-	w    io.Writer
-	opts FormatterOptions
+	w          io.Writer
+	opts       FormatterOptions
+	ruleCounts map[string]int
 }
 
 func (f *textFormatter) Result(r Result) error {
@@ -96,13 +97,7 @@ func (f *textFormatter) Result(r Result) error {
 
 		return err
 	case Skipped:
-		if !f.opts.Verbose {
-			return nil
-		}
-
-		err := writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, "skipped"))
-
-		return err
+		return f.skipped(r)
 	case Invalid:
 		// Diagnostics are printed below.
 	case Valid:
@@ -121,6 +116,10 @@ func (f *textFormatter) Result(r Result) error {
 		err := f.diagnostic(d)
 		if err != nil {
 			return err
+		}
+
+		if f.opts.Summary {
+			f.ruleCounts[d.Rule]++
 		}
 	}
 
@@ -141,12 +140,32 @@ func (f *textFormatter) Finish(s Summary) error {
 	err := writef(f.w,
 		"Summary: %d file(s) checked, %d valid, %d invalid, %d error(s), %d skipped (%d warning(s), %d info)\n",
 		total, s.Valid, s.Invalid, s.Errors, s.Skipped, s.Warnings, s.Infos)
-	if err != nil || s.Incomplete == 0 {
+	if err != nil {
 		return err
 	}
 
-	return writef(f.w, "Validation coverage incomplete for %d file(s); validity only reflects enabled rules.\n",
-		s.Incomplete)
+	if s.Incomplete > 0 {
+		err = writef(f.w, "Validation coverage incomplete for %d file(s); validity only reflects enabled rules.\n",
+			s.Incomplete)
+		if err != nil {
+			return err
+		}
+	}
+
+	return f.ruleSummary()
+}
+
+func (f *textFormatter) skipped(r Result) error {
+	if !f.opts.Verbose {
+		return nil
+	}
+
+	message := "skipped"
+	if r.SkipReason != "" {
+		message += ": " + r.SkipReason
+	}
+
+	return writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, message))
 }
 
 func (f *textFormatter) color(code, s string) string {
@@ -518,6 +537,7 @@ func pickAnnotations(candidates []githubAnnotation, limit int) []githubAnnotatio
 }
 
 func (f *githubFormatter) writeAnnotation(a githubAnnotation) error {
+	a.file = strings.NewReplacer(":", "%3A", ",", "%2C").Replace(escapeGitHub(a.file))
 	if a.line == 0 {
 		return writef(f.w, "::%s file=%s::%s\n", a.level, a.file, escapeGitHub(a.message))
 	}
@@ -530,4 +550,38 @@ func (f *githubFormatter) writeAnnotation(a githubAnnotation) error {
 // command early.
 func escapeGitHub(s string) string {
 	return strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(s)
+}
+
+// ruleSummary counts only diagnostics that Result actually rendered.
+func (f *textFormatter) ruleSummary() error {
+	if len(f.ruleCounts) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(f.ruleCounts))
+	for name := range f.ruleCounts {
+		names = append(names, name)
+	}
+
+	sort.Slice(names, func(i, j int) bool {
+		if f.ruleCounts[names[i]] != f.ruleCounts[names[j]] {
+			return f.ruleCounts[names[i]] > f.ruleCounts[names[j]]
+		}
+
+		return names[i] < names[j]
+	})
+
+	err := writeString(f.w, "Findings by rule (shown diagnostics):\n")
+	if err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		err := writef(f.w, "  %s: %d\n", name, f.ruleCounts[name])
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

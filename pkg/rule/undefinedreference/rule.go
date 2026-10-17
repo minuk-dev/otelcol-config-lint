@@ -20,7 +20,7 @@ func (r undefinedReference) Check(ctx *rule.Context) {
 	f := ctx.File
 
 	for _, ref := range f.Service.Extensions {
-		if rule.HasExpansion(ref.ID.String()) {
+		if rule.HasExpansion(ref.ID.String()) || ctx.Index.HasDynamicDeclarations(config.KindExtension) {
 			continue
 		}
 
@@ -39,7 +39,7 @@ func (r undefinedReference) Check(ctx *rule.Context) {
 	for _, p := range f.Service.Pipelines {
 		for _, slot := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
 			for _, ref := range p.Refs(slot) {
-				if rule.HasExpansion(ref.ID.String()) {
+				if rule.HasExpansion(ref.ID.String()) || ctx.Index.HasDynamicDeclarations(slot) {
 					continue
 				}
 

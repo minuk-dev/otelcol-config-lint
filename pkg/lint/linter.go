@@ -41,6 +41,8 @@ type Result struct {
 	Path        string           `json:"filename"`
 	Status      Status           `json:"status"`
 	Diagnostics diag.Diagnostics `json:"diagnostics,omitempty"`
+	// SkipReason explains why the file was not linted.
+	SkipReason string `json:"skipReason,omitempty"`
 	// Coverage describes the checks that could run, independently of Status.
 	Coverage *Coverage `json:"coverage,omitempty"`
 	// Err explains Error results and may also accompany Invalid YAML syntax.
@@ -54,7 +56,7 @@ func (r Result) Message() string {
 		return r.Err.Error()
 	}
 
-	return ""
+	return r.SkipReason
 }
 
 // Options configures a Linter. New copies Severities and the Rules slice;
@@ -83,6 +85,9 @@ type Options struct {
 	// IgnoreMissingSchemas keeps components that are absent from the schema
 	// from failing the run, for configs using a custom distribution.
 	IgnoreMissingSchemas bool
+	// RulePolicy returns explicit per-file severities. It must be safe for concurrent calls.
+	// It cannot enable a rule disabled by the global selection.
+	RulePolicy func(path string) map[string]diag.Severity
 	// Environment resolves the deployment environment of one config file, for
 	// the rules that cannot judge a config on its own. It is called from every
 	// worker LintAll starts, so it must be safe for concurrent use and must
@@ -210,6 +215,11 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 		return l.lintEmbedded(ctx, path, src)
 	}
 
+	if kubernetesDocuments(path, src) {
+		return Result{Path: path, Status: Skipped,
+			SkipReason: "Kubernetes manifest; use --embedded to lint ConfigMap contents"}
+	}
+
 	return l.lintConfig(ctx, path, src)
 }
 
@@ -287,6 +297,8 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 		return Result{Path: path, Status: Error, Err: err}
 	}
 
+	l, explicit := l.forPath(path)
+
 	ruleCtx := rule.Context{
 		File:   f,
 		Schema: l.opts.Schema,
@@ -312,21 +324,7 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 
 	res := Result{Path: path, Status: Valid, Coverage: l.coverage(&ruleCtx)}
 
-	for _, r := range l.rules {
-		if ctx.Err() != nil {
-			break
-		}
-
-		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
-			if d.Severity.AtLeast(l.opts.FailOn) {
-				res.Status = Invalid
-			}
-
-			if d.Severity.AtLeast(l.opts.MinSeverity) {
-				res.Diagnostics = append(res.Diagnostics, d)
-			}
-		}
-	}
+	l.checkRules(ctx, ruleCtx, &res, explicit)
 
 	if ctx.Err() != nil {
 		return Result{Path: path, Status: Error, Err: ctx.Err()}
@@ -566,4 +564,24 @@ func asSyntaxError(err error, target **config.SyntaxError) bool {
 	}
 
 	return false
+}
+
+func (l *Linter) checkRules(ctx context.Context, ruleCtx rule.Context, res *Result, explicit map[string]diag.Severity) {
+	suppressed := suppressions(ruleCtx.File, l.rules, res, l.opts)
+
+	for _, r := range l.rules {
+		if ctx.Err() != nil {
+			break
+		}
+
+		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
+			if severity, set := explicit[r.Name()]; set {
+				d.Severity = severity
+			}
+
+			if suppressed[d.Position.Line] != d.Rule {
+				addFinding(res, d, l.opts)
+			}
+		}
+	}
 }
