@@ -1,0 +1,17 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: null
+exporters:
+  debug: null
+processors:
+  batch:
+    timeout: null
+    send_batch_size: 100.9
+    send_batch_max_size: 100.1
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

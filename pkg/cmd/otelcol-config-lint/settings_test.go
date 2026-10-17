@@ -137,7 +137,6 @@ func TestOutputAcceptsABareFormat(t *testing.T) {
 	assert.Contains(t, out, `"filename"`, "a bare format should still select json")
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestASettingsFileIsFoundInAParentDirectory(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"),
@@ -154,8 +153,6 @@ func TestASettingsFileIsFoundInAParentDirectory(t *testing.T) {
 
 // TestTheSearchStopsAtTheRepositoryRoot keeps a run from picking up whatever
 // happens to sit above the project it is linting.
-//
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestTheSearchStopsAtTheRepositoryRoot(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"), "run:\n  collectorVersion: v0.110.0\n")
@@ -170,7 +167,6 @@ func TestTheSearchStopsAtTheRepositoryRoot(t *testing.T) {
 	assert.Equal(t, 1, code, "a file above the repository must not apply:\n%s", out)
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestTheYmlSpellingIsFoundToo(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yml"),
@@ -183,7 +179,6 @@ func TestTheYmlSpellingIsFoundToo(t *testing.T) {
 	assert.Equal(t, 0, code, "the .yml spelling should be read: %s%s", out, errOut)
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestNoConfigIgnoresTheFileThatWouldBeFound(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"),
@@ -408,4 +403,30 @@ func TestListRulesHonoursTheRuleBlock(t *testing.T) {
 
 		assert.Contains(t, rest, "off", "%q should be listed as off under default: none", name)
 	}
+}
+
+func TestFileRuleOverridesReachCLI(t *testing.T) {
+	t.Parallel()
+	policy := writeSettings(t, `rules:
+  default: none
+  enable: [debug-exporter-verbosity]
+  overrides:
+    - paths: ["sink.yaml"]
+      disable: [debug-exporter-verbosity]
+`)
+	dir := t.TempDir()
+	sink := filepath.Join(dir, "sink.yaml")
+	other := filepath.Join(dir, "other.yaml")
+
+	const src = "exporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      exporters: [debug]\n"
+	writeFile(t, sink, src)
+	writeFile(t, other, src)
+	_, out, errOut := lint(t, "", "--config", policy, "--output", "json", sink, other)
+	require.Empty(t, errOut)
+	require.NotContains(t, rulesFired(t, out)["sink.yaml"], "debug-exporter-verbosity")
+	require.Contains(t, rulesFired(t, out)["other.yaml"], "debug-exporter-verbosity")
+	code, out, errOut := lint(t, "", "--config", policy, "--severity", "debug-exporter-verbosity=warning",
+		"--fail-on", "warning", sink)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
 }

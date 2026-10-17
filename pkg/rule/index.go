@@ -125,6 +125,17 @@ func (idx *Index) Declared(k config.Kind, id config.ID) (config.Component, bool)
 	return c, ok
 }
 
+// HasDynamicDeclarations reports whether a provider may supply declarations for
+// this service slot, including connectors in receiver and exporter slots.
+func (idx *Index) HasDynamicDeclarations(slot config.Kind) bool {
+	if sec := idx.File.Sections[slot]; sec != nil && IsExpansion(sec.Node) {
+		return true
+	}
+
+	return (slot == config.KindReceiver || slot == config.KindExporter) &&
+		idx.HasDynamicDeclarations(config.KindConnector)
+}
+
 // Resolve finds the declaration backing a reference from a pipeline slot.
 // Receiver and exporter slots also accept connectors, which is how the
 // collector wires two pipelines together.

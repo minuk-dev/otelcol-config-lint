@@ -98,3 +98,37 @@ func TestInlineSuppressionBoundaries(t *testing.T) {
 		})
 	}
 }
+
+func TestInlineSuppressionWithFilePolicy(t *testing.T) {
+	t.Parallel()
+
+	const source = `exporters:
+  debug: {}
+service:
+  pipelines:
+    logs/suppressed:
+      # otelcol-config-lint:disable-next-line debug-exporter-verbosity
+      exporters: [debug]
+    logs/other:
+      exporters: [debug]
+`
+
+	linter := lint.New(lint.Options{
+		Rules: []rule.Rule{debugexporterverbosity.New()},
+		RulePolicy: func(string) map[string]diag.Severity {
+			return map[string]diag.Severity{"debug-exporter-verbosity": diag.Error}
+		},
+		MinSeverity: diag.Error,
+		FailOn:      diag.Error,
+	})
+	result := linter.Lint(t.Context(), "config.yaml", []byte(source))
+	require.Equal(t, lint.Invalid, result.Status)
+	require.Len(t, result.Diagnostics, 1)
+	require.Contains(t, result.Diagnostics[0].Path, "logs/other")
+	require.Equal(t, diag.Error, result.Diagnostics[0].Severity)
+
+	single, _, _ := strings.Cut(source, "    logs/other:")
+	result = linter.Lint(t.Context(), "config.yaml", []byte(single))
+	require.Equal(t, lint.Valid, result.Status)
+	require.Empty(t, result.Diagnostics)
+}

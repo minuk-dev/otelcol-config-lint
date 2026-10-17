@@ -130,3 +130,31 @@ func TestDurationValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestIntegerValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, value string
+		invalid     bool
+	}{
+		{name: "whole float", value: "100.0", invalid: false},
+		{name: "fractional", value: "100.9", invalid: false},
+		{name: "exponent", value: "1e3", invalid: false},
+		{name: "quoted", value: "'100'", invalid: true},
+		{name: "nonfinite", value: ".nan", invalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found, err := ruletest.Run(invalidvalue.New(), "exporters: {debug: {sampling_initial: "+tt.value+"}}")
+			require.NoError(t, err)
+
+			if tt.invalid {
+				assert.Len(t, found, 1)
+			} else {
+				assert.Empty(t, found)
+			}
+		})
+	}
+}

@@ -83,6 +83,9 @@ type Options struct {
 	// IgnoreMissingSchemas keeps components that are absent from the schema
 	// from failing the run, for configs using a custom distribution.
 	IgnoreMissingSchemas bool
+	// RulePolicy returns explicit per-file severities. It must be safe for concurrent calls.
+	// It cannot enable a rule disabled by the global selection.
+	RulePolicy func(path string) map[string]diag.Severity
 	// Environment resolves the deployment environment of one config file, for
 	// the rules that cannot judge a config on its own. It is called from every
 	// worker LintAll starts, so it must be safe for concurrent use and must
@@ -287,6 +290,8 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 		return Result{Path: path, Status: Error, Err: err}
 	}
 
+	l, explicit := l.forPath(path)
+
 	ruleCtx := rule.Context{
 		File:   f,
 		Schema: l.opts.Schema,
@@ -312,19 +317,7 @@ func (l *Linter) lintConfig(ctx context.Context, path string, src []byte) Result
 
 	res := Result{Path: path, Status: Valid, Coverage: l.coverage(&ruleCtx)}
 
-	suppressed := suppressions(f, l.rules, &res, l.opts)
-
-	for _, r := range l.rules {
-		if ctx.Err() != nil {
-			break
-		}
-
-		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
-			if suppressed[d.Position.Line] != d.Rule {
-				addFinding(&res, d, l.opts)
-			}
-		}
-	}
+	l.checkRules(ctx, ruleCtx, &res, explicit)
 
 	if ctx.Err() != nil {
 		return Result{Path: path, Status: Error, Err: ctx.Err()}
@@ -564,4 +557,24 @@ func asSyntaxError(err error, target **config.SyntaxError) bool {
 	}
 
 	return false
+}
+
+func (l *Linter) checkRules(ctx context.Context, ruleCtx rule.Context, res *Result, explicit map[string]diag.Severity) {
+	suppressed := suppressions(ruleCtx.File, l.rules, res, l.opts)
+
+	for _, r := range l.rules {
+		if ctx.Err() != nil {
+			break
+		}
+
+		for _, d := range rule.Run(r, ruleCtx, l.SeverityFor(r)) {
+			if severity, set := explicit[r.Name()]; set {
+				d.Severity = severity
+			}
+
+			if suppressed[d.Position.Line] != d.Rule {
+				addFinding(res, d, l.opts)
+			}
+		}
+	}
 }

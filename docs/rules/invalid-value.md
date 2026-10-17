@@ -31,6 +31,11 @@ An unquoted `5` is valid numeric input, but means five nanoseconds.
 
 ## Notes
 
+Integer fields accept finite numeric YAML values that fit in `int64`, including
+`100.0` and `1e3`. Fractional parts are truncated toward zero, as in the
+Collector's decoder. Component-specific bounds still apply; overflow wrapping
+and non-finite floating-point values are not modeled.
+
 Duration strings use Go's `time.ParseDuration`, matching the Collector's decoder.
 Numeric YAML values specify nanoseconds; fractional nanoseconds are truncated.
 Values such as `.5s`, `1.s`, `+1s`, `0`, and `1μs` are valid; values outside
