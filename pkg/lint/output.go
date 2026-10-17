@@ -100,7 +100,12 @@ func (f *textFormatter) Result(r Result) error {
 			return nil
 		}
 
-		err := writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, "skipped"))
+		message := "skipped"
+		if r.SkipReason != "" {
+			message += ": " + r.SkipReason
+		}
+
+		err := writef(f.w, "%s: %s\n", r.Path, f.color(ansiDim, message))
 
 		return err
 	case Invalid:

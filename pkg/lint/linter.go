@@ -41,6 +41,8 @@ type Result struct {
 	Path        string           `json:"filename"`
 	Status      Status           `json:"status"`
 	Diagnostics diag.Diagnostics `json:"diagnostics,omitempty"`
+	// SkipReason explains why the file was not linted.
+	SkipReason string `json:"skipReason,omitempty"`
 	// Coverage describes the checks that could run, independently of Status.
 	Coverage *Coverage `json:"coverage,omitempty"`
 	// Err explains Error results and may also accompany Invalid YAML syntax.
@@ -54,7 +56,7 @@ func (r Result) Message() string {
 		return r.Err.Error()
 	}
 
-	return ""
+	return r.SkipReason
 }
 
 // Options configures a Linter. New copies Severities and the Rules slice;
@@ -208,6 +210,11 @@ func (l *Linter) Lint(ctx context.Context, path string, src []byte) Result {
 
 	if l.opts.Embedded {
 		return l.lintEmbedded(ctx, path, src)
+	}
+
+	if kubernetesDocuments(path, src) {
+		return Result{Path: path, Status: Skipped,
+			SkipReason: "Kubernetes manifest; use --embedded to lint ConfigMap contents"}
 	}
 
 	return l.lintConfig(ctx, path, src)
