@@ -72,3 +72,16 @@ policy binds every interface deliberately.
 ## See also
 
 - [`../../testdata/rules/receiver-binds-all-interfaces.yaml`](../../testdata/rules/receiver-binds-all-interfaces.yaml)
+
+## Kubernetes deployments
+
+When `run.kubernetes.enabled: true` applies to a file, wildcard receivers and
+extensions report at `info`. The hint describes deliberate pod reachability,
+NetworkPolicy and `hostNetwork`, rather than prescribing a pod IP for every
+listener. Unknown/non-Kubernetes environments retain `warning`.
+
+The environment setting does not establish network isolation: `hostNetwork`
+shares the node network and is not modeled by this setting. Keep a warning or
+error for such deployments through `rules.severity` or `rules.overrides`;
+explicit severity policy takes precedence. Probe/debug-extension exclusions
+remain unchanged. This rule does not traverse `service.telemetry` readers.

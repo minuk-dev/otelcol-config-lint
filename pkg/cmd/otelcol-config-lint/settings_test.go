@@ -475,3 +475,45 @@ service:
 	require.Equal(t, 1, code, errOut)
 	require.Contains(t, out, "warning:")
 }
+
+func TestKubernetesBindingSeverityPolicy(t *testing.T) {
+	t.Parallel()
+
+	const source = `receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: '0.0.0.0:4317'}
+exporters: {debug: {}}
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`
+
+	policy := writeSettings(t, `run:
+  kubernetes:
+    enabled: true
+    overrides:
+      - paths: [host.yaml]
+        enabled: false
+rules:
+  default: none
+  enable: [receiver-binds-all-interfaces]
+`)
+	dir := t.TempDir()
+	pod := filepath.Join(dir, "pod.yaml")
+	host := filepath.Join(dir, "host.yaml")
+
+	writeFile(t, pod, source)
+	writeFile(t, host, source)
+
+	args := []string{"--config", policy, "--fail-on", "warning"}
+	code, out, errOut := lint(t, "", append(args, pod)...)
+	require.Equal(t, 0, code, errOut)
+	require.Contains(t, out, "info:")
+	code, out, errOut = lint(t, "", append(args, host)...)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
+	code, out, errOut = lint(t, "", append(args, "--severity", "receiver-binds-all-interfaces=warning", pod)...)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
+}
