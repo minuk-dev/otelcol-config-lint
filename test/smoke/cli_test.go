@@ -43,7 +43,7 @@ func TestCLISmoke(t *testing.T) {
 run:
   collectorVersion: v0.157.0
   distribution: contrib
-  schemaLocations: ["../local schemas"]
+  schemaLocations: ["./local schemas"]
   exclude: ["*skip*.yaml"]
 issues:
   minSeverity: error

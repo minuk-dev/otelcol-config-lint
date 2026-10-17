@@ -137,7 +137,6 @@ func TestOutputAcceptsABareFormat(t *testing.T) {
 	assert.Contains(t, out, `"filename"`, "a bare format should still select json")
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestASettingsFileIsFoundInAParentDirectory(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"),
@@ -154,8 +153,6 @@ func TestASettingsFileIsFoundInAParentDirectory(t *testing.T) {
 
 // TestTheSearchStopsAtTheRepositoryRoot keeps a run from picking up whatever
 // happens to sit above the project it is linting.
-//
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestTheSearchStopsAtTheRepositoryRoot(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"), "run:\n  collectorVersion: v0.110.0\n")
@@ -170,7 +167,6 @@ func TestTheSearchStopsAtTheRepositoryRoot(t *testing.T) {
 	assert.Equal(t, 1, code, "a file above the repository must not apply:\n%s", out)
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestTheYmlSpellingIsFoundToo(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yml"),
@@ -183,7 +179,6 @@ func TestTheYmlSpellingIsFoundToo(t *testing.T) {
 	assert.Equal(t, 0, code, "the .yml spelling should be read: %s%s", out, errOut)
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestNoConfigIgnoresTheFileThatWouldBeFound(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"),
@@ -269,12 +264,12 @@ func TestAnUnknownRuleSetIsAUsageError(t *testing.T) {
 func TestSettingsForARuleThatTakesNoneIsAUsageError(t *testing.T) {
 	t.Parallel()
 
-	path := writeSettings(t, "rules:\n  settings:\n    missing-batch:\n      timeout: 5s\n")
+	path := writeSettings(t, "rules:\n  settings:\n    insecure-tls:\n      timeout: 5s\n")
 
 	code, _, errOut := lint(t, "", "--config", path, badConfig)
 
 	assert.Equal(t, 2, code)
-	assert.Contains(t, errOut, "missing-batch")
+	assert.Contains(t, errOut, "insecure-tls")
 	assert.Contains(t, errOut, "takes no settings")
 }
 
@@ -410,6 +405,28 @@ func TestListRulesHonoursTheRuleBlock(t *testing.T) {
 	}
 }
 
+func TestAlphaReportingSettings(t *testing.T) {
+	t.Parallel()
+
+	source := `receivers: {filelog: {}}
+exporters: {debug: {}}
+service:
+  pipelines:
+    logs: {receivers: [filelog], exporters: [debug]}
+`
+
+	for _, enabled := range []string{"true", "false"} {
+		t.Run(enabled, func(t *testing.T) {
+			t.Parallel()
+			path := writeSettings(t, "rules:\n  default: none\n  enable: [component-stability]\n"+
+				"  settings:\n    component-stability:\n      report_alpha: "+enabled+"\n")
+			code, out, errOut := lint(t, source, "--config", path, "-")
+			require.Equal(t, 0, code, errOut)
+			assert.Equal(t, enabled == "true", strings.Contains(out, "is alpha"), out)
+		})
+	}
+}
+
 func TestFileRuleOverridesReachCLI(t *testing.T) {
 	t.Parallel()
 	policy := writeSettings(t, `rules:
@@ -432,6 +449,29 @@ func TestFileRuleOverridesReachCLI(t *testing.T) {
 	require.Contains(t, rulesFired(t, out)["other.yaml"], "debug-exporter-verbosity")
 	code, out, errOut := lint(t, "", "--config", policy, "--severity", "debug-exporter-verbosity=warning",
 		"--fail-on", "warning", sink)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
+}
+
+func TestSampledDebugSeverityOverride(t *testing.T) {
+	t.Parallel()
+
+	const src = `exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+service:
+  pipelines:
+    logs:
+      exporters: [debug]
+`
+
+	args := []string{"--default", "none", "-E", "debug-exporter-verbosity", "--fail-on", "warning"}
+	code, out, errOut := lint(t, src, append(args, "-")...)
+	require.Equal(t, 0, code, errOut)
+	require.Contains(t, out, "info:")
+	code, out, errOut = lint(t, src, append(args, "--severity", "debug-exporter-verbosity=warning", "-")...)
 	require.Equal(t, 1, code, errOut)
 	require.Contains(t, out, "warning:")
 }

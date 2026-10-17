@@ -26,7 +26,7 @@ exporters:
 ```console
 $ otelcol-config-lint run config.yaml
 config.yaml:17:17: warning: "tls.insecure" disables TLS verification for exporter "otlp_grpc" [insecure-tls]
-    hint: supply ca_file/cert_file instead of skipping verification outside local testing
+    hint: configure trusted CA certificates and enable verification outside local testing
     docs: https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configtls/README.md
 ```
 
@@ -41,3 +41,10 @@ it fatal where it should be.
 ## See also
 
 - [`../../testdata/rules/insecure-tls.yaml`](../../testdata/rules/insecure-tls.yaml)
+
+When the same TLS block contains a nonempty literal `ca_file` and
+`insecure_skip_verify: true`, the warning explains that server verification is
+still disabled despite the configured CA. Remove the skip flag or set it to
+false while retaining the intended CA. The CA file may still be loaded and can
+cause a startup error if invalid; it is not described as unread or wholly unused.
+An absent, empty or unresolved CA keeps the generic diagnostic.

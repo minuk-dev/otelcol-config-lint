@@ -56,7 +56,7 @@ func TestSettingReaders(t *testing.T) {
 	}
 }
 
-func TestReadDurationNumbers(t *testing.T) {
+func TestReadNumbers(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
@@ -91,11 +91,20 @@ func TestReadDurationNumbers(t *testing.T) {
 
 			require.NoError(t, yaml.Unmarshal([]byte("value: "+tt.value), &doc))
 			node := doc.Content[0].Content[1]
-			got := rule.ReadDuration(node)
-			assert.Same(t, node, got.Node)
-			assert.True(t, got.Present)
-			assert.Equal(t, tt.known, got.Known)
-			assert.Equal(t, tt.num, got.Num)
+
+			for name, read := range map[string]func(*yaml.Node) rule.Setting{
+				"integer": rule.ReadInt, "duration": rule.ReadDuration,
+			} {
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+
+					got := read(node)
+					assert.Same(t, node, got.Node)
+					assert.True(t, got.Present)
+					assert.Equal(t, tt.known, got.Known)
+					assert.Equal(t, tt.num, got.Num)
+				})
+			}
 		})
 	}
 }

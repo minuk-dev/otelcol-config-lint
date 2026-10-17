@@ -2,7 +2,6 @@ package rule
 
 import (
 	"math"
-	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -10,7 +9,10 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 )
 
-const intTag = "!!int"
+const (
+	intTag   = "!!int"
+	floatTag = "!!float"
+)
 
 // Setting is one value read out of a component's settings block, for the rules
 // that compare one setting against another rather than against a schema.
@@ -35,7 +37,8 @@ func Absent() Setting { return Setting{Node: nil, Present: false, Known: false, 
 // reads it: confmap unmarshals through yaml.v3, which resolves 0x400 as 1024,
 // 8_192 as 8192, and a leading zero as octal, so 0100 is 64 and not a hundred.
 // Reading base 10 here would compare, and quote back, a number the collector
-// never sees. Null is a known zero, matching the Collector's scalar decoder.
+// never sees. Fractional numbers truncate toward zero. Null is a known zero,
+// matching the Collector's scalar decoder.
 //
 // A value nothing can know before the collector starts -- an expansion, or text
 // of the wrong type -- is present but not known, which stops every check that
@@ -50,12 +53,22 @@ func ReadInt(node *yaml.Node) Setting {
 		return out
 	}
 
-	num, err := strconv.ParseInt(node.Value, 0, 64)
-	if err != nil {
-		return out
-	}
+	switch node.Tag {
+	case intTag:
+		out.Known = node.Decode(&out.Num) == nil
 
-	out.Known, out.Num = true, num
+	case floatTag:
+		var num float64
+
+		// The upper bound is exclusive: float64 rounds MaxInt64 up to 2^63.
+		err := node.Decode(&num)
+		if err == nil && num >= math.MinInt64 && num < math.MaxInt64 {
+			out.Known, out.Num = true, int64(num)
+		}
+
+	default:
+		// Other scalar types are not numbers.
+	}
 
 	return out
 }
@@ -72,21 +85,8 @@ func ReadDuration(node *yaml.Node) Setting {
 		return out
 	}
 
-	switch node.Tag {
-	case intTag:
-		out.Known = node.Decode(&out.Num) == nil
-
-		return out
-	case "!!float":
-		var num float64
-
-		// The upper bound is exclusive: float64 rounds MaxInt64 up to 2^63.
-		err := node.Decode(&num)
-		if err == nil && num >= math.MinInt64 && num < math.MaxInt64 {
-			out.Known, out.Num = true, int64(num)
-		}
-
-		return out
+	if node.Tag == intTag || node.Tag == floatTag {
+		return ReadInt(node)
 	}
 
 	dur, err := time.ParseDuration(node.Value)

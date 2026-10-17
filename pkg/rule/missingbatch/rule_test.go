@@ -1,6 +1,7 @@
 package missingbatch_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -437,4 +438,64 @@ service:
   pipelines:
     traces: {receivers: [otlp], exporters: [kafka]}
 `
+}
+
+func TestBatchingAcrossForwardConnectors(t *testing.T) {
+	t.Parallel()
+
+	const source = `receivers:
+  otlp: {}
+processors:
+  batch: {}
+connectors:
+  forward/a: {}
+  forward/b: {}
+exporters:
+  debug: {}
+  otlp:
+    sending_queue:
+      batch: {}
+service:
+  pipelines:
+    logs/in:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [forward/a]
+    logs/middle:
+      receivers: [forward/a]
+      exporters: [forward/b]
+    logs/out:
+      receivers: [forward/b]
+      exporters: [debug]
+`
+
+	for _, tt := range []struct {
+		name, from, to string
+		want           int
+	}{
+		{name: "upstream batch", from: "not-present", to: "", want: 0},
+		{name: "no batching", from: "processors: [batch]", to: "processors: []", want: 1},
+		{name: "undeclared processor", from: "  batch: {}", to: "", want: 1},
+		{name: "batch-changing connector", from: "forward", to: "routing", want: 1},
+		{name: "mixed receiver", from: "receivers: [forward/b]", to: "receivers: [forward/b, otlp]", want: 1},
+		{name: "cyclic path", from: "receivers: [otlp]", to: "receivers: [forward/b]", want: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found, err := ruletest.Run(missingbatch.New(), strings.ReplaceAll(source, tt.from, tt.to))
+			require.NoError(t, err)
+			require.Len(t, found, tt.want)
+		})
+	}
+
+	t.Run("unrelated queue does not batch connector", func(t *testing.T) {
+		t.Parallel()
+
+		input := strings.ReplaceAll(source, "processors: [batch]", "processors: []")
+		input = strings.ReplaceAll(input, "exporters: [forward/a]", "exporters: [forward/a, otlp]")
+		found, err := ruletest.Run(missingbatch.New(), input)
+		require.NoError(t, err)
+		require.Len(t, found, 1)
+	})
 }
