@@ -264,12 +264,12 @@ func TestAnUnknownRuleSetIsAUsageError(t *testing.T) {
 func TestSettingsForARuleThatTakesNoneIsAUsageError(t *testing.T) {
 	t.Parallel()
 
-	path := writeSettings(t, "rules:\n  settings:\n    missing-batch:\n      timeout: 5s\n")
+	path := writeSettings(t, "rules:\n  settings:\n    insecure-tls:\n      timeout: 5s\n")
 
 	code, _, errOut := lint(t, "", "--config", path, badConfig)
 
 	assert.Equal(t, 2, code)
-	assert.Contains(t, errOut, "missing-batch")
+	assert.Contains(t, errOut, "insecure-tls")
 	assert.Contains(t, errOut, "takes no settings")
 }
 

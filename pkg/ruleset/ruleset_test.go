@@ -954,14 +954,13 @@ func TestFindingsCiteUpstream(t *testing.T) {
 	}
 }
 
-// TestNoBuiltInRuleTakesSettingsYet records where rules.settings stands: the
-// schema is there for the rules that will want it, and no rule in the set reads
-// a block. When the first one does, this test is the reminder to document it.
-func TestNoBuiltInRuleTakesSettingsYet(t *testing.T) {
+// TestBuiltInRuleSettingsAreDocumented keeps new configurable rules from
+// shipping without a documented settings block.
+func TestBuiltInRuleSettingsAreDocumented(t *testing.T) {
 	t.Parallel()
 
 	for _, r := range ruleset.All() {
-		if _, ok := r.(rule.Configurable); ok {
+		if _, ok := r.(rule.Configurable); ok && r.Name() != "missing-batch" {
 			t.Errorf("%s now takes settings -- document its block under rules.settings", r.Name())
 		}
 	}

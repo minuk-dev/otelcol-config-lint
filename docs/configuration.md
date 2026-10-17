@@ -93,14 +93,13 @@ golangci-lint's `linters.settings` works:
 ```yaml
 rules:
   settings:
-    some-rule:
-      threshold: 10
+    missing-batch:
+      additional_processors: [resourcebatch]
 ```
 
-No built-in rule reads a block yet — the schema is here so one can be added
-without every settings file having to change shape. Until a rule declares that
-it takes settings, writing a block for it is reported as an error: a knob nobody
-reads is worse than a knob that is missing.
+`missing-batch.additional_processors` names custom processor types that your
+distribution uses for batching. Only configure types whose batching behavior you
+have verified. Rules that do not declare settings still reject a settings block.
 
 ## Checking the settings file in an editor
 
