@@ -307,3 +307,8 @@ see [docs/schemas.md](docs/schemas.md).
 
 [docs/contributing.md](docs/contributing.md) has the repository layout, the
 `make` targets, how releases are cut, and what adding a rule takes.
+
+Text `--summary` includes findings per rule, ordered by descending count and
+then rule name. Counts include only displayed diagnostics after severity
+filtering; file errors and skipped files remain in the file summary. JSON and
+other output formats retain their existing structure.
