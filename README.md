@@ -308,6 +308,13 @@ see [docs/schemas.md](docs/schemas.md).
 [docs/contributing.md](docs/contributing.md) has the repository layout, the
 `make` targets, how releases are cut, and what adding a rule takes.
 
+Directory arguments discover only `.yaml` and `.yml` files (case-insensitive),
+including nested directories. Explicit file arguments are parsed regardless of
+extension. Shell and Action globs expand into explicit arguments: use
+`run ./overlays` or Action `files: ./overlays` for YAML-only discovery, rather
+than `./overlays/*`. When reporting unexpected candidates, include the binary
+version, exact invocation, and whether a wrapper or shell expanded its paths.
+
 Directory runs skip Kubernetes manifest documents outside `--embedded` mode.
 Use `--verbose` to see each skip reason, or JSON output for structured skipped
 results. `--embedded` continues to lint collector configs in ConfigMap data.

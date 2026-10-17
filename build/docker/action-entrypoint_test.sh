@@ -178,3 +178,24 @@ GITHUB_OUTPUT="${work}/outputs" bash build/docker/action-entrypoint.sh \
   >"${work}/action.json" || action_code=$?
 test "${action_code}" -eq "${cli_code}"
 diff -u "${work}/cli.json" "${work}/action.json"
+
+# A directory argument filters extensions; expanded globs become explicit files.
+mkdir -p "${work}/candidates/nested"
+for file in collector.yaml collector.yml nested/collector.YAML; do
+  printf 'receivers: {}\n' >"${work}/candidates/${file}"
+done
+printf '%s\n' '-----BEGIN CERTIFICATE-----' >"${work}/candidates/beta-kafka-ca.pem"
+printf '%s\n' 'not a config' >"${work}/candidates/nested/notes.txt"
+for input in "${work}/candidates" "${work}/candidates/*"; do
+  action_code=0
+  bash build/docker/action-entrypoint.sh --no-config=true --default=none \
+    --schema-location=testdata/schemas --output=json "--files=${input}" \
+    >"${work}/action.json" || action_code=$?
+  if [ "${input}" = "${work}/candidates" ]; then
+    test "${action_code}" -eq 0
+    jq -e '.files | length == 3 and all(.filename | endswith(".pem") | not)' "${work}/action.json" >/dev/null
+  else
+    test "${action_code}" -eq 1
+    jq -e 'any(.files[]; (.filename | endswith(".pem")) and .status == "invalid")' "${work}/action.json" >/dev/null
+  fi
+done
