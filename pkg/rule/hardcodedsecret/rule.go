@@ -212,6 +212,16 @@ func namesCredential(key string, inHeaders bool) bool {
 		}
 	}
 
+	// Configuration metadata describes how to obtain or interpret a credential.
+	// Header names do not carry that contract and may still hold the secret.
+	if !inHeaders {
+		for _, suffix := range []string{"_env", "_type", "_mode", "_format"} {
+			if strings.HasSuffix(key, suffix) {
+				return false
+			}
+		}
+	}
+
 	// "secret" subsumes client_secret and secret_key; "password" subsumes
 	// sasl_password and the rest. A bare "key" is deliberately absent: key,
 	// keys and key_file are ordinary settings across the collector, which is

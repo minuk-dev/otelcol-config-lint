@@ -93,10 +93,16 @@ func TestHardcodedSecret(t *testing.T) {
 
 		// A key that names where a credential lives is the opposite of the
 		// problem: it is a properly configured component.
-		"a key file":      {settings: "    private_key_file: /etc/certs/key.pem", want: false},
-		"a password file": {settings: "    password_file: /etc/otel/password", want: false},
-		"a token url":     {settings: "    token_url: https://issuer/oauth2/token", want: false},
-		"a secret name":   {settings: "    secret_name: otel-collector-credentials", want: false},
+		"a key file":               {settings: "    private_key_file: /etc/certs/key.pem", want: false},
+		"a password file":          {settings: "    password_file: /etc/otel/password", want: false},
+		"a token url":              {settings: "    token_url: https://issuer/oauth2/token", want: false},
+		"a token environment":      {settings: "    default_logstore_token_env: prod", want: false},
+		"a token type":             {settings: "    token_type: bearer", want: false},
+		"a secret mode":            {settings: "    secret_mode: managed", want: false},
+		"a credential format":      {settings: "    credential_format: json", want: false},
+		"shouted metadata":         {settings: "    DEFAULT_TOKEN_ENV: prod", want: false},
+		"metadata plus credential": {settings: "    token_env: prod\n    token: abc123def456", want: true},
+		"a secret name":            {settings: "    secret_name: otel-collector-credentials", want: false},
 
 		// A bare "key" is an ordinary setting across the collector, and
 		// matching it would report half of every config.
@@ -142,6 +148,9 @@ func TestHardcodedSecretInHeaders(t *testing.T) {
 		settings string
 		want     bool
 	}{
+		"token header ending in env":   {settings: "    headers:\n      x-auth-token-env: abc123def456", want: true},
+		"secret header ending in type": {settings: "    headers:\n      x-secret-type: abc123def456", want: true},
+		"bearer metadata-like header":  {settings: "    headers:\n      x-env: Bearer abc123def456", want: true},
 		"a bearer token": {
 			settings: "    headers:\n      authorization: Bearer abc123def456",
 			want:     true,
