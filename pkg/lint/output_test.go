@@ -3,6 +3,7 @@ package lint_test
 import (
 	"bytes"
 	"encoding/xml"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -206,4 +207,40 @@ func TestGitHubOutputKeepsLaterFilesAndCapsErrors(t *testing.T) {
 	assert.Equal(t, 10, bytes.Count(buf.Bytes(), []byte("::error file=")))
 	assert.Contains(t, buf.String(), "::error file=b.yaml::")
 	assert.Contains(t, buf.String(), "::notice::10 of 12 errors shown")
+}
+
+func TestGitHubOutputEscapesFileProperties(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		line int
+	}{
+		{name: "diagnostic", line: 2}, {name: "file error", line: 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			const path = "configs/a,b:%0A\r\n::notice::injected.yaml"
+
+			var buf bytes.Buffer
+
+			f, err := lint.NewFormatter("github", &buf, lint.FormatterOptions{})
+			require.NoError(t, err)
+
+			r := lint.Result{Path: path, Status: lint.Error, Err: assert.AnError}
+			if tt.line > 0 {
+				r = lint.Result{Path: path, Status: lint.Invalid, Diagnostics: diag.Diagnostics{{
+					Rule: "test", Severity: diag.Error, Message: "bad\nvalue",
+					Position: diag.Position{File: path, Line: tt.line, Column: 1},
+				}}}
+			}
+
+			require.NoError(t, f.Result(r))
+			require.NoError(t, f.Finish(lint.Summary{}))
+			assert.Contains(t, buf.String(), "file=configs/a%2Cb%3A%250A%0D%0A%3A%3Anotice%3A%3Ainjected.yaml")
+			assert.Equal(t, 1, strings.Count(buf.String(), "\n"))
+			assert.NotContains(t, buf.String(), "::notice::")
+		})
+	}
 }

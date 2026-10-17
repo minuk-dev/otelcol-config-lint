@@ -76,6 +76,12 @@ func validateNode(path string, n *yaml.Node) error {
 		}
 	case yaml.MappingNode:
 		for _, e := range entries(n, "") {
+			key := aliasTarget(e.KeyNode)
+			if key.Kind == yaml.MappingNode || key.Kind == yaml.SequenceNode {
+				return &SyntaxError{Path: path, Line: e.KeyNode.Line, Column: e.KeyNode.Column,
+					Msg: "invalid map key: keys must be scalar values"}
+			}
+
 			if e.KeyNode.Tag != MergeTag {
 				continue
 			}

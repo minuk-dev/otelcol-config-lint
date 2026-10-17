@@ -43,6 +43,18 @@ func TestBatchSizeBounds(t *testing.T) {
 		settings string
 		want     string // a phrase the finding has to carry
 	}{
+		"fractional values compare after truncation": {
+			settings: "    send_batch_size: 100.9\n    send_batch_max_size: 99.9",
+			want:     "sets send_batch_max_size to 99 and send_batch_size to 100",
+		},
+		"negative fraction cannot decode into uint32": {
+			settings: "    send_batch_size: -0.9",
+			want:     "sets send_batch_size to -0.9, which the field cannot hold",
+		},
+		"floating point uint32 overflow": {
+			settings: "    send_batch_size: 4294967296.0",
+			want:     "which the field cannot hold",
+		},
 		"a cap below the default size": {
 			settings: "    send_batch_max_size: 1000",
 			want:     "send_batch_max_size must be greater or equal to send_batch_size",

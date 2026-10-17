@@ -25,6 +25,11 @@ func (r missingMemoryLimiter) Check(ctx *rule.Context) {
 			continue
 		}
 
+		// Forward and routing synchronously pass same-signal data downstream.
+		if ctx.Index.UpstreamCovered(p, []string{rule.MemoryLimiterType}, []string{"forward", "routing"}) {
+			continue
+		}
+
 		ctx.Report(rule.Finding{
 			Node: rule.NodeOr(p.ProcessorsNode, p.KeyNode),
 			Path: "service.pipelines." + p.Key + ".processors",

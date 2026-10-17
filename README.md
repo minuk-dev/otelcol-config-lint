@@ -314,3 +314,13 @@ extension. Shell and Action globs expand into explicit arguments: use
 `run ./overlays` or Action `files: ./overlays` for YAML-only discovery, rather
 than `./overlays/*`. When reporting unexpected candidates, include the binary
 version, exact invocation, and whether a wrapper or shell expanded its paths.
+
+Directory runs skip Kubernetes manifest documents outside `--embedded` mode.
+Use `--verbose` to see each skip reason, or JSON output for structured skipped
+results. `--embedded` continues to lint collector configs in ConfigMap data.
+Malformed or mixed manifest/collector streams are still reported.
+
+Text `--summary` includes findings per rule, ordered by descending count and
+then rule name. Counts include only displayed diagnostics after severity
+filtering; file errors and skipped files remain in the file summary. JSON and
+other output formats retain their existing structure.

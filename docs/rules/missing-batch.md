@@ -94,3 +94,26 @@ is parsed, so what an anchor supplies is read like anything written in place.
 ## See also
 
 - [`../../testdata/rules/missing-batch.yaml`](../../testdata/rules/missing-batch.yaml)
+
+## Batching before a connector
+
+A downstream pipeline does not receive a redundant finding when every ingress
+path is already batched and reaches it through `forward` connectors. The check
+requires declared processors and same-signal paths. Unknown references, cycles,
+missing producers and an unbatched fan-in remain inconclusive. `routing` and
+other connectors can split or generate batches, so they retain the downstream
+check. Queue batching on a sibling exporter does not batch the connector leg.
+
+For a private distribution with a verified batching processor, declare its type:
+
+```yaml
+rules:
+  settings:
+    missing-batch:
+      additional_processors: [resourcebatch]
+```
+
+This adds types to the built-in `batch` recognition, both in the current pipeline
+and upstream through `forward`. It is an explicit assertion about that custom
+component, not a guarantee inferred from its name or schema. Existing exporter
+`sending_queue.batch` recognition remains specific to the exporter's own leg.

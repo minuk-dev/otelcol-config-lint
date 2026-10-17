@@ -1,0 +1,18 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: null
+exporters:
+  debug:
+    ? [verbosity]
+    : basic
+processors:
+  batch:
+    timeout: null
+    send_batch_size: null
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
