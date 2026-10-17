@@ -491,9 +491,14 @@ service:
 
 	policy := writeSettings(t, `run:
   kubernetes:
-    enabled: true
+    hostNetwork: false
     overrides:
       - paths: [host.yaml]
+        enabled: true
+        hostNetwork: true
+      - paths: [unknown.yaml]
+        enabled: true
+      - paths: [outside.yaml]
         enabled: false
 rules:
   default: none
@@ -506,14 +511,52 @@ rules:
 	writeFile(t, pod, source)
 	writeFile(t, host, source)
 
-	args := []string{"--config", policy, "--fail-on", "warning"}
+	args := []string{"--config", policy, "--fail-on", "warning", "--verbose"}
 	code, out, errOut := lint(t, "", append(args, pod)...)
 	require.Equal(t, 0, code, errOut)
 	require.Contains(t, out, "info:")
+	require.Contains(t, errOut, "kubernetes, hostNetwork false")
 	code, out, errOut = lint(t, "", append(args, host)...)
 	require.Equal(t, 1, code, errOut)
 	require.Contains(t, out, "warning:")
+	require.Contains(t, out, "node network")
+
+	for _, name := range []string{"unknown.yaml", "outside.yaml"} {
+		path := filepath.Join(dir, name)
+		writeFile(t, path, source)
+		code, out, errOut = lint(t, "", append(args, path)...)
+		require.Equal(t, 1, code, errOut)
+		require.Contains(t, out, "warning:")
+	}
+
 	code, out, errOut = lint(t, "", append(args, "--severity", "receiver-binds-all-interfaces=warning", pod)...)
 	require.Equal(t, 1, code, errOut)
 	require.Contains(t, out, "warning:")
+}
+
+func TestKubernetesBindingFlagCanOptOut(t *testing.T) {
+	t.Parallel()
+
+	policy := writeSettings(t, `run:
+  kubernetes:
+    hostNetwork: false
+rules:
+  default: none
+  enable: [receiver-binds-all-interfaces]
+`)
+
+	const source = `receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: '0.0.0.0:4317'}
+exporters: {debug: {}}
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [debug]}
+`
+
+	code, out, errOut := lint(t, source, "--config", policy, "--kubernetes=false", "--fail-on", "warning", "-")
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
+	require.Contains(t, out, "host has")
 }

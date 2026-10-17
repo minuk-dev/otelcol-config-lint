@@ -134,7 +134,11 @@
       "description": "Deprecated: moved to run.kubernetes.",
       "properties": {
         "enabled": {
-          "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+          "description": "The configs run in a Kubernetes pod. Defaults to true when hostNetwork or either memory number is written.",
+          "type": "boolean"
+        },
+        "hostNetwork": {
+          "description": "Whether the pod shares the node network. Omit when unknown; only explicit false lowers wildcard listener findings to info.",
           "type": "boolean"
         },
         "memoryLimit": {
@@ -152,7 +156,11 @@
             "description": "One path-matched environment. It replaces the defaults for the files it matches rather than merging with them.",
             "properties": {
               "enabled": {
-                "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+                "description": "The configs run in a Kubernetes pod. Defaults to true when hostNetwork or either memory number is written.",
+                "type": "boolean"
+              },
+              "hostNetwork": {
+                "description": "Whether the pod shares the node network. Omit when unknown; only explicit false lowers wildcard listener findings to info.",
                 "type": "boolean"
               },
               "memoryLimit": {
@@ -372,7 +380,11 @@
           "description": "The pods the configs run in, for the rules that cannot judge a config without knowing what it runs in.",
           "properties": {
             "enabled": {
-              "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+              "description": "The configs run in a Kubernetes pod. Defaults to true when hostNetwork or either memory number is written.",
+              "type": "boolean"
+            },
+            "hostNetwork": {
+              "description": "Whether the pod shares the node network. Omit when unknown; only explicit false lowers wildcard listener findings to info.",
               "type": "boolean"
             },
             "memoryLimit": {
@@ -390,7 +402,11 @@
                 "description": "One path-matched environment. It replaces the defaults for the files it matches rather than merging with them.",
                 "properties": {
                   "enabled": {
-                    "description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
+                    "description": "The configs run in a Kubernetes pod. Defaults to true when hostNetwork or either memory number is written.",
+                    "type": "boolean"
+                  },
+                  "hostNetwork": {
+                    "description": "Whether the pod shares the node network. Omit when unknown; only explicit false lowers wildcard listener findings to info.",
                     "type": "boolean"
                   },
                   "memoryLimit": {

@@ -74,6 +74,8 @@ type Context struct {
 type Environment struct {
 	// Kubernetes reports that the config runs in a Kubernetes pod.
 	Kubernetes bool
+	// HostNetwork is whether the pod shares the node network; nil is unknown.
+	HostNetwork *bool
 	// MemoryRequest is the container's memory request in bytes; 0 is unknown.
 	MemoryRequest int64
 	// MemoryLimit is the container's memory limit in bytes; 0 is unknown.

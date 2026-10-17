@@ -70,5 +70,5 @@ func (p EnvironmentPolicy) Resolve(path string) rule.Environment {
 // Configured reports whether the policy can resolve anything at all, so a
 // caller can stay quiet about environments nobody asked for.
 func (p EnvironmentPolicy) Configured() bool {
-	return p.Default.Known() || len(p.Overrides) > 0
+	return p.Default.Kubernetes || len(p.Overrides) > 0
 }

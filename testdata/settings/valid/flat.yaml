@@ -17,4 +17,5 @@ exclude:
   - "*.tmpl.yaml"
 kubernetes:
   enabled: true
+  hostNetwork: false
   memoryLimit: 512Mi

@@ -139,10 +139,21 @@ func (r receiverBindsAllInterfaces) report(
 		Hint: bindHint(rule.EndpointPort(node.Value)),
 		Docs: rule.ConfigSecurityDocs,
 	}
+
 	if ctx.Env.Kubernetes {
-		finding.Severity = diag.Info
+		network := "the pod or node network namespace (hostNetwork is unknown)"
+
+		if ctx.Env.HostNetwork != nil {
+			if *ctx.Env.HostNetwork {
+				network = "the node network namespace (hostNetwork is true)"
+			} else {
+				network = "the pod network namespace"
+				finding.Severity = diag.Info
+			}
+		}
+
 		finding.Message = rule.Quote(rule.ShortPath(path)) + " binds " + rule.Quote(node.Value) +
-			", every interface in the pod network namespace, for " + string(kind) + " " + rule.Quote(c.ID.String())
+			", every interface in " + network + ", for " + string(kind) + " " + rule.Quote(c.ID.String())
 		finding.Hint = "confirm this listener is intended to be reachable from other pods; " +
 			"check NetworkPolicy and hostNetwork (which shares the node network); " +
 			"use a specific address when only local clients need access"

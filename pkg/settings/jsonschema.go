@@ -141,8 +141,14 @@ func runSchema() object {
 func kubernetesSchema() object {
 	defaults := object{
 		"enabled": object{
-			"description": "The configs run in a Kubernetes pod. Defaults to true when either memory number is written.",
-			"type":        "boolean",
+			"description": "The configs run in a Kubernetes pod. " +
+				"Defaults to true when hostNetwork or either memory number is written.",
+			"type": "boolean",
+		},
+		"hostNetwork": object{
+			"description": "Whether the pod shares the node network. Omit when unknown; " +
+				"only explicit false lowers wildcard listener findings to info.",
+			"type": "boolean",
 		},
 		"memoryRequest": ref("#/$defs/quantity", "The container's memory request, e.g. 256Mi."),
 		"memoryLimit":   ref("#/$defs/quantity", "The container's memory limit, e.g. 512Mi."),
@@ -162,6 +168,7 @@ func kubernetesSchema() object {
 				"items":       object{"type": "string"},
 			},
 			"enabled":       defaults["enabled"],
+			"hostNetwork":   defaults["hostNetwork"],
 			"memoryRequest": defaults["memoryRequest"],
 			"memoryLimit":   defaults["memoryLimit"],
 		},
