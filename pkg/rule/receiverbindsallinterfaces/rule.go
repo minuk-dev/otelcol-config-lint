@@ -132,13 +132,23 @@ func (r receiverBindsAllInterfaces) report(
 		return
 	}
 
-	ctx.Report(rule.Finding{
+	finding := rule.Finding{
 		Node: node, Path: path,
 		Message: rule.Quote(rule.ShortPath(path)) + " binds " + rule.Quote(node.Value) +
 			", every interface the host has, for " + string(kind) + " " + rule.Quote(c.ID.String()),
 		Hint: bindHint(rule.EndpointPort(node.Value)),
 		Docs: rule.ConfigSecurityDocs,
-	})
+	}
+	if ctx.Env.Kubernetes {
+		finding.Severity = diag.Info
+		finding.Message = rule.Quote(rule.ShortPath(path)) + " binds " + rule.Quote(node.Value) +
+			", every interface in the pod network namespace, for " + string(kind) + " " + rule.Quote(c.ID.String())
+		finding.Hint = "confirm this listener is intended to be reachable from other pods; " +
+			"check NetworkPolicy and hostNetwork (which shares the node network); " +
+			"use a specific address when only local clients need access"
+	}
+
+	ctx.Report(finding)
 }
 
 // bindHint names the fix upstream documents rather than only saying not to do
