@@ -404,3 +404,29 @@ func TestListRulesHonoursTheRuleBlock(t *testing.T) {
 		assert.Contains(t, rest, "off", "%q should be listed as off under default: none", name)
 	}
 }
+
+func TestFileRuleOverridesReachCLI(t *testing.T) {
+	t.Parallel()
+	policy := writeSettings(t, `rules:
+  default: none
+  enable: [debug-exporter-verbosity]
+  overrides:
+    - paths: ["sink.yaml"]
+      disable: [debug-exporter-verbosity]
+`)
+	dir := t.TempDir()
+	sink := filepath.Join(dir, "sink.yaml")
+	other := filepath.Join(dir, "other.yaml")
+
+	const src = "exporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      exporters: [debug]\n"
+	writeFile(t, sink, src)
+	writeFile(t, other, src)
+	_, out, errOut := lint(t, "", "--config", policy, "--output", "json", sink, other)
+	require.Empty(t, errOut)
+	require.NotContains(t, rulesFired(t, out)["sink.yaml"], "debug-exporter-verbosity")
+	require.Contains(t, rulesFired(t, out)["other.yaml"], "debug-exporter-verbosity")
+	code, out, errOut := lint(t, "", "--config", policy, "--severity", "debug-exporter-verbosity=warning",
+		"--fail-on", "warning", sink)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
+}

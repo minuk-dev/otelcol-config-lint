@@ -189,3 +189,10 @@ The CLI owns settings-file discovery and flag precedence.
 `LintAll(ctx, paths, workers)` returns a completed `[]Result` in input order.
 Cancellation discards the batch and returns an error wrapping `ctx.Err()`.
 Formatting and process exit codes are separate from validation.
+
+`Options.RulePolicy` and `PrepareOptions.RulePolicy` optionally resolve explicit
+severity overrides for each input name. Return a rule-name-to-severity map; the
+callback must be safe for concurrent calls. The engine copies the returned map,
+keeps globally disabled rules disabled, and uses the resolved levels for both
+coverage and diagnostics. Call `settings.File.RulePolicy` to validate and compile
+a settings file's path overrides using the CLI's matching semantics.

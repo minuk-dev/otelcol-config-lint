@@ -258,6 +258,42 @@
           },
           "type": "array"
         },
+        "overrides": {
+          "items": {
+            "additionalProperties": false,
+            "description": "First matching entry overlays global rule policy; explicit CLI flags win.",
+            "properties": {
+              "disable": {
+                "items": {
+                  "$ref": "#/$defs/rule"
+                },
+                "type": "array"
+              },
+              "paths": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "severity": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/severity"
+                },
+                "propertyNames": {
+                  "$ref": "#/$defs/rule"
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "paths"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
         "settings": {
           "additionalProperties": {
             "type": "object"
