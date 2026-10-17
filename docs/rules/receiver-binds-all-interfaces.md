@@ -75,13 +75,29 @@ policy binds every interface deliberately.
 
 ## Kubernetes deployments
 
-When `run.kubernetes.enabled: true` applies to a file, wildcard receivers and
-extensions report at `info`. The hint describes deliberate pod reachability,
-NetworkPolicy and `hostNetwork`, rather than prescribing a pod IP for every
-listener. Unknown/non-Kubernetes environments retain `warning`.
+When `run.kubernetes.enabled: true` and `hostNetwork: false` apply to a file,
+wildcard receivers and extensions report at `info`. The hint describes deliberate
+pod reachability and NetworkPolicy. Set `run.kubernetes.hostNetwork` from the pod
+specification; the linter does not infer it from Collector configuration.
 
-The environment setting does not establish network isolation: `hostNetwork`
-shares the node network and is not modeled by this setting. Keep a warning or
-error for such deployments through `rules.severity` or `rules.overrides`;
-explicit severity policy takes precedence. Probe/debug-extension exclusions
-remain unchanged. This rule does not traverse `service.telemetry` readers.
+`hostNetwork: true` retains `warning` and describes the node network namespace.
+Omitting `hostNetwork` also retains `warning`, since Kubernetes alone does not
+establish network isolation. This is stricter than the earlier behavior that
+lowered every Kubernetes listener to `info`.
+
+```yaml
+run:
+  kubernetes:
+    enabled: true
+    hostNetwork: false
+    overrides:
+      - paths: ["agent-*.yaml"]
+        enabled: true
+        hostNetwork: true
+```
+
+Path overrides replace the default environment, so each ordinary-pod override
+must state `hostNetwork: false` to receive `info`. Explicit `rules.severity` or
+`rules.overrides` severity remains authoritative. Unknown/non-Kubernetes
+environments retain `warning`; probe/debug-extension exclusions remain unchanged.
+This rule does not traverse `service.telemetry` readers.

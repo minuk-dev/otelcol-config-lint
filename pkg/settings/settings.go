@@ -154,8 +154,10 @@ type RuleOverride struct {
 // path-to-limits table belongs in a file.
 type Kubernetes struct {
 	// Enabled says the configs run in Kubernetes. When it is not set, writing
-	// either memory number is taken to mean the same thing.
+	// hostNetwork or either memory number is taken to mean the same thing.
 	Enabled *bool `yaml:"enabled"`
+	// HostNetwork distinguishes pod-local listeners from node listeners.
+	HostNetwork *bool `yaml:"hostNetwork"`
 	// MemoryRequest and MemoryLimit are the container's resources, written as
 	// a Kubernetes quantity such as "512Mi".
 	MemoryRequest string `yaml:"memoryRequest"`
@@ -167,7 +169,7 @@ type Kubernetes struct {
 // written reports whether the block says anything at all, which is how the
 // flat first-release form knows it has nothing to fold in.
 func (k Kubernetes) written() bool {
-	return k.Enabled != nil || k.MemoryRequest != "" || k.MemoryLimit != "" || len(k.Overrides) > 0
+	return k.Enabled != nil || k.HostNetwork != nil || k.MemoryRequest != "" || k.MemoryLimit != "" || len(k.Overrides) > 0
 }
 
 // KubernetesOverride is one path-matched entry of the kubernetes block. It
@@ -178,6 +180,7 @@ type KubernetesOverride struct {
 	// base name, exactly as the exclude patterns are.
 	Paths         []string `yaml:"paths"`
 	Enabled       *bool    `yaml:"enabled"`
+	HostNetwork   *bool    `yaml:"hostNetwork"`
 	MemoryRequest string   `yaml:"memoryRequest"`
 	MemoryLimit   string   `yaml:"memoryLimit"`
 }

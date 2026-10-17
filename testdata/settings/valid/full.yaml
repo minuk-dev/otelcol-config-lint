@@ -17,10 +17,12 @@ run:
     - "*.tmpl.yaml"
   kubernetes:
     enabled: true
+    hostNetwork: false
     memoryRequest: 512Mi
     memoryLimit: 512Mi
     overrides:
       - paths: ["configs/agent-*.yaml"]
+        hostNetwork: true
         memoryRequest: 256Mi
         memoryLimit: 256Mi
       - paths: ["configs/legacy/*.yaml"]

@@ -123,6 +123,7 @@ type options struct {
 	// running in Kubernetes; nil when neither said anything, which leaves the
 	// answer to be read from the memory numbers.
 	kubernetesEnabled *bool
+	hostNetwork       *bool
 	// kubernetesOverrides are the per-path environments, which only the
 	// settings file can state.
 	kubernetesOverrides []settings.KubernetesOverride
@@ -262,6 +263,7 @@ func (o *options) prepare(cmd *cobra.Command) error {
 	}
 
 	o.kubernetesOverrides = file.Run.Kubernetes.Overrides
+	o.hostNetwork = file.Run.Kubernetes.HostNetwork
 
 	err = o.prepareRules(file)
 	if err != nil {

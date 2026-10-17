@@ -15,7 +15,7 @@ import (
 func (o *options) environmentPolicy() (lint.EnvironmentPolicy, error) {
 	var none lint.EnvironmentPolicy
 
-	fallback, err := environmentOf(o.kubernetesEnabled, o.memoryRequest, o.memoryLimit)
+	fallback, err := environmentOf(o.kubernetesEnabled, o.hostNetwork, o.memoryRequest, o.memoryLimit)
 	if err != nil {
 		return none, fmt.Errorf("kubernetes: %w", err)
 	}
@@ -29,7 +29,7 @@ func (o *options) environmentPolicy() (lint.EnvironmentPolicy, error) {
 			return none, fmt.Errorf("%s: %w", where, ErrNoOverridePaths)
 		}
 
-		env, envErr := environmentOf(over.Enabled, over.MemoryRequest, over.MemoryLimit)
+		env, envErr := environmentOf(over.Enabled, over.HostNetwork, over.MemoryRequest, over.MemoryLimit)
 		if envErr != nil {
 			return none, fmt.Errorf("%s: %w", where, envErr)
 		}
@@ -46,9 +46,9 @@ func (o *options) environmentPolicy() (lint.EnvironmentPolicy, error) {
 }
 
 // environmentOf turns one set of written values into an environment. An
-// unstated "enabled" is read from the memory numbers: a block that says how
-// much memory the container has is a block about a container.
-func environmentOf(enabled *bool, request, limit string) (rule.Environment, error) {
+// unstated "enabled" is inferred from hostNetwork or the memory numbers:
+// these values describe a pod.
+func environmentOf(enabled, hostNetwork *bool, request, limit string) (rule.Environment, error) {
 	req, err := parseSize("memoryRequest", request)
 	if err != nil {
 		return rule.Environment{}, err
@@ -59,12 +59,12 @@ func environmentOf(enabled *bool, request, limit string) (rule.Environment, erro
 		return rule.Environment{}, err
 	}
 
-	on := request != "" || limit != ""
+	on := hostNetwork != nil || request != "" || limit != ""
 	if enabled != nil {
 		on = *enabled
 	}
 
-	return rule.Environment{Kubernetes: on, MemoryRequest: req, MemoryLimit: lim}, nil
+	return rule.Environment{Kubernetes: on, HostNetwork: hostNetwork, MemoryRequest: req, MemoryLimit: lim}, nil
 }
 
 // parseSize reads a Kubernetes quantity, treating an unwritten value as
@@ -90,6 +90,10 @@ func describeEnvironment(env rule.Environment) string {
 	}
 
 	parts := []string{"kubernetes"}
+	if env.HostNetwork != nil {
+		parts = append(parts, fmt.Sprintf("hostNetwork %t", *env.HostNetwork))
+	}
+
 	if env.MemoryRequest > 0 {
 		parts = append(parts, "memory request "+quantity.Format(env.MemoryRequest))
 	}

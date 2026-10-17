@@ -171,8 +171,11 @@ run:
 - `paths` are globs matched against both the whole path and the base name,
   exactly as `--exclude` is, so the two behave identically — including which
   patterns do not work: there is no `**`.
-- `enabled` defaults to true when either memory number is written, since a block
-  stating what the container has is a block about a container.
+- `enabled` defaults to true when `hostNetwork` or either memory number is written.
+- `hostNetwork` is optional: `false` states the pod has its own network namespace;
+  `true` states it shares the node network. Only explicit `false` lowers wildcard
+  listener findings to info. Omit it when unknown to retain warnings. Each path
+  override replaces this value too; it is not inferred from Collector YAML.
 - Sizes are Kubernetes quantities: `512Mi`, `1Gi`, `2G`, or a bare byte count.
   Anything else is an error rather than a silently different number.
 - A file that matches no override and has no defaults to fall back on simply
