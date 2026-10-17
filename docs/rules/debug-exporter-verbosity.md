@@ -60,3 +60,11 @@ config.yaml:22:19: warning: exporter "debug" runs at verbosity: detailed in pipe
 ## See also
 
 - [`../../testdata/rules/debug-exporter-verbosity.yaml`](../../testdata/rules/debug-exporter-verbosity.yaml)
+
+Explicit `sampling_initial >= 0` and `sampling_thereafter > 1` reduce a
+`detailed` finding to info. The message acknowledges sampled output instead of
+recommending sampling that is already configured. This is a reduction in output
+frequency, not a guaranteed byte-rate limit; detailed payloads are still emitted.
+`sampling_thereafter: 1` disables sampling. Absent, null, invalid or unresolved
+sampling values retain the warning, as does zero thereafter until its targeted
+logger behavior is established. Explicit severity policy remains authoritative.

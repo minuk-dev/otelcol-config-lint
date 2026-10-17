@@ -430,3 +430,26 @@ func TestFileRuleOverridesReachCLI(t *testing.T) {
 	require.Equal(t, 1, code, errOut)
 	require.Contains(t, out, "warning:")
 }
+
+func TestSampledDebugSeverityOverride(t *testing.T) {
+	t.Parallel()
+
+	const src = `exporters:
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+service:
+  pipelines:
+    logs:
+      exporters: [debug]
+`
+
+	args := []string{"--default", "none", "-E", "debug-exporter-verbosity", "--fail-on", "warning"}
+	code, out, errOut := lint(t, src, append(args, "-")...)
+	require.Equal(t, 0, code, errOut)
+	require.Contains(t, out, "info:")
+	code, out, errOut = lint(t, src, append(args, "--severity", "debug-exporter-verbosity=warning", "-")...)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "warning:")
+}
