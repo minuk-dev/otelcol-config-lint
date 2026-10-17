@@ -190,6 +190,31 @@ still read, and folded into the blocks above. A run that finds one says which
 keys to move. `output: json` is not one of them: a bare format name is still the
 shorthand for `output: {format: json}`.
 
+## Suppressing one diagnostic line
+
+Place a standalone directive immediately before the line reported by a rule:
+
+```yaml
+service:
+  pipelines:
+    logs/mismatch:
+      exporters:
+        # otelcol-config-lint:disable-next-line debug-exporter-verbosity
+        - debug/mismatch
+```
+
+The directive affects only that rule on the next physical line. It does not
+suppress an entire mapping or pipeline, and an intervening blank line means it
+will not target the next YAML node. Use one registered rule name. Misspelled
+names and unsupported directive syntax produce `invalid-suppression` errors.
+Comments inside quoted strings or block scalar values are data, not directives;
+inside an extracted ConfigMap Collector config they are parsed as inner YAML.
+
+Suppression happens before failure and output thresholds are evaluated, for all
+output formats. Aliases and merges retain the source positions the parser uses
+for diagnostics: place the comment at the reported source line, which can be
+an anchor definition. Other references and other rules remain checked.
+
 ## File-specific rule exceptions
 
 ```yaml

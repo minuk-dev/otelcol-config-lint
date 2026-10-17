@@ -560,6 +560,8 @@ func asSyntaxError(err error, target **config.SyntaxError) bool {
 }
 
 func (l *Linter) checkRules(ctx context.Context, ruleCtx rule.Context, res *Result, explicit map[string]diag.Severity) {
+	suppressed := suppressions(ruleCtx.File, l.rules, res, l.opts)
+
 	for _, r := range l.rules {
 		if ctx.Err() != nil {
 			break
@@ -570,12 +572,8 @@ func (l *Linter) checkRules(ctx context.Context, ruleCtx rule.Context, res *Resu
 				d.Severity = severity
 			}
 
-			if d.Severity.AtLeast(l.opts.FailOn) {
-				res.Status = Invalid
-			}
-
-			if d.Severity.AtLeast(l.opts.MinSeverity) {
-				res.Diagnostics = append(res.Diagnostics, d)
+			if suppressed[d.Position.Line] != d.Rule {
+				addFinding(res, d, l.opts)
 			}
 		}
 	}
