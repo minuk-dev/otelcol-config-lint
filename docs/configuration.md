@@ -40,6 +40,11 @@ output:
   color: true
 ```
 
+Relative `run.schemaLocations` paths (including legacy top-level
+`schemaLocations`) resolve from the settings file directory. URLs, absolute
+paths, and `default` keep their meaning. Explicit `--schema-location` paths
+resolve from the current working directory.
+
 Every block is optional, as is every key in it: what a file does not state keeps
 its default. A key the linter does not know is an error rather than a line that
 quietly does nothing.
