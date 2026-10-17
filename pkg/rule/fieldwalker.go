@@ -228,9 +228,10 @@ func matchesType(field *schema.Field, node *yaml.Node) bool {
 	case "bool":
 		return node.Tag == BoolTag
 	case "int":
-		return node.Tag == intTag
+		// shortcut: float integers must fit int64; model field widths before allowing overflow conversions.
+		return node.Tag == intTag || (node.Tag == floatTag && ReadInt(node).Known)
 	case "float":
-		return node.Tag == "!!float" || node.Tag == intTag
+		return node.Tag == floatTag || node.Tag == intTag
 	case "duration":
 		return ReadDuration(node).Known
 	default:

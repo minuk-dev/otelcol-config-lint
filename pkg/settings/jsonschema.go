@@ -206,8 +206,8 @@ func rulesSchema() object {
 		},
 		"overrides": ruleOverridesSchema(),
 		"settings": object{
-			"description": "Each rule's own settings, keyed by rule name. No built-in rule reads a " +
-				"block yet, so writing one is currently reported as an error.",
+			"description": "Each rule's own settings, keyed by rule name. " +
+				"Rules that do not support settings reject a block.",
 			"type":                 "object",
 			"propertyNames":        ref("#/$defs/rule", ""),
 			"additionalProperties": object{"type": "object"},

@@ -518,6 +518,7 @@ func pickAnnotations(candidates []githubAnnotation, limit int) []githubAnnotatio
 }
 
 func (f *githubFormatter) writeAnnotation(a githubAnnotation) error {
+	a.file = strings.NewReplacer(":", "%3A", ",", "%2C").Replace(escapeGitHub(a.file))
 	if a.line == 0 {
 		return writef(f.w, "::%s file=%s::%s\n", a.level, a.file, escapeGitHub(a.message))
 	}

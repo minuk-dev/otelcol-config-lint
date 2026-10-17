@@ -93,14 +93,13 @@ golangci-lint's `linters.settings` works:
 ```yaml
 rules:
   settings:
-    some-rule:
-      threshold: 10
+    missing-batch:
+      additional_processors: [resourcebatch]
 ```
 
-No built-in rule reads a block yet — the schema is here so one can be added
-without every settings file having to change shape. Until a rule declares that
-it takes settings, writing a block for it is reported as an error: a knob nobody
-reads is worse than a knob that is missing.
+`missing-batch.additional_processors` names custom processor types that your
+distribution uses for batching. Only configure types whose batching behavior you
+have verified. Rules that do not declare settings still reject a settings block.
 
 ## Checking the settings file in an editor
 
@@ -189,6 +188,31 @@ The keys the first release put at the top level — `collectorVersion`,
 still read, and folded into the blocks above. A run that finds one says which
 keys to move. `output: json` is not one of them: a bare format name is still the
 shorthand for `output: {format: json}`.
+
+## Suppressing one diagnostic line
+
+Place a standalone directive immediately before the line reported by a rule:
+
+```yaml
+service:
+  pipelines:
+    logs/mismatch:
+      exporters:
+        # otelcol-config-lint:disable-next-line debug-exporter-verbosity
+        - debug/mismatch
+```
+
+The directive affects only that rule on the next physical line. It does not
+suppress an entire mapping or pipeline, and an intervening blank line means it
+will not target the next YAML node. Use one registered rule name. Misspelled
+names and unsupported directive syntax produce `invalid-suppression` errors.
+Comments inside quoted strings or block scalar values are data, not directives;
+inside an extracted ConfigMap Collector config they are parsed as inner YAML.
+
+Suppression happens before failure and output thresholds are evaluated, for all
+output formats. Aliases and merges retain the source positions the parser uses
+for diagnostics: place the comment at the reported source line, which can be
+an anchor definition. Other references and other rules remain checked.
 
 ## File-specific rule exceptions
 

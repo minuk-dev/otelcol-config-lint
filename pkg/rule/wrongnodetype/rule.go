@@ -29,7 +29,7 @@ func (r wrongNodeType) Check(ctx *rule.Context) {
 func (r wrongNodeType) checkSections(ctx *rule.Context) {
 	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
-		if sec == nil || rule.IsNull(sec.Node) || sec.Node.Kind == yaml.MappingNode {
+		if sec == nil || rule.IsNull(sec.Node) || rule.IsExpansion(sec.Node) || sec.Node.Kind == yaml.MappingNode {
 			continue
 		}
 
