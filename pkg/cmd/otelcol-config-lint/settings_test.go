@@ -137,7 +137,6 @@ func TestOutputAcceptsABareFormat(t *testing.T) {
 	assert.Contains(t, out, `"filename"`, "a bare format should still select json")
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestASettingsFileIsFoundInAParentDirectory(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"),
@@ -154,8 +153,6 @@ func TestASettingsFileIsFoundInAParentDirectory(t *testing.T) {
 
 // TestTheSearchStopsAtTheRepositoryRoot keeps a run from picking up whatever
 // happens to sit above the project it is linting.
-//
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestTheSearchStopsAtTheRepositoryRoot(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"), "run:\n  collectorVersion: v0.110.0\n")
@@ -170,7 +167,6 @@ func TestTheSearchStopsAtTheRepositoryRoot(t *testing.T) {
 	assert.Equal(t, 1, code, "a file above the repository must not apply:\n%s", out)
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestTheYmlSpellingIsFoundToo(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yml"),
@@ -183,7 +179,6 @@ func TestTheYmlSpellingIsFoundToo(t *testing.T) {
 	assert.Equal(t, 0, code, "the .yml spelling should be read: %s%s", out, errOut)
 }
 
-//nolint:paralleltest // t.Chdir cannot be called from a parallel test
 func TestNoConfigIgnoresTheFileThatWouldBeFound(t *testing.T) {
 	schemas, dir := absSchemas(t), t.TempDir()
 	writeFile(t, filepath.Join(dir, ".otelcol-config-lint.yaml"),
