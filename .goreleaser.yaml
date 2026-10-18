@@ -3,7 +3,8 @@ version: 2
 
 before:
   hooks:
-    - go mod tidy
+    # Changing module files here would stamp release binaries with +dirty.
+    - go mod tidy -diff
 
 builds:
   - id: otelcol-config-lint

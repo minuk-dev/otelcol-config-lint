@@ -1,6 +1,12 @@
 name: release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (vMAJOR.MINOR.PATCH, for example v0.2.1)'
+        required: true
+        type: string
   push:
     branches:
       - main
@@ -11,13 +17,43 @@ permissions:
   contents: write
   packages: write
 
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && 'manual' || github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_type == 'tag' && github.ref_name || '' }}
+
 jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.25
+      - name: Check module files before tagging
+        run: go mod tidy -diff
+      # GITHUB_TOKEN pushes do not trigger another workflow; this run builds
+      # the tag itself after this job succeeds.
+      - name: Pin the Action image, commit and tag the release
+        run: bash build/release.sh "$RELEASE_TAG"
+
   goreleaser:
+    needs: prepare
+    if: ${{ !cancelled() && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.version || github.ref }}
           fetch-depth: 0
       # Bump then tag: the commit being released has to pin the action's image
       # at the release it is about to publish. If it names anything else,
@@ -25,28 +61,28 @@ jobs:
       # of the linter than the tag says -- and the fix, once the tag is out
       # there, is another release. Cheaper to refuse the tag.
       - name: The action has to be pinned at the release being cut
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         run: |
           # goreleaser publishes {{ .Version }}, which carries no leading v.
-          expected="${GITHUB_REF_NAME#v}"
+          expected="${RELEASE_TAG#v}"
           pinned="$(sed -nE 's|^FROM ghcr\.io/minuk-dev/otelcol-config-lint:([^ ]+).*|\1|p' Dockerfile)"
 
           if [ "${pinned}" != "${expected}" ]; then
-            echo "::error title=release::${GITHUB_REF_NAME} pins the action at" \
+            echo "::error title=release::${RELEASE_TAG} pins the action at" \
               "'${pinned}', expected '${expected}'." \
-              "Run 'make release-pin RELEASE=${GITHUB_REF_NAME}', commit, and tag that commit."
+              "Run 'make release-pin RELEASE=${RELEASE_TAG}', commit, and tag that commit."
             exit 1
           fi
 
-          echo "${GITHUB_REF_NAME} pins the action at ${pinned}"
+          echo "${RELEASE_TAG} pins the action at ${pinned}"
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version: 1.25
       - name: Set flags based on ref type
         run: |
-          if [[ "${{ github.ref }}" != refs/tags/v* ]]; then
-            echo "flags=--snapshot" >> $GITHUB_ENV
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "flags=--snapshot" >> "$GITHUB_ENV"
           fi
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -73,7 +109,7 @@ jobs:
       # Pull from the registry even though GoReleaser left local build images.
       # Run the resolved digest so every check exercises the same published bytes.
       - name: Pull the published release image
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         run: |
           pinned="$(sed -nE 's|^FROM ghcr\.io/minuk-dev/otelcol-config-lint:([^ ]+).*|\1|p' Dockerfile)"
           image="ghcr.io/minuk-dev/otelcol-config-lint:${pinned}"
@@ -84,18 +120,18 @@ jobs:
           echo "OTELCOL_LINT_IMAGE=${digest}" >> "$GITHUB_ENV"
 
       - name: Exercise the published image with mounted fixtures
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         env:
-          OTELCOL_LINT_VERSION: ${{ github.ref_name }}
+          OTELCOL_LINT_VERSION: ${{ env.RELEASE_TAG }}
         run: go test -tags=integration ./test/smoke -count=1 -v
 
       # A snapshot build does not publish, so push its images by hand to keep
       # ghcr.io tracking main between releases.
       - name: Extract version
-        if: startsWith(github.ref, 'refs/heads/')
-        run: echo "VERSION=$(jq -r '.version' dist/metadata.json)" >> $GITHUB_ENV
+        if: env.RELEASE_TAG == ''
+        run: echo "VERSION=$(jq -r '.version' dist/metadata.json)" >> "$GITHUB_ENV"
       - name: Push snapshot images and create the multi-arch manifest
-        if: startsWith(github.ref, 'refs/heads/')
+        if: env.RELEASE_TAG == ''
         run: |
           jq -r '.[] | select(.type == "Docker Image") | .name' dist/artifacts.json > image_list.txt
           cat image_list.txt
@@ -117,7 +153,7 @@ jobs:
     # release succeeded. It is whatever the tag's own major is -- v0 while the
     # releases are 0.x, and v1 from 1.0.0 on -- so the README documents the one
     # that currently exists rather than the one it would like to.
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && needs.goreleaser.result == 'success' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')) }}
     needs: goreleaser
     runs-on: ubuntu-latest
     permissions:
@@ -126,10 +162,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.version || github.ref }}
           fetch-depth: 0
       - name: Move the major tag to this release
         run: |
-          major="${GITHUB_REF_NAME%%.*}"
-          echo "Moving ${major} to ${GITHUB_REF_NAME}"
-          git tag -f "${major}" "${GITHUB_REF_NAME}"
+          major="${RELEASE_TAG%%.*}"
+          echo "Moving ${major} to ${RELEASE_TAG}"
+          git tag -f "${major}" "${RELEASE_TAG}"
           git push -f origin "refs/tags/${major}"
