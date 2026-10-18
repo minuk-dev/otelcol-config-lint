@@ -21,6 +21,8 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: 1.25
+      - name: Check manual release preparation
+        run: bash build/release_test.sh
       # A snapshot build exercises every target the release will produce, so a
       # broken .goreleaser.yaml fails here rather than on a tag.
       - name: Build all release targets
@@ -38,10 +40,12 @@ jobs:
           binary="$(jq -r 'first(.[] | select(.type == "Binary" and .goos == "linux" and .goarch == "amd64")).path' dist/artifacts.json)"
           got="$("${binary}" version)"
           echo "${got}"
-          if [ "${got}" = "otelcol-config-lint devel" ]; then
-            echo 'the binary carries no build information; check the checkout and -buildvcs' >&2
-            exit 1
-          fi
+          case "${got}" in
+            "otelcol-config-lint devel"|*dirty)
+              echo 'the binary must carry clean build information; check the checkout, hooks and -buildvcs' >&2
+              exit 1
+              ;;
+          esac
       - name: Upload binaries
         uses: actions/upload-artifact@v7
         with:

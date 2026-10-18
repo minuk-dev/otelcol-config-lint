@@ -49,7 +49,16 @@ production adoption record or a required deployment check.
 
 ## Releasing
 
-Pin the Action image before tagging:
+Open **Actions → release → Run workflow**, select `main`, and enter a new
+`vMAJOR.MINOR.PATCH` version, for example `v0.2.1`.
+
+The workflow checks module files, pins the Action image, and pushes the release
+commit and tag together. GoReleaser writes release notes from the commit history,
+publishes Linux/macOS/Windows binaries and amd64/arm64 container images, then the
+workflow checks the published image and advances the major Action tag (`@v0` for
+0.x releases). If a publishing job fails, rerun failed jobs to reuse the tag.
+
+To tag manually instead, pin the Action image before tagging:
 
 ```sh
 make release-pin RELEASE=v1.2.3
