@@ -6,6 +6,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // New builds the rule.
@@ -19,21 +20,21 @@ type duplicateReference struct{ rule.Base }
 func (r duplicateReference) Check(ctx *rule.Context) {
 	for _, p := range ctx.File.Service.Pipelines {
 		for _, slot := range []config.Kind{config.KindReceiver, config.KindProcessor, config.KindExporter} {
-			seen := map[config.ID]bool{}
+			seen := sets.New[config.ID]()
 
 			for _, ref := range p.Refs(slot) {
 				if rule.HasExpansion(ref.ID.String()) {
 					continue
 				}
 
-				if seen[ref.ID] {
+				if seen.Has(ref.ID) {
 					ctx.Report(rule.Finding{
 						Node: ref.Node, Path: ref.Path,
 						Message: rule.Quote(ref.ID.String()) + " is listed twice in " + p.Key + "." + slot.Section(),
 					})
 				}
 
-				seen[ref.ID] = true
+				seen.Insert(ref.ID)
 			}
 		}
 	}

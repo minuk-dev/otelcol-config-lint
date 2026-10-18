@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Releases before v0.150.0 predate the config.schema.yaml files upstream now
@@ -56,19 +57,19 @@ type goIndex struct {
 	// underlying kind says nothing about what a config writes: an int with an
 	// UnmarshalText method is spelled as a word, the way the debug exporter's
 	// verbosity is "detailed" and not 2.
-	textual map[string]bool
+	textual sets.Set[string]
 	// selfDecoding holds the types that decode themselves from a confmap.
 	// Their mapstructure tags are not the whole of what they accept: a setting
 	// the method reads by hand is a setting no tag names.
-	selfDecoding map[string]bool
+	selfDecoding sets.Set[string]
 	fset         *token.FileSet
 }
 
 func newGoIndex() *goIndex {
 	return &goIndex{
 		byName:       map[string]*goType{},
-		textual:      map[string]bool{},
-		selfDecoding: map[string]bool{},
+		textual:      sets.New[string](),
+		selfDecoding: sets.New[string](),
 		fset:         token.NewFileSet(),
 	}
 }
@@ -132,10 +133,10 @@ func (g *goIndex) addMethod(importPath string, imports map[string]string, method
 
 	switch method.Name.Name {
 	case "UnmarshalText":
-		g.textual[importPath+"."+name] = true
+		g.textual.Insert(importPath + "." + name)
 	case "Unmarshal":
 		if takesConfmap(method, imports) {
-			g.selfDecoding[importPath+"."+name] = true
+			g.selfDecoding.Insert(importPath + "." + name)
 		}
 	}
 }
@@ -211,7 +212,7 @@ func (g *goIndex) fields(key string, seen []string, depth int) *schema.Field {
 	}
 
 	// A squashed struct may already have opened this one; see mergeChildren.
-	out.Open = out.Open || (unfilled && g.selfDecoding[declaredAt])
+	out.Open = out.Open || (unfilled && g.selfDecoding.Has(declaredAt))
 
 	return out
 }
@@ -315,7 +316,7 @@ func (g *goIndex) scalar(decl *goType, expr ast.Expr) string {
 	}
 
 	key := g.resolve(decl, expr)
-	if g.textual[key] {
+	if g.textual.Has(key) {
 		return typeString
 	}
 

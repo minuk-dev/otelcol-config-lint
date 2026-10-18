@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // maxExpandedNodes bounds downstream tree walks, including repeated aliases.
@@ -138,7 +140,7 @@ const MergeTag = "!!merge"
 // is the line the reader has to edit.
 // Cycles and excessive expansion are rejected before this pass.
 func resolve(root *yaml.Node) {
-	r := resolver{walked: map[*yaml.Node]bool{}}
+	r := resolver{walked: sets.New[*yaml.Node]()}
 	r.value(root)
 }
 
@@ -147,7 +149,7 @@ type resolver struct {
 	// walked is the nodes already rewritten. An anchor merged into a dozen
 	// components is one node reached a dozen times, and rewriting it once is
 	// both faster and what keeps its own merges from being applied twice.
-	walked map[*yaml.Node]bool
+	walked sets.Set[*yaml.Node]
 }
 
 // value returns what a node stands for: an alias becomes the node it names,
@@ -172,11 +174,11 @@ func (r *resolver) value(n *yaml.Node) *yaml.Node {
 
 // walk rewrites a node's children, once per node however many aliases reach it.
 func (r *resolver) walk(n *yaml.Node) {
-	if r.walked[n] {
+	if r.walked.Has(n) {
 		return
 	}
 
-	r.walked[n] = true
+	r.walked.Insert(n)
 
 	if n.Kind == yaml.MappingNode {
 		r.mapping(n)
@@ -238,9 +240,9 @@ func mergedEntries(local, merged []*yaml.Node) []*yaml.Node {
 		return nil
 	}
 
-	seen := make(map[string]bool, len(local)/mappingStride)
+	seen := make(sets.Set[string], len(local)/mappingStride)
 	for i := 0; i < len(local); i += mappingStride {
-		seen[local[i].Value] = true
+		seen.Insert(local[i].Value)
 	}
 
 	var out []*yaml.Node
@@ -248,11 +250,11 @@ func mergedEntries(local, merged []*yaml.Node) []*yaml.Node {
 	for _, src := range merged {
 		for i := 0; i+1 < len(src.Content); i += mappingStride {
 			k, v := src.Content[i], src.Content[i+1]
-			if seen[k.Value] {
+			if seen.Has(k.Value) {
 				continue
 			}
 
-			seen[k.Value] = true
+			seen.Insert(k.Value)
 			out = append(out, k, v)
 		}
 	}

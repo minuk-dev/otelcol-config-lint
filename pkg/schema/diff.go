@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Diff reports what one collector release changed about a distribution's
@@ -130,9 +131,9 @@ func DiffSchemas(previous, release *Schema) *Diff {
 		// A rename shows up as an addition of the new name, and the old name
 		// survives as an alias so it is not a removal. Dropping the new name
 		// from the additions leaves one entry describing one upstream change.
-		skip := map[string]bool{}
+		skip := sets.New[string]()
 		for _, r := range renamed {
-			skip[r.To] = true
+			skip.Insert(r.To)
 		}
 
 		d.Added = append(d.Added, missingFrom(kind, old, current, skip)...)
@@ -159,11 +160,11 @@ func (d *Diff) Empty() bool {
 
 // missingFrom lists the components of have that base does not, skipping the
 // types the caller has already accounted for.
-func missingFrom(kind config.Kind, base, have map[string]*Component, skip map[string]bool) []Ref {
+func missingFrom(kind config.Kind, base, have map[string]*Component, skip sets.Set[string]) []Ref {
 	var out []Ref
 
 	for typ := range have {
-		if _, ok := base[typ]; ok || skip[typ] {
+		if _, ok := base[typ]; ok || skip.Has(typ) {
 			continue
 		}
 
@@ -324,14 +325,14 @@ func restabilisedIn(kind config.Kind, old, current map[string]*Component) []Stab
 // stabilitySignals returns the keys either component records a level under,
 // sorted so the report reads the same way every run.
 func stabilitySignals(a, b *Component) []string {
-	seen := map[string]bool{}
+	seen := sets.New[string]()
 
 	var out []string
 
 	for _, comp := range []*Component{a, b} {
 		for signal := range comp.Stability {
-			if !seen[signal] {
-				seen[signal] = true
+			if !seen.Has(signal) {
+				seen.Insert(signal)
 				out = append(out, signal)
 			}
 		}

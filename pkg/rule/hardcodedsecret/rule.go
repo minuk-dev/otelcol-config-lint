@@ -10,6 +10,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // headersKey is the map whose keys are HTTP header names rather than settings,
@@ -44,8 +45,8 @@ func (r hardcodedSecret) Check(ctx *rule.Context) {
 	// one node, reached once per use. It is one credential in one place to
 	// edit, so it is reported once: repeating it under each component would
 	// put the same line in the report as many times as the config aliases it.
-	reported := map[*yaml.Node]bool{}
-	visited := map[secretContext]bool{}
+	reported := sets.New[*yaml.Node]()
+	visited := sets.New[secretContext]()
 
 	for _, kind := range config.Kinds() {
 		sec := ctx.File.Sections[kind]
@@ -55,11 +56,11 @@ func (r hardcodedSecret) Check(ctx *rule.Context) {
 
 		for _, c := range sec.Components {
 			for _, hit := range findSecrets(c.ValueNode, kind.Section()+"."+c.ID.String(), "", false, visited) {
-				if reported[hit.node] {
+				if reported.Has(hit.node) {
 					continue
 				}
 
-				reported[hit.node] = true
+				reported.Insert(hit.node)
 
 				ctx.Report(rule.Finding{
 					Node: hit.node, Path: hit.path,
@@ -100,17 +101,17 @@ type secretContext struct {
 // the key at the bracket would let a credential through for being written one
 // line lower. inHeaders reports that the walk is inside a headers map, whose
 // keys are header names rather than settings.
-func findSecrets(n *yaml.Node, path, key string, inHeaders bool, visited map[secretContext]bool) []secretHit {
+func findSecrets(n *yaml.Node, path, key string, inHeaders bool, visited sets.Set[secretContext]) []secretHit {
 	if n == nil {
 		return nil
 	}
 
 	context := secretContext{node: n, key: key, inHeaders: inHeaders}
-	if visited[context] {
+	if visited.Has(context) {
 		return nil
 	}
 
-	visited[context] = true
+	visited.Insert(context)
 
 	var out []secretHit
 

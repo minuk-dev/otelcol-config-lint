@@ -5,6 +5,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Index resolves references from the service block to component declarations,
@@ -13,14 +14,14 @@ type Index struct {
 	File *config.File
 
 	declared map[config.Kind]map[config.ID]config.Component
-	used     map[config.Kind]map[config.ID]bool
+	used     map[config.Kind]sets.Set[config.ID]
 	// dynamic records slots whose references cannot be resolved statically.
 	dynamic map[config.Kind]bool
 	// enabled holds the extensions service.extensions lists, which is the only
 	// place that starts one. A settings reference marks an extension used
 	// without enabling it, and telling the two apart is what lets
 	// undefined-extension-reference report an extension nobody starts.
-	enabled map[config.ID]bool
+	enabled sets.Set[config.ID]
 	// extRefs holds the extension references written inside component
 	// settings, in file order.
 	extRefs []ExtensionRef
@@ -38,9 +39,9 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 	idx := &Index{
 		File:       f,
 		declared:   map[config.Kind]map[config.ID]config.Component{},
-		used:       map[config.Kind]map[config.ID]bool{},
+		used:       map[config.Kind]sets.Set[config.ID]{},
 		dynamic:    dynamicReferences(f.Service),
-		enabled:    map[config.ID]bool{},
+		enabled:    sets.New[config.ID](),
 		extRefs:    extensionRefs(f, sch),
 		asReceiver: map[config.ID][]config.Pipeline{},
 		asExporter: map[config.ID][]config.Pipeline{},
@@ -48,7 +49,7 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 	for kind, sec := range f.Sections {
 		idx.declared[kind] = map[config.ID]config.Component{}
 
-		idx.used[kind] = map[config.ID]bool{}
+		idx.used[kind] = sets.New[config.ID]()
 		for _, c := range sec.Components {
 			// A duplicate key keeps the last declaration, matching YAML.
 			idx.declared[kind][c.ID] = c
@@ -57,7 +58,7 @@ func NewIndex(f *config.File, sch *schema.Schema) *Index {
 
 	for _, ref := range f.Service.Extensions {
 		if !HasExpansion(ref.ID.String()) {
-			idx.enabled[ref.ID] = true
+			idx.enabled.Insert(ref.ID)
 
 			idx.markUsed(config.KindExtension, ref.ID)
 		}
@@ -159,7 +160,7 @@ func (idx *Index) Resolve(slot config.Kind, id config.ID) (config.Component, boo
 
 // Used reports whether a declared component is referenced by the service
 // block, or, for an extension, by another component's settings.
-func (idx *Index) Used(k config.Kind, id config.ID) bool { return idx.used[k][id] }
+func (idx *Index) Used(k config.Kind, id config.ID) bool { return idx.used[k].Has(id) }
 
 // HasDynamicRefs reports whether unresolved service references may select a
 // component of this kind. It does not establish that any component is used.
@@ -185,7 +186,7 @@ func HasDynamicRefs(refs []config.Ref) bool {
 // Enabled reports whether service.extensions lists the extension, which is
 // what makes the collector instantiate it. An extension can be referenced
 // without being enabled, and then it never runs.
-func (idx *Index) Enabled(id config.ID) bool { return idx.enabled[id] }
+func (idx *Index) Enabled(id config.ID) bool { return idx.enabled.Has(id) }
 
 // ExtensionRefs returns the extension references written inside component
 // settings, such as an exporter's sending_queue.storage.
@@ -212,10 +213,10 @@ func (idx *Index) KindOf(id config.ID) (config.Kind, bool) {
 
 func (idx *Index) markUsed(k config.Kind, id config.ID) {
 	if idx.used[k] == nil {
-		idx.used[k] = map[config.ID]bool{}
+		idx.used[k] = sets.New[config.ID]()
 	}
 
-	idx.used[k][id] = true
+	idx.used[k].Insert(id)
 }
 
 // ExtensionRef is a reference to an extension written inside a component's

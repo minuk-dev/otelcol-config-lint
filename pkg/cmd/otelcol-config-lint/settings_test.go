@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/settings"
 )
 
@@ -27,14 +28,14 @@ func absSchemas(t *testing.T) string {
 func firedRules(t *testing.T, out string) []string {
 	t.Helper()
 
-	seen := make(map[string]bool)
+	seen := sets.New[string]()
 
 	var rules []string
 
 	for _, found := range rulesFired(t, out) {
 		for _, name := range found {
-			if !seen[name] {
-				seen[name] = true
+			if !seen.Has(name) {
+				seen.Insert(name)
 				rules = append(rules, name)
 			}
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // The numbers upstream defaults to, in the batchprocessor's factory.
@@ -235,7 +236,7 @@ func (r batchSizeBounds) checkMetadataKeys(ctx *rule.Context, proc batchProcesso
 	}
 
 	path := rule.JoinPath(proc.path, "metadata_keys")
-	seen := map[string]bool{}
+	seen := sets.New[string]()
 
 	for i, item := range proc.metadataKeys.Content {
 		if item.Kind != yaml.ScalarNode || rule.HasExpansion(item.Value) {
@@ -243,8 +244,8 @@ func (r batchSizeBounds) checkMetadataKeys(ctx *rule.Context, proc batchProcesso
 		}
 
 		folded := strings.ToLower(item.Value)
-		if !seen[folded] {
-			seen[folded] = true
+		if !seen.Has(folded) {
+			seen.Insert(folded)
 
 			continue
 		}

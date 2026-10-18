@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // File is a parsed collector config.
@@ -398,13 +399,13 @@ func collectDuplicates(n *yaml.Node, path string) []Entry {
 
 	switch n.Kind {
 	case yaml.MappingNode:
-		seen := map[string]bool{}
+		seen := sets.New[string]()
 		for _, e := range entries(n, path) {
-			if seen[e.Key] {
+			if seen.Has(e.Key) {
 				out = append(out, e)
 			}
 
-			seen[e.Key] = true
+			seen.Insert(e.Key)
 			out = append(out, collectDuplicates(e.Node, e.Path)...)
 		}
 	case yaml.SequenceNode:
