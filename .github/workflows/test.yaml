@@ -31,6 +31,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  http-schema-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+      - name: Generate and check HTTP schemas from pinned upstream releases
+        run: go test -race -tags=integration ./pkg/cmd/schemagen -run '^TestHTTPReleaseSchemas$' -count=1 -v -timeout=12m
+
   cli-smoke:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10

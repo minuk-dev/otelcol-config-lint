@@ -532,7 +532,7 @@ func attachSourceFields(cat *schema.Schema, index *goIndex) int {
 }
 
 // httpBookkeeping recognizes only the non-config fields audited against Collector
-// 23e90b7fc273f0ff7a6c89a184f6afbc5573e52f. HTTP Unmarshal migrates tagged
+// confighttp v0.160.0 (cd3455cf3a7f672208140b1ebb1581c542b2b0ed). HTTP Unmarshal migrates tagged
 // keepalive keys; these fields store warnings or prevent unkeyed literals.
 // Additional unfilled fields must still leave the decoder open.
 func httpBookkeeping(key string, field *ast.Field) bool {
