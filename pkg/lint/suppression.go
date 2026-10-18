@@ -7,15 +7,16 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 const suppressionPrefix = "otelcol-config-lint:"
 
 // suppressions records directive errors and returns exact source-line exceptions.
 func suppressions(file *config.File, rules []rule.Rule, result *Result, opts Options) map[int]string {
-	known := make(map[string]bool, len(rules))
+	known := make(sets.Set[string], len(rules))
 	for _, check := range rules {
-		known[check.Name()] = true
+		known.Insert(check.Name())
 	}
 
 	out := map[int]string{}
@@ -27,7 +28,7 @@ func suppressions(file *config.File, rules []rule.Rule, result *Result, opts Opt
 		}
 
 		parts := strings.Fields(text)
-		if len(parts) == 2 && parts[0] == suppressionPrefix+"disable-next-line" && known[parts[1]] {
+		if len(parts) == 2 && parts[0] == suppressionPrefix+"disable-next-line" && known.Has(parts[1]) {
 			out[line+1] = parts[1]
 
 			continue

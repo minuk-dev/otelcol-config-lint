@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // ComponentsFile is the name a registry publishes its component availability
@@ -69,7 +70,7 @@ func (s Span) Covers(version string) bool {
 // The newest release ends its span open rather than named, so that the entry
 // of a component that is still shipped does not change when the next release
 // is added.
-func SpansOf(releases []string, present map[string]bool) []Span {
+func SpansOf(releases []string, present sets.Set[string]) []Span {
 	ordered := oldestFirst(releases)
 
 	var spans []Span
@@ -77,7 +78,7 @@ func SpansOf(releases []string, present map[string]bool) []Span {
 	cur := -1
 
 	for _, v := range ordered {
-		if !present[v] {
+		if !present.Has(v) {
 			cur = -1
 
 			continue

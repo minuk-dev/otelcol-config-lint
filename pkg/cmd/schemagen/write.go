@@ -11,6 +11,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // The modes new directories and files are created with.
@@ -174,7 +175,7 @@ func (o *options) writeComponents(idx *schema.Index) error {
 // type, by reading every schema the registry holds for it.
 func (o *options) spansIn(dist string, versions []string) (schema.ComponentSpans, error) {
 	// kind -> type -> the releases shipping it.
-	present := map[config.Kind]map[string]map[string]bool{}
+	present := map[config.Kind]map[string]sets.Set[string]{}
 
 	for _, v := range versions {
 		cat, err := o.readRegistrySchema(filepath.Join(o.registryDir, dist), v)
@@ -185,16 +186,16 @@ func (o *options) spansIn(dist string, versions []string) (schema.ComponentSpans
 		for kind, byType := range cat.Components {
 			byName, ok := present[kind]
 			if !ok {
-				byName = map[string]map[string]bool{}
+				byName = map[string]sets.Set[string]{}
 				present[kind] = byName
 			}
 
 			for typ := range byType {
 				if byName[typ] == nil {
-					byName[typ] = map[string]bool{}
+					byName[typ] = sets.New[string]()
 				}
 
-				byName[typ][v] = true
+				byName[typ].Insert(v)
 			}
 		}
 	}
@@ -303,7 +304,7 @@ func (o *options) extensionIn(dir string, versions []string) string {
 // versionsIn lists the releases a distribution directory holds, in any of the
 // formats a schema may be written in.
 func (o *options) versionsIn(dir string) []string {
-	seen := map[string]bool{}
+	seen := sets.New[string]()
 
 	var out []string
 
@@ -311,8 +312,8 @@ func (o *options) versionsIn(dir string) []string {
 		names, _ := afero.Glob(o.fs(), filepath.Join(dir, "*"+ext))
 		for _, n := range names {
 			v := strings.TrimSuffix(filepath.Base(n), ext)
-			if !seen[v] {
-				seen[v] = true
+			if !seen.Has(v) {
+				seen.Insert(v)
 				out = append(out, v)
 			}
 		}

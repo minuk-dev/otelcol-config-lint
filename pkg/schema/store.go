@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Extensions returns the schema file suffixes, in preference order. The
@@ -131,14 +132,14 @@ type Store struct {
 // remote locations cannot be enumerated, so they never appear here even though
 // Load can still resolve them.
 func (s Store) Versions(ctx context.Context) []string {
-	seen := map[string]bool{}
+	seen := sets.New[string]()
 
 	var out []string
 
 	for _, loc := range s.locations() {
 		for _, v := range s.versionsAt(ctx, loc) {
-			if v != "" && !seen[v] {
-				seen[v] = true
+			if v != "" && !seen.Has(v) {
+				seen.Insert(v)
 				out = append(out, v)
 			}
 		}

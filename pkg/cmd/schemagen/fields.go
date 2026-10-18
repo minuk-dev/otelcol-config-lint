@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // configSchemaFile is the name upstream publishes a component's config schema
@@ -54,11 +55,11 @@ type jsonSchema struct {
 type schemaSet struct {
 	byKey map[string]*jsonSchema
 	// seen counts the files, which byKey cannot: one file is keyed twice.
-	seen map[string]bool
+	seen sets.Set[string]
 }
 
 func newSchemaSet() *schemaSet {
-	return &schemaSet{byKey: map[string]*jsonSchema{}, seen: map[string]bool{}}
+	return &schemaSet{byKey: map[string]*jsonSchema{}, seen: sets.New[string]()}
 }
 
 // add records a config schema under both spellings a reference may use: the
@@ -74,7 +75,7 @@ func (s *schemaSet) add(importPath string, raw []byte) {
 	}
 
 	s.byKey[importPath] = &doc
-	s.seen[importPath] = true
+	s.seen.Insert(importPath)
 
 	if repo, ok := repositoryPath(importPath); ok {
 		s.byKey[repo] = &doc

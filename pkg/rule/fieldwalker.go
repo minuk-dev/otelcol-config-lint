@@ -7,6 +7,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // The schema types a field can declare. Only maps and lists are descended
@@ -113,10 +114,10 @@ func (w FieldWalker) walkMap(field *schema.Field, node *yaml.Node, path string) 
 		return
 	}
 
-	present := map[string]bool{}
+	present := sets.New[string]()
 
 	for _, e := range MapEntries(node, path) {
-		present[e.Key] = true
+		present.Insert(e.Key)
 
 		child, known := field.Children[e.Key]
 
@@ -154,13 +155,13 @@ func (w FieldWalker) walkList(field *schema.Field, node *yaml.Node, path string)
 	}
 }
 
-func (w FieldWalker) checkRequired(field *schema.Field, present map[string]bool, node *yaml.Node, path string) {
+func (w FieldWalker) checkRequired(field *schema.Field, present sets.Set[string], node *yaml.Node, path string) {
 	if w.OnRequired == nil {
 		return
 	}
 
 	for _, req := range field.Required {
-		if !present[req] {
+		if !present.Has(req) {
 			w.OnRequired(req, node, JoinPath(path, req))
 		}
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // The releases the availability fixtures below are written against, newest
@@ -57,7 +58,7 @@ func TestSpansOfIsOpenAtTheNewestRelease(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := schema.SpansOf(fixtureReleases, set(tt.present))
+			got := schema.SpansOf(fixtureReleases, sets.New(tt.present...))
 			assert.Equal(t, tt.want, got)
 
 			// Whatever the spans came out as, reading them back names the
@@ -224,14 +225,4 @@ func components(spans []schema.Span) *schema.Components {
 	return &schema.Components{Distributions: map[string]schema.ComponentSpans{
 		distContrib: {config.KindReceiver: {"otlp": spans}},
 	}}
-}
-
-// set turns a list of releases into what SpansOf takes.
-func set(versions []string) map[string]bool {
-	out := map[string]bool{}
-	for _, v := range versions {
-		out[v] = true
-	}
-
-	return out
 }

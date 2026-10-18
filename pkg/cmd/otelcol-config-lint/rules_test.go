@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // rulesDir holds one invalid config per rule, each next to the settings file
@@ -224,7 +225,7 @@ func TestRuleFixturesCommentTheirMistake(t *testing.T) {
 			matched := false
 
 			for _, line := range reported {
-				if marked[line] || marked[line-1] {
+				if marked.HasAny(line, line-1) {
 					matched = true
 
 					break
@@ -239,13 +240,13 @@ func TestRuleFixturesCommentTheirMistake(t *testing.T) {
 
 // commentedLines returns the lines carrying a comment that names the rule, as a
 // set of 1-based line numbers.
-func commentedLines(src, rule string) map[int]bool {
-	out := map[int]bool{}
+func commentedLines(src, rule string) sets.Set[int] {
+	out := sets.New[int]()
 
 	for i, line := range strings.Split(src, "\n") {
 		_, comment, found := strings.Cut(line, "#")
 		if found && strings.Contains(comment, rule) {
-			out[i+1] = true
+			out.Insert(i + 1)
 		}
 	}
 

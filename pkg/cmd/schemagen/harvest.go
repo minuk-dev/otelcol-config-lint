@@ -16,6 +16,7 @@ import (
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Limits for the harvest.
@@ -336,7 +337,7 @@ func convert(decl declared, meta metadata) *schema.Component {
 		Module:    decl.module,
 	}
 
-	signals := map[config.Signal]bool{}
+	signals := sets.New[config.Signal]()
 
 	for level, entries := range meta.Status.Stability {
 		for _, entry := range entries {
@@ -350,13 +351,13 @@ func convert(decl declared, meta metadata) *schema.Component {
 					From: config.Signal(from), To: config.Signal(to),
 				})
 			default:
-				signals[config.Signal(entry)] = true
+				signals.Insert(config.Signal(entry))
 			}
 		}
 	}
 
 	for _, s := range config.Signals() {
-		if signals[s] {
+		if signals.Has(s) {
 			comp.Signals = append(comp.Signals, s)
 		}
 	}

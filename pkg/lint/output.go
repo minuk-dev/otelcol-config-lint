@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
 // Formatter renders results as they arrive and writes a trailer at the end.
@@ -513,8 +514,8 @@ func pickAnnotations(candidates []githubAnnotation, limit int) []githubAnnotatio
 
 	selected := make([]githubAnnotation, 0, limit)
 	used := make([]bool, len(candidates))
-	files := map[string]bool{}
-	groups := map[string]bool{}
+	files := sets.New[string]()
+	groups := sets.New[string]()
 
 	for pass := distinctFiles; pass <= remainingAnnotations; pass++ {
 		for i, a := range candidates {
@@ -523,13 +524,16 @@ func pickAnnotations(candidates []githubAnnotation, limit int) []githubAnnotatio
 			}
 
 			group := a.rule + "\x00" + a.file
-			if (pass == distinctFiles && files[a.file]) ||
-				(pass == distinctRulesPerFile && groups[group]) {
+			if (pass == distinctFiles && files.Has(a.file)) ||
+				(pass == distinctRulesPerFile && groups.Has(group)) {
 				continue
 			}
 
 			selected = append(selected, a)
-			used[i], files[a.file], groups[group] = true, true, true
+			used[i] = true
+
+			files.Insert(a.file)
+			groups.Insert(group)
 		}
 	}
 
