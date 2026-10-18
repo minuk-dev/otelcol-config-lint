@@ -1,9 +1,7 @@
 # Settings file
 
-Commit the policy instead of repeating flags. The file is laid out the way
-golangci-lint's is: **what to check** under `run`, **which rules** under
-`rules`, **what counts as a failure** under `issues`, and **how it is printed**
-under `output`.
+Commit the policy instead of repeating flags. Use `run` for the target,
+`rules` for policy, `issues` for failure thresholds, and `output` for reporting.
 
 ```yaml
 version: "1"
@@ -49,9 +47,9 @@ Every block is optional, as is every key in it: what a file does not state keeps
 its default. A key the linter does not know is an error rather than a line that
 quietly does nothing.
 
-Each key mirrors a `run` flag of the same meaning — the [flag
-table](../README.md#usage) names the pairs. The file is what a repository
-commits; a flag is how one run departs from it.
+Use `otelcol-config-lint run --help` for flags and
+[otelcol-config-lint.schema.json](../otelcol-config-lint.schema.json) for all
+settings keys and defaults.
 
 ## Where the file is found
 
@@ -84,16 +82,11 @@ Naming a rule in both `enable` and `disable` is an error rather than a silent
 win for one of them. `otelcol-config-lint list rules` prints what the policy
 resolves to: a rule that will not run is listed at severity `off`.
 
-See [the rule reference](rules/README.md) for what each one does.
-
-Before choosing deployment blockers, use the [rollout validation
-example](rollout-validation.md) to record findings and compare them with the
-actual Collector on a sanitized representative corpus.
+See [Rule behavior](rules.md) for analysis limits and policy choices.
 
 ## Per-rule settings
 
-`rules.settings` is where a rule's own knobs go, keyed by rule name, the way
-golangci-lint's `linters.settings` works:
+`rules.settings` holds options keyed by rule name:
 
 ```yaml
 rules:
@@ -119,19 +112,6 @@ Name it from the file itself, which every YAML language server reads:
 # yaml-language-server: $schema=https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json
 ```
 
-Or map it once, in VS Code's `settings.json`:
-
-```json
-{
-  "yaml.schemas": {
-    "https://raw.githubusercontent.com/minuk-dev/otelcol-config-lint/main/otelcol-config-lint.schema.json": [
-      ".otelcol-config-lint.yaml",
-      ".otelcol-config-lint.yml"
-    ]
-  }
-}
-```
-
 `otelcol-config-lint config-schema` prints the same document, so a project that
 vendors it gets the list of rules the binary it pins actually runs:
 
@@ -141,7 +121,7 @@ otelcol-config-lint config-schema > otelcol-config-lint.schema.json
 
 ## The deployment environment
 
-[`memory-limiter-sizing`](rules/memory-limiter-sizing.md) compares a
+`memory-limiter-sizing` compares a
 `memory_limiter` against the container it runs in, which the config file cannot
 state. The `run.kubernetes` block supplies it.
 
@@ -196,15 +176,6 @@ The keys the first release put at the top level — `collectorVersion`,
 still read, and folded into the blocks above. A run that finds one says which
 keys to move. `output: json` is not one of them: a bare format name is still the
 shorthand for `output: {format: json}`.
-
-To omit alpha notices while retaining development warnings:
-
-```yaml
-rules:
-  settings:
-    component-stability:
-      report_alpha: false # default: true
-```
 
 ## Suppressing one diagnostic line
 
