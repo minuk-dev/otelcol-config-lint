@@ -163,6 +163,27 @@ func TestMemoryLimiterConfigLeavesExpansionsAlone(t *testing.T) {
 	}
 }
 
+func TestMemoryLimiterConfigDynamicBlock(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		want int
+	}{
+		{name: "${file:limits.yaml}", want: 0},
+		{name: "${env:LIMITER}", want: 0},
+		{name: "$${env:LIMITER}", want: 2},
+		{name: "null", want: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found := check(t, limiter("memory_limiter", "    "+tt.name))
+			require.Len(t, found, tt.want)
+		})
+	}
+}
+
 func TestMemoryLimiterConfigRemarksOnAFarOffInterval(t *testing.T) {
 	t.Parallel()
 

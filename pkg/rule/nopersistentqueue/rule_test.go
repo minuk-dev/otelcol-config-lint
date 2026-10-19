@@ -238,6 +238,27 @@ exporters:
 	}
 }
 
+func TestNoPersistentQueueDynamicBlocks(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, settings string
+	}{
+		{name: "queue from file", settings: "{sending_queue: '${file:queue.yaml}'}"},
+		{name: "queue from environment", settings: "{sending_queue: '${env:QUEUE}'}"},
+		{name: "exporter from file", settings: "${file:exporter.yaml}"},
+		{name: "exporter from environment", settings: "${env:EXPORTER}"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			source := "exporters:\n  otlphttp: " + tt.settings +
+				"\nservice:\n  pipelines:\n    traces: {receivers: [otlp], exporters: [otlphttp]}\n"
+			assert.Empty(t, check(t, source))
+		})
+	}
+}
+
 // A component the schema resolved no fields for is not a component known to
 // have no settings: the datadog exporter, which has a queue, sits in that
 // bucket next to nop. What the config writes is then the only evidence there

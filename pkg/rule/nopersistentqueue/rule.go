@@ -108,6 +108,8 @@ func readSendingQueue(c config.Component) sendingQueue {
 	queue := sendingQueue{node: nil, written: false, disabled: false, persisted: false, unresolved: false}
 
 	settings := rule.ResolveAlias(c.ValueNode)
+	queue.unresolved = rule.IsExpansion(settings)
+
 	if settings == nil || settings.Kind != yaml.MappingNode {
 		return queue
 	}
@@ -121,6 +123,8 @@ func readSendingQueue(c config.Component) sendingQueue {
 	}
 
 	if block == nil || block.Kind != yaml.MappingNode {
+		queue.unresolved = rule.IsExpansion(block)
+
 		return queue
 	}
 
