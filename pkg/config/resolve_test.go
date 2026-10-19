@@ -106,6 +106,71 @@ processors:
 		settings(t, f, "memory_limiter"))
 }
 
+func TestAliasMappingKeys(t *testing.T) {
+	t.Parallel()
+
+	f := parse(t, "receivers:\n  &component otlp: {}\nexporters:\n  *component : {endpoint: backend:4317}\n")
+	component, found := f.Component(config.KindExporter, config.ParseID("otlp"))
+	require.True(t, found)
+	assert.Equal(t, "otlp", component.KeyNode.Value)
+	assert.Equal(t, 2, f.Pos(component.KeyNode).Line, "resolved keys retain the anchor's source position")
+}
+
+func TestAliasKeysAndMerges(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, source string
+	}{
+		{name: "local alias overrides merge", source: `processors:
+  batch/base: &base
+    &setting timeout: 1s
+  batch:
+    <<: *base
+    *setting : 5s
+`},
+		{name: "alias in merged source", source: `processors:
+  batch/key:
+    &setting timeout: 1s
+  batch/base: &base
+    *setting : 5s
+  batch:
+    <<: *base
+`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := parse(t, tt.source)
+			assert.Equal(t, map[string]string{"timeout": "5s"}, settings(t, f, "batch"))
+			assert.Empty(t, f.DuplicateKeys)
+		})
+	}
+}
+
+func TestDuplicateAliasKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, source string
+	}{
+		{name: "literal then alias", source: "    &setting timeout: 1s\n    *setting : 5s\n"},
+		{name: "alias then literal", source: "    *setting : 1s\n    timeout: 5s\n"},
+		{name: "different aliases", source: "    *setting : 1s\n    *other : 5s\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := parse(t, "processors:\n  batch/base:\n    key: &setting timeout\n"+
+				"    other: &other timeout\n  batch:\n"+tt.source)
+			require.Len(t, f.DuplicateKeys, 1)
+			assert.Equal(t, "timeout", f.DuplicateKeys[0].Key)
+			assert.Equal(t, "processors.batch.timeout", f.DuplicateKeys[0].Path)
+			assert.Equal(t, 7, f.Pos(f.DuplicateKeys[0].KeyNode).Line)
+		})
+	}
+}
+
 // TestASequenceOfMergesAppliesTheFirstThatCarriesTheKey pins the order
 // yaml.v3 applies "<<: [*a, *b]" in.
 func TestASequenceOfMergesAppliesTheFirstThatCarriesTheKey(t *testing.T) {

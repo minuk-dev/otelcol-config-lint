@@ -385,7 +385,8 @@ func entries(n *yaml.Node, parentPath string) []Entry {
 	out := make([]Entry, 0, len(n.Content)/mappingStride)
 	for i := 0; i+1 < len(n.Content); i += mappingStride {
 		k, v := n.Content[i], n.Content[i+1]
-		out = append(out, Entry{Key: k.Value, KeyNode: k, Node: v, Path: join(parentPath, k.Value)})
+		key := aliasTarget(k).Value
+		out = append(out, Entry{Key: key, KeyNode: k, Node: v, Path: join(parentPath, key)})
 	}
 
 	return out

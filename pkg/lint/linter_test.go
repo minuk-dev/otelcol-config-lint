@@ -82,6 +82,25 @@ func newLinter(t *testing.T, opts lint.Options) *lint.Linter {
 	return lint.New(opts)
 }
 
+func TestAliasedComponentKey(t *testing.T) {
+	t.Parallel()
+
+	const source = `receivers:
+  &component otlp:
+    protocols:
+      grpc: {endpoint: localhost:4317}
+exporters:
+  *component : {endpoint: backend:4317}
+service:
+  pipelines:
+    traces: {receivers: [otlp], exporters: [otlp]}
+`
+
+	result := newLinter(t, lint.Options{MinSeverity: diag.Error}).Lint(t.Context(), "alias.yaml", []byte(source))
+	assert.Equal(t, lint.Valid, result.Status)
+	assert.Empty(t, result.Diagnostics)
+}
+
 func TestStatuses(t *testing.T) {
 	t.Parallel()
 
