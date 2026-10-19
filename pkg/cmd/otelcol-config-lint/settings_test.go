@@ -454,6 +454,73 @@ func TestFileRuleOverridesReachCLI(t *testing.T) {
 	require.Contains(t, out, "warning:")
 }
 
+func TestStdinKeepsGlobalPolicy(t *testing.T) {
+	t.Parallel()
+
+	policy := writeSettings(t, `rules:
+  default: none
+  enable: [service-required]
+  overrides:
+    - paths: ['*']
+      disable: [service-required]
+`)
+
+	const source = "receivers: {}\n"
+
+	file := filepath.Join(t.TempDir(), "stdin")
+	writeFile(t, file, source)
+
+	code, out, errOut := lint(t, source, "--config", policy, "--output", "json", "-", file)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, rulesFired(t, out)["stdin"], "service-required")
+	require.Contains(t, out, `"filename": "stdin"`)
+	require.Contains(t, out, `"file": "stdin"`)
+
+	code, out, errOut = lint(t, "", "--config", policy, "--output", "json", file)
+	require.Equal(t, 0, code, errOut)
+	require.NotContains(t, out, "service-required")
+
+	code, out, errOut = lint(t, source, "--config", policy, "--severity", "service-required=warning", "-")
+	require.Equal(t, 0, code, errOut)
+	require.Contains(t, out, "warning:")
+}
+
+func TestStdinKeepsDefaultEnvironment(t *testing.T) {
+	t.Parallel()
+
+	policy := writeSettings(t, `run:
+  kubernetes:
+    memoryLimit: 256Mi
+    overrides:
+      - paths: ['*']
+        enabled: false
+rules:
+  default: none
+  enable: [memory-limiter-sizing]
+`)
+
+	const source = "processors:\n  memory_limiter: {check_interval: 1s, limit_mib: 512}\n"
+
+	file := filepath.Join(t.TempDir(), "stdin")
+	writeFile(t, file, source)
+
+	code, out, errOut := lint(t, source, "--config", policy, "--verbose", "-", file)
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, "[memory-limiter-sizing]")
+	require.Contains(t, errOut, "stdin: kubernetes, memory limit 256Mi")
+	require.Contains(t, errOut, file+": no deployment environment")
+}
+
+func TestStdinSyntaxErrorKeepsDisplayName(t *testing.T) {
+	t.Parallel()
+
+	code, out, errOut := lint(t, "receivers: [", "--no-config", "--output", "json", "-")
+	require.Equal(t, 1, code, errOut)
+	require.Contains(t, out, `"filename": "stdin"`)
+	require.Contains(t, out, `"file": "stdin"`)
+	require.Contains(t, out, `"msg": "stdin:`)
+}
+
 func TestSampledDebugSeverityOverride(t *testing.T) {
 	t.Parallel()
 

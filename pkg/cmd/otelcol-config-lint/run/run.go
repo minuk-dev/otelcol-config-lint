@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/minuk-dev/otelcol-config-lint/pkg/cmdutil"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/ruleset"
@@ -396,7 +397,7 @@ func (o *options) lintAll(
 	results := make(map[string]lint.Result, files.Len())
 
 	if files.Has(scanner.StdinMarker) {
-		results[scanner.StdinMarker] = linter.LintReader(cmd.Context(), "stdin", cmd.InOrStdin())
+		results[scanner.StdinMarker] = lintStdin(cmd, linter)
 	}
 
 	if !o.exitOnError {
@@ -418,7 +419,7 @@ func (o *options) lintAll(
 			r = linter.LintFile(cmd.Context(), f)
 		}
 
-		err := o.reportResult(cmd, formatter, r)
+		err := o.reportResult(cmd, formatter, r, f)
 		if err != nil {
 			return err
 		}
@@ -442,14 +443,31 @@ func (o *options) lintAll(
 	return nil
 }
 
-func (o *options) reportResult(cmd *cobra.Command, formatter lint.Formatter, r lint.Result) error {
+// lintStdin uses the policy marker while checking and the display name only when reporting.
+func lintStdin(cmd *cobra.Command, linter *lint.Linter) lint.Result {
+	result := linter.LintReader(cmd.Context(), scanner.StdinMarker, cmd.InOrStdin())
+	result.Path = "stdin"
+
+	for i := range result.Diagnostics {
+		result.Diagnostics[i].Position.File = result.Path
+	}
+
+	var syntax *config.SyntaxError
+	if errors.As(result.Err, &syntax) {
+		syntax.Path = result.Path
+	}
+
+	return result
+}
+
+func (o *options) reportResult(cmd *cobra.Command, formatter lint.Formatter, r lint.Result, policyPath string) error {
 	err := cmd.Context().Err()
 	if err != nil {
 		return fmt.Errorf("lint cancelled: %w", err)
 	}
 
 	if o.verbose && o.envPolicy.Configured() {
-		cmd.PrintErrf("otelcol-config-lint: %s: %s\n", r.Path, describeEnvironment(o.envPolicy.Resolve(r.Path)))
+		cmd.PrintErrf("otelcol-config-lint: %s: %s\n", r.Path, describeEnvironment(o.envPolicy.Resolve(policyPath)))
 	}
 
 	err = formatter.Result(r)
