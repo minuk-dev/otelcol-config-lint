@@ -69,7 +69,9 @@ func findInsecure(n *yaml.Node, path string) []tlsHit {
 		for _, e := range rule.MapEntries(n, path) {
 			switch e.Key {
 			case "insecure", "insecure_skip_verify":
-				if e.Node.Tag == rule.BoolTag && e.Node.Value == "true" {
+				var insecure bool
+
+				if e.Node.Tag == rule.BoolTag && e.Node.Decode(&insecure) == nil && insecure {
 					out = append(out, tlsHit{node: e.Node, path: e.Path, hasCA: e.Key == "insecure_skip_verify" && configuredCA(n)})
 				}
 			default:

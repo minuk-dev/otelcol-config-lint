@@ -149,7 +149,9 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 				queue.unresolved = true
 			}
 
-			queue.disabled = val.Tag == rule.BoolTag && val.Value == "false"
+			var enabled bool
+
+			queue.disabled = val.Tag == rule.BoolTag && val.Decode(&enabled) == nil && !enabled
 		case rule.StorageKey:
 			// Anything but an empty or null value is the setting written.
 			// Whether what was written is a name the collector can resolve is

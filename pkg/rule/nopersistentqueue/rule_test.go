@@ -40,6 +40,27 @@ service:
 `
 }
 
+func TestBooleanSpellings(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		want int
+	}{
+		{name: "true", want: 1}, {name: "True", want: 1}, {name: "TRUE", want: 1},
+		{name: "false", want: 0}, {name: "False", want: 0}, {name: "FALSE", want: 0},
+		{name: `"true"`, want: 1}, {name: `"True"`, want: 1}, {name: `"TRUE"`, want: 1},
+		{name: `"false"`, want: 1}, {name: `"False"`, want: 1}, {name: `"FALSE"`, want: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			found := check(t, exporting("    sending_queue:\n      enabled: "+tt.name))
+			assert.Len(t, found, tt.want)
+		})
+	}
+}
+
 func TestNoPersistentQueue(t *testing.T) {
 	t.Parallel()
 
