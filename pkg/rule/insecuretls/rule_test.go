@@ -10,6 +10,30 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
 )
 
+func TestBooleanSpellings(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"insecure", "insecure_skip_verify"} {
+		for _, tt := range []struct {
+			name string
+			want int
+		}{
+			{name: "true", want: 1}, {name: "True", want: 1}, {name: "TRUE", want: 1},
+			{name: "false", want: 0}, {name: "False", want: 0}, {name: "FALSE", want: 0},
+			{name: `"true"`, want: 0}, {name: `"True"`, want: 0}, {name: `"TRUE"`, want: 0},
+			{name: `"false"`, want: 0}, {name: `"False"`, want: 0}, {name: `"FALSE"`, want: 0},
+		} {
+			t.Run(key+"/"+tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				found, err := ruletest.Run(insecuretls.New(), "exporters:\n  otlp:\n    tls:\n      "+key+": "+tt.name)
+				require.NoError(t, err)
+				assert.Len(t, found, tt.want)
+			})
+		}
+	}
+}
+
 func TestConfiguredCAWithSkippedVerification(t *testing.T) {
 	t.Parallel()
 
