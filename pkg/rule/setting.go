@@ -106,8 +106,8 @@ func (s Setting) Positive() bool { return s.Known && s.Num > 0 }
 // here, so no check that needs the number can run.
 func (s Setting) Unknown() bool { return s.Present && !s.Known }
 
-// ProcessorsOfType returns every declared processor of one type, read into
-// whatever the caller needs. Matching on the type rather than the whole id is
+// ProcessorsOfType reads processors of one type whose settings are not provider expansions.
+// Matching on the type rather than the whole id is
 // what covers named instances such as "batch/traces".
 func ProcessorsOfType[T any](f *config.File, typ string, read func(config.Component) T) []T {
 	sec := f.Sections[config.KindProcessor]
@@ -118,7 +118,7 @@ func ProcessorsOfType[T any](f *config.File, typ string, read func(config.Compon
 	var out []T
 
 	for _, c := range sec.Components {
-		if c.ID.Type == typ {
+		if c.ID.Type == typ && !IsExpansion(c.ValueNode) {
 			out = append(out, read(c))
 		}
 	}

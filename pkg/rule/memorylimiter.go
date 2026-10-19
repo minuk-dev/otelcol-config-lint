@@ -38,7 +38,7 @@ type MemoryLimiter struct {
 	SpikePercent  Setting
 }
 
-// MemoryLimiters returns every declared memory_limiter. Instances are matched
+// MemoryLimiters returns memory_limiters with statically readable settings. Instances are matched
 // on their type, so "memory_limiter/aggressive" is covered too.
 func MemoryLimiters(f *config.File) []MemoryLimiter {
 	return ProcessorsOfType(f, MemoryLimiterType, readMemoryLimiter)
