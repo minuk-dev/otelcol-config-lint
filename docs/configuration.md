@@ -161,8 +161,8 @@ run:
 - A file that matches no override and has no defaults to fall back on simply
   skips `memory-limiter-sizing`. That is per file: the rest of the run is
   unaffected. `--verbose` prints what each file resolved to.
-- Config read from stdin is reported as `stdin`, which no glob is meant to
-  match, so it gets the defaults.
+- Config read from stdin is reported as `stdin` and always gets the defaults.
+  Path overrides apply only to filesystem inputs, including a file named `stdin`.
 
 `--kubernetes`, `--memory-request` and `--memory-limit` are the single-file
 convenience: they set the defaults and, like every flag, win over the file.
