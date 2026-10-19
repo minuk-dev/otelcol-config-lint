@@ -191,7 +191,7 @@ func (r *resolver) walk(n *yaml.Node) {
 	}
 }
 
-// mapping rewrites one mapping: its values resolved, and the entries its merge
+// mapping rewrites one mapping: its keys and values resolved, and the entries its merge
 // keys supply spliced in behind the keys it writes itself.
 func (r *resolver) mapping(n *yaml.Node) {
 	local := make([]*yaml.Node, 0, len(n.Content))
@@ -208,7 +208,7 @@ func (r *resolver) mapping(n *yaml.Node) {
 			continue
 		}
 
-		local = append(local, k, r.value(v))
+		local = append(local, r.value(k), r.value(v))
 	}
 
 	local = append(local, mergedEntries(local, merged)...)
