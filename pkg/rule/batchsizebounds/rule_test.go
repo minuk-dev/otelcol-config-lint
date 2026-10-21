@@ -267,3 +267,29 @@ func TestBatchSizeBoundsDistinguishesNullFromMissing(t *testing.T) {
 		})
 	}
 }
+
+func TestNullBatchSizeUsesVersionedDefault(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"v0.101.0", "v0.126.0", "v0.127.0", "v0.153.0", "", "latest"} {
+		for _, value := range []string{"null", "~", "", "0", "${env:BATCH_SIZE}"} {
+			t.Run(version+"/"+value, func(t *testing.T) {
+				t.Parallel()
+
+				sch := ruletest.Schema()
+				sch.CollectorVersion = version
+				found, err := ruletest.RunWith(batchsizebounds.New(), batcher("batch/traces",
+					"    send_batch_size: "+value+"\n    send_batch_max_size: 512"), ruletest.Options{Schema: sch})
+				require.NoError(t, err)
+
+				if (version == "v0.101.0" || version == "v0.126.0") && value != "0" && value != "${env:BATCH_SIZE}" {
+					require.Len(t, found, 1)
+					assert.Contains(t, found[0].Message, "below the default send_batch_size of 8192")
+					assert.Equal(t, "processors.batch/traces.send_batch_max_size", found[0].Path)
+				} else {
+					assert.Empty(t, found)
+				}
+			})
+		}
+	}
+}
