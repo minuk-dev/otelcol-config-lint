@@ -136,6 +136,7 @@ func TestCollectorCompatibility(t *testing.T) {
 		collectorCode, lintCode       int
 	}{
 		{name: "fractional-integer", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "quoted-scalars", distribution: "", rejection: "expected type", collectorCode: 1, lintCode: 1},
 		{name: "invalid-fractional-batch-size", distribution: "", rejection: "overflows uint", collectorCode: 1, lintCode: 1},
 		{name: "invalid-yaml-key", distribution: "", rejection: "cannot resolve the configuration", collectorCode: 1, lintCode: 1},
 		{name: "provider-sections", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},

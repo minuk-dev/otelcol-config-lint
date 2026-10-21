@@ -177,7 +177,7 @@ func (w FieldWalker) checkType(field *schema.Field, node *yaml.Node, path string
 		return false // resolved at runtime by a confmap provider
 	}
 
-	if ok := matchesType(field, node); !ok {
+	if ok := matchesType(field, w.Ctx.DecodeScalar(node, field.Type)); !ok {
 		if w.OnInvalid != nil {
 			w.OnInvalid(node, path, describeType(field))
 		}

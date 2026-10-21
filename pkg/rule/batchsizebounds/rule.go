@@ -69,11 +69,13 @@ func (b batchProcessor) at(s rule.Setting) *yaml.Node { return rule.NodeOr(s.Nod
 
 // batchProcessors returns every declared batch processor, matched on type so
 // "batch/traces" is covered too.
-func batchProcessors(f *config.File) []batchProcessor {
-	return rule.ProcessorsOfType(f, rule.BatchType, readBatch)
+func batchProcessors(ctx *rule.Context) []batchProcessor {
+	return rule.ProcessorsOfType(ctx.File, rule.BatchType, func(c config.Component) batchProcessor {
+		return readBatch(ctx, c)
+	})
 }
 
-func readBatch(c config.Component) batchProcessor {
+func readBatch(ctx *rule.Context, c config.Component) batchProcessor {
 	proc := batchProcessor{
 		id:               c.ID,
 		node:             rule.NodeOr(c.KeyNode, c.ValueNode),
@@ -91,9 +93,9 @@ func readBatch(c config.Component) batchProcessor {
 	for _, e := range rule.MapEntries(c.ValueNode, proc.path) {
 		switch e.Key {
 		case "send_batch_size":
-			proc.sendBatchSize = rule.ReadInt(e.Node)
+			proc.sendBatchSize = rule.ReadInt(ctx.DecodeScalar(e.Node, "int"))
 		case "send_batch_max_size":
-			proc.sendBatchMaxSize = rule.ReadInt(e.Node)
+			proc.sendBatchMaxSize = rule.ReadInt(ctx.DecodeScalar(e.Node, "int"))
 		case "timeout":
 			proc.timeout = rule.ReadDuration(e.Node)
 		case "metadata_keys":
@@ -109,7 +111,7 @@ func readBatch(c config.Component) batchProcessor {
 type batchSizeBounds struct{ rule.Base }
 
 func (r batchSizeBounds) Check(ctx *rule.Context) {
-	for _, proc := range batchProcessors(ctx.File) {
+	for _, proc := range batchProcessors(ctx) {
 		// A size the field cannot hold stands on its own: it fails to decode
 		// whatever the other field says, and it stops the comparison, which
 		// the collector never reaches.

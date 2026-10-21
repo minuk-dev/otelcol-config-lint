@@ -47,7 +47,7 @@ func (r noPersistentQueue) Check(ctx *rule.Context) {
 			continue
 		}
 
-		queue := readSendingQueue(c)
+		queue := readSendingQueue(ctx, c)
 
 		if queue.disabled || queue.persisted || queue.unresolved ||
 			!rule.AcceptsQueue(ctx, c.ID.Type, queue.written) {
@@ -104,7 +104,7 @@ func (q sendingQueue) describe() string {
 // read, which is where the queue sits and where the field schema describes it:
 // an exporter that wraps another, such as loadbalancing, carries a queue per
 // protocol whose fix is written somewhere else again.
-func readSendingQueue(c config.Component) sendingQueue {
+func readSendingQueue(ctx *rule.Context, c config.Component) sendingQueue {
 	queue := sendingQueue{node: nil, written: false, disabled: false, persisted: false, unresolved: false}
 
 	settings := rule.ResolveAlias(c.ValueNode)
@@ -128,14 +128,14 @@ func readSendingQueue(c config.Component) sendingQueue {
 		return queue
 	}
 
-	readQueueBlock(block, &queue)
+	readQueueBlock(ctx, block, &queue)
 
 	return queue
 }
 
 // readQueueBlock reads the two settings that decide whether there is a queue at
 // all, and whether it survives a restart.
-func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
+func readQueueBlock(ctx *rule.Context, block *yaml.Node, queue *sendingQueue) {
 	for _, e := range rule.MapEntries(block, "") {
 		val := rule.ResolveAlias(e.Node)
 		if val == nil {
@@ -154,6 +154,8 @@ func readQueueBlock(block *yaml.Node, queue *sendingQueue) {
 			}
 
 			var enabled bool
+
+			val = ctx.DecodeScalar(val, "bool")
 
 			queue.disabled = val.Tag == rule.BoolTag && val.Decode(&enabled) == nil && !enabled
 		case rule.StorageKey:

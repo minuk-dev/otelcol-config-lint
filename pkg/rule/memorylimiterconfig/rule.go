@@ -34,7 +34,7 @@ func New() rule.Rule {
 type memoryLimiterConfig struct{ rule.Base }
 
 func (r memoryLimiterConfig) Check(ctx *rule.Context) {
-	for _, lim := range rule.MemoryLimiters(ctx.File) {
+	for _, lim := range ctx.MemoryLimiters() {
 		r.checkInterval(ctx, lim)
 		r.checkLimits(ctx, lim)
 		r.checkSpikes(ctx, lim)

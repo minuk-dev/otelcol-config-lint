@@ -30,7 +30,7 @@ func (r memoryLimiterSizing) Check(ctx *rule.Context) {
 		return
 	}
 
-	for _, lim := range rule.MemoryLimiters(ctx.File) {
+	for _, lim := range ctx.MemoryLimiters() {
 		r.checkPercentage(ctx, lim)
 
 		hard, ok := lim.HardLimit(ctx.Env)

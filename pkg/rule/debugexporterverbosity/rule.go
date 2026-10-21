@@ -63,7 +63,7 @@ func (r debugExporterVerbosity) Check(ctx *rule.Context) {
 			}
 
 			finding := r.finding(p, ref, detailedDebug(c))
-			if detailedDebug(c) && sampledDebug(c) {
+			if detailedDebug(c) && sampledDebug(ctx, c) {
 				finding.Severity = diag.Info
 				finding.Message = "exporter " + rule.Quote(ref.ID.String()) +
 					" emits sampled detailed telemetry in pipeline " + rule.Quote(p.Key)
@@ -129,7 +129,7 @@ func detailedDebug(c config.Component) bool {
 
 // sampledDebug only accepts explicit known sampling that reduces output.
 // Thereafter=1 logs every message; unknown/default values are not evidence.
-func sampledDebug(c config.Component) bool {
+func sampledDebug(ctx *rule.Context, c config.Component) bool {
 	initialNode, _ := rule.ChildNode(c.ValueNode, "sampling_initial")
 	thereafterNode, _ := rule.ChildNode(c.ValueNode, "sampling_thereafter")
 
@@ -138,7 +138,8 @@ func sampledDebug(c config.Component) bool {
 		return false
 	}
 
-	initial, thereafter := rule.ReadInt(initialNode), rule.ReadInt(thereafterNode)
+	initial := rule.ReadInt(ctx.DecodeScalar(initialNode, "int"))
+	thereafter := rule.ReadInt(ctx.DecodeScalar(thereafterNode, "int"))
 
 	return initial.Known && initial.Num >= 0 && thereafter.Known && thereafter.Num > 1
 }

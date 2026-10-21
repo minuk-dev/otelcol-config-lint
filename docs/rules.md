@@ -5,6 +5,12 @@ Runnable examples live in [testdata/rules](../testdata/rules/README.md).
 Diagnostics include a hint and, where applicable, an upstream documentation link.
 This page covers behavior that needs context beyond a single finding.
 
+Quoted numbers and booleans follow the target Collector's default decoding:
+releases before `v0.105.0` accept values such as `"1024"` and `"true"` for numeric
+and boolean fields. Type checks and rules that compare those settings use the
+same conversion. From `v0.105.0`, those strings are type errors. Overrides of
+`confmap.strictlyTypedInput` through Collector feature gates are not modeled.
+
 ## Static analysis limits
 
 YAML anchors, aliases and `<<` merges are resolved before checking. Explicit
