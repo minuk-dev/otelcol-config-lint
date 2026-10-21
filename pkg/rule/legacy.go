@@ -16,6 +16,7 @@ func (c *Context) DecodeScalar(node *yaml.Node, typ string) *yaml.Node {
 		return node
 	}
 
+	// shortcut: use release defaults; add overrides when Collector feature gates are modeled.
 	version := c.Schema.CollectorVersion
 	if version == "" || version == schema.Latest || schema.Compare(version, "v0.105.0") >= 0 {
 		return node
