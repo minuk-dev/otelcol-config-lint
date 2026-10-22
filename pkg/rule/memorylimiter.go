@@ -115,13 +115,13 @@ func readMemoryLimiter(ctx *Context, c config.Component) MemoryLimiter {
 		case "check_interval":
 			lim.CheckInterval = ReadDuration(e.Node)
 		case "limit_mib":
-			lim.LimitMiB = ReadInt(ctx.DecodeScalar(e.Node, "int"))
+			lim.LimitMiB = ctx.ReadInt(e.Node)
 		case "limit_percentage":
-			lim.LimitPercent = ReadInt(ctx.DecodeScalar(e.Node, "int"))
+			lim.LimitPercent = ctx.ReadInt(e.Node)
 		case "spike_limit_mib":
-			lim.SpikeMiB = ReadInt(ctx.DecodeScalar(e.Node, "int"))
+			lim.SpikeMiB = ctx.ReadInt(e.Node)
 		case "spike_limit_percentage":
-			lim.SpikePercent = ReadInt(ctx.DecodeScalar(e.Node, "int"))
+			lim.SpikePercent = ctx.ReadInt(e.Node)
 		default:
 			// Every other setting is the field schema's business.
 		}

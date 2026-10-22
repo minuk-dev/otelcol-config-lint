@@ -4,21 +4,18 @@ import (
 	"strconv"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // DecodeScalar reads quoted numbers and booleans using the target Collector's
 // default confmap behavior. The returned node retains the source location.
 func (c *Context) DecodeScalar(node *yaml.Node, typ string) *yaml.Node {
-	if node == nil || node.Kind != yaml.ScalarNode || node.Tag != "!!str" ||
+	if node == nil || node.Kind != yaml.ScalarNode || node.Tag != strTag ||
 		HasExpansion(node.Value) || c == nil || c.Schema == nil {
 		return node
 	}
 
-	// shortcut: use release defaults; add overrides when Collector feature gates are modeled.
-	version := c.Schema.CollectorVersion
-	if version == "" || version == schema.Latest || schema.Compare(version, "v0.105.0") >= 0 {
+	weak, _, known := c.Schema.ScalarDecoding()
+	if !known || !weak {
 		return node
 	}
 
@@ -32,7 +29,7 @@ func decodeQuotedScalar(node *yaml.Node, typ string) *yaml.Node {
 	var tag string
 
 	switch typ {
-	case "int":
+	case typeInt:
 		// shortcut: schemas erase integer widths; support int64 until schemas distinguish unsigned fields.
 		if value == "" {
 			value = "0"
@@ -44,7 +41,7 @@ func decodeQuotedScalar(node *yaml.Node, typ string) *yaml.Node {
 		}
 
 		value, tag = strconv.FormatInt(num, 10), intTag
-	case "float":
+	case typeFloat:
 		if value == "" {
 			value = "0"
 		}
@@ -55,7 +52,7 @@ func decodeQuotedScalar(node *yaml.Node, typ string) *yaml.Node {
 		}
 
 		value, tag = strconv.FormatFloat(num, 'g', -1, 64), floatTag
-	case "bool":
+	case typeBool:
 		if value == "" {
 			value = "false"
 		}
@@ -74,4 +71,12 @@ func decodeQuotedScalar(node *yaml.Node, typ string) *yaml.Node {
 	decoded.Value, decoded.Tag = value, tag
 
 	return &decoded
+}
+
+// ReadInt uses the selected decoder while retaining the original scalar for range checks.
+func (c *Context) ReadInt(node *yaml.Node) Setting {
+	setting := ReadInt(c.DecodeScalar(node, typeInt))
+	setting.Node = node
+
+	return setting
 }

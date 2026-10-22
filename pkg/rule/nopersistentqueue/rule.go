@@ -153,6 +153,10 @@ func readQueueBlock(ctx *rule.Context, block *yaml.Node, queue *sendingQueue) {
 				queue.unresolved = true
 			}
 
+			if _, _, known := ctx.Schema.ScalarDecoding(); !known && val.Tag == "!!str" {
+				queue.unresolved = true
+			}
+
 			var enabled bool
 
 			val = ctx.DecodeScalar(val, "bool")

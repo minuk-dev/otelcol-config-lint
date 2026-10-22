@@ -13,8 +13,11 @@ import (
 // The schema types a field can declare. Only maps and lists are descended
 // into; the rest are leaves.
 const (
-	typeMap  = "map"
-	typeList = "list"
+	typeMap   = "map"
+	typeList  = "list"
+	typeInt   = "int"
+	typeFloat = "float"
+	typeBool  = "bool"
 )
 
 // FieldWalker validates a component's settings against its field schema. Each
@@ -177,6 +180,12 @@ func (w FieldWalker) checkType(field *schema.Field, node *yaml.Node, path string
 		return false // resolved at runtime by a confmap provider
 	}
 
+	if w.unknownScalar(field, node) {
+		w.skipped(path, "unknown_decoder")
+
+		return false
+	}
+
 	if ok := matchesType(field, w.Ctx.DecodeScalar(node, field.Type)); !ok {
 		if w.OnInvalid != nil {
 			w.OnInvalid(node, path, describeType(field))
@@ -225,13 +234,13 @@ func matchesType(field *schema.Field, node *yaml.Node) bool {
 	case typeList:
 		return node.Kind == yaml.SequenceNode
 	case "string":
-		return node.Kind == yaml.ScalarNode && node.Tag == "!!str"
-	case "bool":
+		return node.Kind == yaml.ScalarNode && node.Tag == strTag
+	case typeBool:
 		return node.Tag == BoolTag
-	case "int":
+	case typeInt:
 		// shortcut: float integers must fit int64; model field widths before allowing overflow conversions.
 		return node.Tag == intTag || (node.Tag == floatTag && ReadInt(node).Known)
-	case "float":
+	case typeFloat:
 		return node.Tag == floatTag || node.Tag == intTag
 	case "duration":
 		return ReadDuration(node).Known
@@ -257,4 +266,18 @@ func (w FieldWalker) skipped(path, reason string) {
 	if w.OnSkipped != nil {
 		w.OnSkipped(path, reason)
 	}
+}
+
+func (w FieldWalker) unknownScalar(field *schema.Field, node *yaml.Node) bool {
+	if w.Ctx == nil || node.Tag != strTag {
+		return false
+	}
+
+	if field.Type != typeInt && field.Type != typeFloat && field.Type != typeBool {
+		return false
+	}
+
+	_, _, known := w.Ctx.Schema.ScalarDecoding()
+
+	return !known && matchesType(field, decodeQuotedScalar(node, field.Type))
 }

@@ -51,6 +51,7 @@ service:
 				"send_batch_size": {Type: "int"}, "send_batch_max_size": {Type: "int"},
 			}}
 			legacy := version == "v0.101.0" || version == "v0.104.0"
+			unknown := version == "" || version == "latest"
 			opts := ruletest.Options{Schema: sch, Env: rule.Environment{Kubernetes: true, MemoryLimit: 256 * 1024 * 1024}}
 
 			for _, tt := range []struct {
@@ -73,6 +74,10 @@ service:
 					want := tt.modernCount
 					if legacy {
 						want = tt.legacyCount
+					}
+
+					if unknown && (tt.check.Name() == "invalid-value" || tt.check.Name() == "no-persistent-queue") {
+						want = 0
 					}
 
 					assert.Len(t, found, want)
@@ -148,4 +153,78 @@ func TestDecodeLegacyScalar(t *testing.T) {
 			assert.Nil(t, ctx.DecodeScalar(nil, tt.typ))
 		})
 	}
+}
+
+func TestLegacyUnsignedSettingsRejectSigns(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{`"+1024"`, `"-0"`, `"+0"`, `"4294967296"`} {
+		for _, tt := range []struct {
+			name, settings string
+			check          rule.Rule
+		}{
+			{"batch size", "batch: {send_batch_size: " + value + ", send_batch_max_size: 2048}", batchsizebounds.New()},
+			{"batch cap", "batch: {send_batch_size: 1, send_batch_max_size: " + value + "}", batchsizebounds.New()},
+			{"memory_limiter", "memory_limiter: {check_interval: 1s, limit_mib: " + value + "}", memorylimiterconfig.New()},
+		} {
+			t.Run(tt.name+"/"+value, func(t *testing.T) {
+				t.Parallel()
+
+				sch := ruletest.Schema()
+				sch.CollectorVersion = "v0.101.0"
+				found, err := ruletest.RunWith(tt.check, "processors: {"+tt.settings+"}", ruletest.Options{Schema: sch})
+				require.NoError(t, err)
+				require.NotEmpty(t, found)
+				assert.True(t, ruletest.Reports(found, "uint32"))
+			})
+		}
+	}
+}
+
+func TestLegacyScalarDecoderProvenance(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, version     string
+		decoder           *schema.Decoder
+		invalid, insecure int
+	}{
+		{"old decoder in modern distribution", "v1.0.0", &schema.Decoder{ConfmapVersion: "v0.104.0", Modified: false}, 0, 1},
+		{"modern decoder in old distribution", "v0.101.0", &schema.Decoder{ConfmapVersion: "v1.33.0", Modified: false}, 1, 0},
+		{"custom label without provenance", "v0.105.0-custom", nil, 0, 0},
+		{"local fork", "v0.101.0", &schema.Decoder{ConfmapVersion: "v0.101.0", Modified: true}, 0, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sch := ruletest.Schema()
+			sch.CollectorVersion, sch.Distribution, sch.Decoder = tt.version, "custom", tt.decoder
+
+			const src = `exporters: {otlp: {endpoint: localhost:4317, tls: {insecure: "true"}}}`
+
+			found, err := ruletest.RunWith(invalidvalue.New(), src, ruletest.Options{Schema: sch})
+			require.NoError(t, err)
+			assert.Len(t, found, tt.invalid)
+			found, err = ruletest.RunWith(insecuretls.New(), src, ruletest.Options{Schema: sch})
+			require.NoError(t, err)
+			assert.Len(t, found, tt.insecure)
+		})
+	}
+}
+
+func TestLegacySignedSamplingRemainsValid(t *testing.T) {
+	t.Parallel()
+
+	sch := ruletest.Schema()
+	sch.CollectorVersion = "v0.101.0"
+
+	const src = `
+exporters: {debug: {verbosity: detailed, sampling_initial: "+2", sampling_thereafter: "+10"}}
+service: {pipelines: {traces: {exporters: [debug]}}}
+`
+
+	found, err := ruletest.RunWith(debugexporterverbosity.New(), src, ruletest.Options{Schema: sch})
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, diag.Info, found[0].Severity)
 }

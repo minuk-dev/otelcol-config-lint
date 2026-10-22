@@ -36,6 +36,11 @@ type memoryLimiterConfig struct{ rule.Base }
 func (r memoryLimiterConfig) Check(ctx *rule.Context) {
 	for _, lim := range ctx.MemoryLimiters() {
 		r.checkInterval(ctx, lim)
+
+		if r.checkRange(ctx, lim) {
+			continue
+		}
+
 		r.checkLimits(ctx, lim)
 		r.checkSpikes(ctx, lim)
 	}
@@ -145,4 +150,32 @@ func (r memoryLimiterConfig) checkPercentages(ctx *rule.Context, lim rule.Memory
 			})
 		}
 	}
+}
+
+func (r memoryLimiterConfig) checkRange(ctx *rule.Context, lim rule.MemoryLimiter) bool {
+	found := false
+
+	for _, size := range []struct {
+		key string
+		val rule.Setting
+	}{
+		{key: "limit_mib", val: lim.LimitMiB},
+		{key: "spike_limit_mib", val: lim.SpikeMiB},
+		{key: "limit_percentage", val: lim.LimitPercent},
+		{key: "spike_limit_percentage", val: lim.SpikePercent},
+	} {
+		if !size.val.InvalidUint32() {
+			continue
+		}
+
+		found = true
+
+		ctx.Report(rule.Finding{
+			Node: lim.At(size.val), Path: rule.JoinPath(lim.Path, size.key),
+			Message: lim.Name() + " sets " + size.key + " to a value the uint32 field cannot decode",
+			Hint:    "use an unsigned integer between 0 and 4294967295", Docs: rule.MemoryLimiterDocs,
+		})
+	}
+
+	return found
 }

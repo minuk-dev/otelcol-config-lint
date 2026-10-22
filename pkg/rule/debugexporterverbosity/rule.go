@@ -138,8 +138,8 @@ func sampledDebug(ctx *rule.Context, c config.Component) bool {
 		return false
 	}
 
-	initial := rule.ReadInt(ctx.DecodeScalar(initialNode, "int"))
-	thereafter := rule.ReadInt(ctx.DecodeScalar(thereafterNode, "int"))
+	initial := ctx.ReadInt(initialNode)
+	thereafter := ctx.ReadInt(thereafterNode)
 
 	return initial.Known && initial.Num >= 0 && thereafter.Known && thereafter.Num > 1
 }

@@ -5,11 +5,15 @@ Runnable examples live in [testdata/rules](../testdata/rules/README.md).
 Diagnostics include a hint and, where applicable, an upstream documentation link.
 This page covers behavior that needs context beyond a single finding.
 
-Quoted numbers and booleans follow the target Collector's default decoding:
+Quoted numbers and booleans follow the resolved decoder's default decoding:
 releases before `v0.105.0` accept values such as `"1024"` and `"true"` for numeric
 and boolean fields. Type checks and rules that compare those settings use the
 same conversion. From `v0.105.0`, those strings are type errors. Overrides of
 `confmap.strictlyTypedInput` through Collector feature gates are not modeled.
+Custom schemas use `decoder` provenance rather than the distribution version.
+If decoding is unknown, convertible quoted scalars are left unresolved and
+coverage reports `unknown_decoder`. Batch sizes and memory limits validate the
+original text as uint32, rejecting signed strings such as `"+1024"` and `"-0"`.
 
 ## Static analysis limits
 
