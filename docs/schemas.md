@@ -108,6 +108,20 @@ The version comes from the manifest's `dist.otelcol_version` or `dist.version`;
 use that value when linting. `acme=` overrides the manifest's distribution name.
 Module downloads use the Go toolchain's `GOPROXY`, `GOPRIVATE` and credentials.
 Local `replaces` entries are read from their checkouts.
+
+Generated schemas record the resolved `decoder.confmapVersion`, independently
+of the distribution version. A replacement pointing to another official
+confmap version records that effective version. Local or fork replacements of
+confmap or mapstructure set `decoder.modified: true`; unresolved decoder modules
+produce an empty `decoder` object. These cases leave scalar decoding unknown
+instead of guessing from the distribution label. Coverage reports
+`unknown_decoder` when version-dependent checks cannot be completed.
+
+Legacy schemas without `decoder` use plain upstream release tags only for the
+core, contrib, k8s and otlp distributions (or an unspecified distribution).
+Prerelease/custom labels and custom distributions need decoder provenance.
+Feature-gate overrides and arbitrary fork behavior still require separate
+Collector validation.
 Use `go run ./cmd/schemagen generate --help` for generator options.
 
 To generate official distributions from a releases checkout at the desired tag:

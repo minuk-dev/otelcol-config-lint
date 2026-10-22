@@ -9,6 +9,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/batchsizebounds"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // check runs the rule over src, which every test in this package starts from.
@@ -291,5 +292,36 @@ func TestNullBatchSizeUsesVersionedDefault(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestNullBatchSizeUsesDecoderProvenance(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, version string
+		decoder       *schema.Decoder
+		count         int
+	}{
+		{"custom suffix is unknown", "v0.127.0-custom", nil, 0},
+		{"development is unknown", "dev", nil, 0},
+		{"old decoder in new distribution", "v1.0.0",
+			&schema.Decoder{ConfmapVersion: "v1.32.0", Modified: false}, 1},
+		{"new decoder in old distribution", "v0.101.0",
+			&schema.Decoder{ConfmapVersion: "v1.33.0", Modified: false}, 0},
+		{"local replacement is unknown", "v0.101.0",
+			&schema.Decoder{ConfmapVersion: "v0.101.0", Modified: true}, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sch := ruletest.Schema()
+			sch.CollectorVersion, sch.Distribution, sch.Decoder = tt.version, "custom", tt.decoder
+			found, err := ruletest.RunWith(batchsizebounds.New(),
+				batcher("batch", "    send_batch_size: null\n    send_batch_max_size: 512"),
+				ruletest.Options{Schema: sch})
+			require.NoError(t, err)
+			assert.Len(t, found, tt.count)
+		})
 	}
 }

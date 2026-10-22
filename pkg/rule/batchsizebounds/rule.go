@@ -16,7 +16,6 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/config"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
-	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/sets"
 )
 
@@ -138,10 +137,13 @@ func (r batchSizeBounds) checkSizes(ctx *rule.Context, proc batchProcessor) {
 	}
 
 	useDefault := !proc.sendBatchSize.Present
-	if proc.sendBatchSize.Present && rule.IsNull(proc.sendBatchSize.Node) && ctx.Schema != nil {
-		version := ctx.Schema.CollectorVersion
-		// Confmap enabled DecodeNil in v0.127.0; older releases retain the factory default.
-		useDefault = version != "" && version != schema.Latest && schema.Compare(version, "v0.127.0") < 0
+	if proc.sendBatchSize.Present && rule.IsNull(proc.sendBatchSize.Node) {
+		_, zero, known := ctx.Schema.ScalarDecoding()
+		if !known {
+			return
+		}
+
+		useDefault = !zero
 	}
 
 	size := int64(defaultSendBatchSize)
