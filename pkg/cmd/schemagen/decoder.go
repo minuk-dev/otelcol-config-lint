@@ -43,6 +43,7 @@ func (o *options) decoder(man *manifest, components *moduleSet) *schema.Decoder 
 	}
 
 	dir := man.replaceBase()
+
 	exists, err := afero.Exists(o.fs(), filepath.Join(dir, "go.mod"))
 	if err != nil || !exists {
 		return partial
