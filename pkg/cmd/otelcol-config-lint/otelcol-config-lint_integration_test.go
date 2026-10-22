@@ -130,6 +130,10 @@ func TestCollectorCompatibility(t *testing.T) {
 	t.Parallel()
 
 	binary, version, distribution := collectorTarget(t)
+	nullBatchCode, nullBatchRejection := 0, ""
+	if version == "v0.110.0" {
+		nullBatchCode, nullBatchRejection = 1, "send_batch_max_size must be greater or equal to send_batch_size"
+	}
 
 	for _, tt := range []struct {
 		name, distribution, rejection string
@@ -145,6 +149,7 @@ func TestCollectorCompatibility(t *testing.T) {
 		{name: "provider-lists", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "provider-pipelines", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "null-defaults", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
+		{name: "null-batch-cap", distribution: "", rejection: nullBatchRejection, collectorCode: nullBatchCode, lintCode: nullBatchCode},
 		{name: "named-identifiers", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "custom-verbosity", distribution: "", rejection: "", collectorCode: 0, lintCode: 0},
 		{name: "invalid-telemetry-shape", distribution: "", rejection: "telemetry", collectorCode: 1, lintCode: 1},

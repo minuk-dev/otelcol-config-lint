@@ -73,7 +73,12 @@ schema supports that setting; otherwise the hint recommends the processor.
 
 `batch-size-bounds` accounts for implicit defaults: `send_batch_size` triggers a
 send, while `send_batch_max_size` caps it. A nonzero maximum below the default
-trigger of 8192 can fail even when no trigger is written.
+trigger of 8192 can fail even when no trigger is written. Before Collector
+`v0.127.0`, an explicit `null` also retains that default; from `v0.127.0` it
+decodes to zero. The rule uses resolved decoder metadata when available, with
+a release-version fallback for legacy official schemas. If decoder behavior
+is unknown, comparisons depending on that null default are skipped and
+coverage reports `unknown_decoder`.
 
 ## Processor order and memory
 

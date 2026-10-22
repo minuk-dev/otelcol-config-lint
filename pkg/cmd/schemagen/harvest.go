@@ -60,6 +60,7 @@ func (o *options) build(man *manifest) (*schema.Schema, error) {
 
 	cat := &schema.Schema{
 		CollectorVersion: man.collectorVersion(),
+		Decoder:          o.decoder(man, mods),
 		Distribution:     man.Dist.Name,
 		GeneratedAt:      time.Now().UTC().Format(time.RFC3339),
 		Sources:          map[string]string{},

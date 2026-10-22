@@ -136,8 +136,18 @@ func (r batchSizeBounds) checkSizes(ctx *rule.Context, proc batchProcessor) {
 		return
 	}
 
+	useDefault := !proc.sendBatchSize.Present
+	if proc.sendBatchSize.Present && rule.IsNull(proc.sendBatchSize.Node) {
+		_, zero, known := ctx.Schema.ScalarDecoding()
+		if !known {
+			return
+		}
+
+		useDefault = !zero
+	}
+
 	size := int64(defaultSendBatchSize)
-	if proc.sendBatchSize.Known {
+	if proc.sendBatchSize.Known && !useDefault {
 		size = proc.sendBatchSize.Num
 	}
 
@@ -149,7 +159,7 @@ func (r batchSizeBounds) checkSizes(ctx *rule.Context, proc batchProcessor) {
 	// the message the reader will not find in their file, so it is named as a
 	// default rather than quoted back at them as if they had written it.
 	written := " and send_batch_size to " + rule.Itoa64(size)
-	if !proc.sendBatchSize.Present {
+	if useDefault {
 		written = ", below the default send_batch_size of " + rule.Itoa64(size)
 	}
 
