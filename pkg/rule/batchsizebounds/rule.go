@@ -69,11 +69,13 @@ func (b batchProcessor) at(s rule.Setting) *yaml.Node { return rule.NodeOr(s.Nod
 
 // batchProcessors returns every declared batch processor, matched on type so
 // "batch/traces" is covered too.
-func batchProcessors(f *config.File) []batchProcessor {
-	return rule.ProcessorsOfType(f, rule.BatchType, readBatch)
+func batchProcessors(ctx *rule.Context) []batchProcessor {
+	return rule.ProcessorsOfType(ctx.File, rule.BatchType, func(c config.Component) batchProcessor {
+		return readBatch(ctx, c)
+	})
 }
 
-func readBatch(c config.Component) batchProcessor {
+func readBatch(ctx *rule.Context, c config.Component) batchProcessor {
 	proc := batchProcessor{
 		id:               c.ID,
 		node:             rule.NodeOr(c.KeyNode, c.ValueNode),
@@ -91,9 +93,9 @@ func readBatch(c config.Component) batchProcessor {
 	for _, e := range rule.MapEntries(c.ValueNode, proc.path) {
 		switch e.Key {
 		case "send_batch_size":
-			proc.sendBatchSize = rule.ReadInt(e.Node)
+			proc.sendBatchSize = ctx.ReadInt(e.Node)
 		case "send_batch_max_size":
-			proc.sendBatchMaxSize = rule.ReadInt(e.Node)
+			proc.sendBatchMaxSize = ctx.ReadInt(e.Node)
 		case "timeout":
 			proc.timeout = rule.ReadDuration(e.Node)
 		case "metadata_keys":
@@ -109,7 +111,7 @@ func readBatch(c config.Component) batchProcessor {
 type batchSizeBounds struct{ rule.Base }
 
 func (r batchSizeBounds) Check(ctx *rule.Context) {
-	for _, proc := range batchProcessors(ctx.File) {
+	for _, proc := range batchProcessors(ctx) {
 		// A size the field cannot hold stands on its own: it fails to decode
 		// whatever the other field says, and it stops the comparison, which
 		// the collector never reaches.
@@ -187,24 +189,14 @@ func (r batchSizeBounds) checkRange(ctx *rule.Context, proc batchProcessor) bool
 		{key: "send_batch_size", val: proc.sendBatchSize},
 		{key: "send_batch_max_size", val: proc.sendBatchMaxSize},
 	} {
-		negative := size.val.Num < 0
-		if size.val.Node != nil && size.val.Node.Tag == "!!float" {
-			var num float64
-
-			err := size.val.Node.Decode(&num)
-			if err == nil {
-				negative = num < 0
-			}
-		}
-
-		if !size.val.Known || (!negative && size.val.Num <= maxBatchSize) {
+		if !size.val.InvalidUint32() {
 			continue
 		}
 
 		found = true
 
 		value := rule.Itoa64(size.val.Num)
-		if negative && size.val.Num == 0 {
+		if size.val.Node != nil {
 			value = size.val.Node.Value
 		}
 

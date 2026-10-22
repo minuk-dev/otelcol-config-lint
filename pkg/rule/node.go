@@ -6,9 +6,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// BoolTag is the tag yaml.v3 resolves a boolean scalar to. A setting is only
-// read as one when the document actually wrote a boolean, so the string
-// "false" is not mistaken for the value.
+// BoolTag identifies a YAML boolean or a quoted boolean converted by DecodeScalar.
 const BoolTag = "!!bool"
 
 // mappingStride is the step between keys in a yaml.Node mapping, whose Content

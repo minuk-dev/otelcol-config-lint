@@ -28,7 +28,7 @@ func (r insecureTLS) Check(ctx *rule.Context) {
 		}
 
 		for _, c := range sec.Components {
-			for _, hit := range findInsecure(c.ValueNode, kind.Section()+"."+c.ID.String()) {
+			for _, hit := range findInsecure(ctx, c.ValueNode, kind.Section()+"."+c.ID.String()) {
 				finding := rule.Finding{
 					Node: hit.node, Path: hit.path,
 					Message: rule.Quote(rule.ShortPath(hit.path)) + " disables TLS verification for " +
@@ -57,7 +57,7 @@ type tlsHit struct {
 // findInsecure walks a component's settings for tls.insecure or
 // tls.insecure_skip_verify set to true, at any nesting depth. Exporters bury
 // these under sub-blocks such as auth or queue settings.
-func findInsecure(n *yaml.Node, path string) []tlsHit {
+func findInsecure(ctx *rule.Context, n *yaml.Node, path string) []tlsHit {
 	if n == nil {
 		return nil
 	}
@@ -71,16 +71,18 @@ func findInsecure(n *yaml.Node, path string) []tlsHit {
 			case "insecure", "insecure_skip_verify":
 				var insecure bool
 
-				if e.Node.Tag == rule.BoolTag && e.Node.Decode(&insecure) == nil && insecure {
+				val := ctx.DecodeScalar(e.Node, "bool")
+
+				if val.Tag == rule.BoolTag && val.Decode(&insecure) == nil && insecure {
 					out = append(out, tlsHit{node: e.Node, path: e.Path, hasCA: e.Key == "insecure_skip_verify" && configuredCA(n)})
 				}
 			default:
-				out = append(out, findInsecure(e.Node, e.Path)...)
+				out = append(out, findInsecure(ctx, e.Node, e.Path)...)
 			}
 		}
 	case yaml.SequenceNode:
 		for i, item := range n.Content {
-			out = append(out, findInsecure(item, rule.IndexPath(path, i))...)
+			out = append(out, findInsecure(ctx, item, rule.IndexPath(path, i))...)
 		}
 	default:
 		// Scalars and aliases hold no settings of their own.

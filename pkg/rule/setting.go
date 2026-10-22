@@ -2,6 +2,7 @@ package rule
 
 import (
 	"math"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -10,6 +11,7 @@ import (
 )
 
 const (
+	strTag   = "!!str"
 	intTag   = "!!int"
 	floatTag = "!!float"
 )
@@ -124,4 +126,37 @@ func ProcessorsOfType[T any](f *config.File, typ string, read func(config.Compon
 	}
 
 	return out
+}
+
+// InvalidUint32 reports values a known uint32 field cannot decode, including signed strings.
+func (s Setting) InvalidUint32() bool {
+	if !s.Known {
+		return false
+	}
+
+	if s.Num < 0 || s.Num > math.MaxUint32 {
+		return true
+	}
+
+	if s.Node == nil {
+		return false
+	}
+
+	switch s.Node.Tag {
+	case strTag:
+		value := s.Node.Value
+		if value == "" {
+			value = "0"
+		}
+
+		_, err := strconv.ParseUint(value, 0, 32)
+
+		return err != nil
+	case floatTag:
+		var num float64
+
+		return s.Node.Decode(&num) == nil && num < 0
+	default:
+		return false
+	}
 }
