@@ -518,6 +518,7 @@ replaces:
 
 	require.Equal(t, schemagen.ExitOK, code, "run failed: %s", stderr)
 	assert.Contains(t, stdout, "modified: true", "a local confmap replacement must not inherit release defaults")
+	assert.Contains(t, stdout, "incomplete: true", "component-only resolution must not claim the full Collector graph")
 	assert.Contains(t, stdout, "root_path:", "the settings that did resolve were dropped")
 	assert.Contains(t, stdout, "open: true", "a partly resolved component was closed over half its settings")
 }

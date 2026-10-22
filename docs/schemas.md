@@ -110,10 +110,14 @@ Module downloads use the Go toolchain's `GOPROXY`, `GOPRIVATE` and credentials.
 Local `replaces` entries are read from their checkouts.
 
 Generated schemas record the resolved `decoder.confmapVersion`, independently
-of the distribution version. A replacement pointing to another official
+of the distribution version. Generate the Collector module with OCB first and
+set `dist.output_path` to its directory. Schemas read that module with
+`go list -mod=readonly -m -e -json all`; they do not modify its module files.
+If that module is absent or cannot be fully resolved, `decoder.incomplete: true`
+marks the component-only graph as insufficient to determine decoder behavior. A replacement pointing to another official
 confmap version records that effective version. Local or fork replacements of
 confmap or mapstructure set `decoder.modified: true`; unresolved decoder modules
-produce an empty `decoder` object. These cases leave scalar decoding unknown
+produce an empty `decoder` object. These cases, including incomplete graphs, leave scalar decoding unknown
 instead of guessing from the distribution label. Coverage reports
 `unknown_decoder` when version-dependent checks cannot be completed.
 

@@ -47,7 +47,8 @@ type moduleError struct {
 // component's settings are largely shared config types living in modules of
 // their own, so the dependencies are where most field schemas come from.
 type moduleSet struct {
-	byPath map[string]resolvedModule
+	incomplete bool
+	byPath     map[string]resolvedModule
 }
 
 func (s *moduleSet) lookup(module string) (resolvedModule, bool) {
@@ -99,7 +100,11 @@ func (o *options) resolveModules(man *manifest) (*moduleSet, error) {
 		return nil, fmt.Errorf("resolve modules: %w", err)
 	}
 
-	set := &moduleSet{byPath: map[string]resolvedModule{}}
+	return o.readModuleSet(out)
+}
+
+func (o *options) readModuleSet(out string) (*moduleSet, error) {
+	set := &moduleSet{byPath: map[string]resolvedModule{}, incomplete: false}
 
 	dec := json.NewDecoder(strings.NewReader(out))
 
@@ -119,8 +124,12 @@ func (o *options) resolveModules(man *manifest) (*moduleSet, error) {
 		case mod.Main:
 			// The workspace itself, which holds nothing to harvest.
 		case mod.Error != nil:
+			set.incomplete = true
+
 			o.logf("  %s: %s\n", mod.Path, firstLine(mod.Error.Err))
 		case mod.Dir == "":
+			set.incomplete = true
+
 			o.logf("  %s: not on disk\n", mod.Path)
 		default:
 			set.byPath[mod.Path] = mod

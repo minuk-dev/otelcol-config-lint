@@ -8,6 +8,8 @@ import (
 // Decoder records the resolved config decoder independently of the distribution version.
 type Decoder struct {
 	ConfmapVersion string `json:"confmapVersion,omitempty" yaml:"confmapVersion,omitempty"`
+	// Incomplete means only the component graph, not the generated Collector module, was resolved.
+	Incomplete bool `json:"incomplete,omitempty" yaml:"incomplete,omitempty"`
 	// Modified marks local or fork replacements of confmap or mapstructure.
 	Modified bool `json:"modified,omitempty" yaml:"modified,omitempty"`
 }
@@ -21,7 +23,7 @@ func (s *Schema) ScalarDecoding() (bool, bool, bool) {
 
 	version, nullBoundary := s.CollectorVersion, "v0.127.0"
 	if s.Decoder != nil {
-		if s.Decoder.Modified {
+		if s.Decoder.Modified || s.Decoder.Incomplete {
 			return false, false, false
 		}
 

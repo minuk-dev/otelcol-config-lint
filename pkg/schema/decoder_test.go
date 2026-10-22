@@ -31,6 +31,8 @@ func TestScalarDecoding(t *testing.T) {
 			&schema.Decoder{ConfmapVersion: "v1.32.0", Modified: false}, false, false, true},
 		{"local replacement", "v0.101.0", "core",
 			&schema.Decoder{ConfmapVersion: "v0.101.0", Modified: true}, false, false, false},
+		{"partial component graph", "v0.101.0", "core",
+			&schema.Decoder{ConfmapVersion: "v0.101.0", Incomplete: true}, false, false, false},
 		{"unresolved graph", "v0.101.0", "core",
 			&schema.Decoder{ConfmapVersion: "", Modified: false}, false, false, false},
 	} {

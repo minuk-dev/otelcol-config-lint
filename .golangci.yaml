@@ -44,7 +44,7 @@ linters:
         # zero value carrying the default behaviour.
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(Options|PrepareOptions|FormatterOptions|Result|Summary)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/lint\.(EnvironmentPolicy|EnvironmentOverride)'
-        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/schema\.(Store|Schema|Component|Field)'
+        - 'github\.com/minuk-dev/otelcol-config-lint/pkg/schema\.(Store|Schema|Component|Field|Decoder)'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule\.Context'
         - 'github\.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest\.Options'
         # An environment nobody described is the zero value, and saying so is
