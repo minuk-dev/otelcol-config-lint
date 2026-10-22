@@ -30,7 +30,7 @@ func TestScanModuleUsesInjectedFS(t *testing.T) {
 
 	opts := &options{fsys: fsys}
 	set, index, metas := newSchemaSet(), newGoIndex(), map[string]metadata{}
-	mod := resolvedModule{Path: "example.com/receiver", Version: "v0.0.0", Dir: dir, Main: false, Error: nil}
+	mod := resolvedModule{Path: "example.com/receiver", Version: "v0.0.0", Dir: dir, Main: false, Error: nil, Replace: nil}
 	opts.scanModule(mod, set, index, metas)
 	require.Equal(t, "custom", metas[mod.Path].Type)
 	require.Len(t, metas, 1)

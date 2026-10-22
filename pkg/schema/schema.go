@@ -26,7 +26,9 @@ type Schema struct {
 	// the one place a distribution is recorded: the components below carry no
 	// membership of their own, since a second answer could only disagree.
 	Distribution string `json:"distribution,omitempty" yaml:"distribution,omitempty"`
-	GeneratedAt  string `json:"generatedAt,omitempty"  yaml:"generatedAt,omitempty"`
+	// Decoder is nil for legacy schemas that only identify an upstream release.
+	Decoder     *Decoder `json:"decoder,omitempty"     yaml:"decoder,omitempty"`
+	GeneratedAt string   `json:"generatedAt,omitempty" yaml:"generatedAt,omitempty"`
 	// Sources maps each upstream repository harvested to the module it was
 	// generated from. It is provenance, not distribution membership: both
 	// repositories are read whichever distribution is being written.

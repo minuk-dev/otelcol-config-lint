@@ -14,6 +14,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/lint"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/invalidvalue"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
@@ -79,6 +80,7 @@ func TestCoverage(t *testing.T) {
 
 			linter := lint.New(lint.Options{
 				Schema: &schema.Schema{CollectorVersion: "v0.157.0", Distribution: "acme",
+					Decoder:    &schema.Decoder{ConfmapVersion: "v1.33.0", Modified: false},
 					Components: map[config.Kind]map[string]*schema.Component{config.KindReceiver: components}},
 				Rules: []rule.Rule{invalidvalue.New()}, MinSeverity: diag.Error, IgnoreMissingSchemas: true,
 			})
@@ -266,4 +268,16 @@ func TestCoverageReports(t *testing.T) {
 			assert.Equal(t, 1, report.Summary.Incomplete)
 		})
 	}
+}
+
+func TestCoverageUnknownDecoder(t *testing.T) {
+	t.Parallel()
+
+	sch := ruletest.Schema()
+	sch.CollectorVersion = "v0.127.0-custom"
+	linter := lint.New(lint.Options{Schema: sch, Rules: []rule.Rule{invalidvalue.New()}})
+	result := linter.Lint(t.Context(), "config.yaml", []byte("exporters: {otlp: {endpoint: localhost:4317}}"))
+	require.NotNil(t, result.Coverage)
+	assert.Equal(t, "partial", result.Coverage.Status)
+	assert.Contains(t, result.Coverage.Skipped, lint.CoverageSkip{Path: "", Reason: "unknown_decoder", Block: ""})
 }

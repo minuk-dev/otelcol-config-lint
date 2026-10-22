@@ -27,11 +27,12 @@ var errNoModules = errors.New("no modules could be downloaded")
 //
 //nolint:tagliatelle // "go list -m -json" writes Go-style keys, not camelCase
 type resolvedModule struct {
-	Path    string       `json:"Path"`
-	Version string       `json:"Version"`
-	Dir     string       `json:"Dir"`
-	Main    bool         `json:"Main"`
-	Error   *moduleError `json:"Error"`
+	Replace *resolvedModule `json:"Replace"`
+	Path    string          `json:"Path"`
+	Version string          `json:"Version"`
+	Dir     string          `json:"Dir"`
+	Main    bool            `json:"Main"`
+	Error   *moduleError    `json:"Error"`
 }
 
 // moduleError is why one module of the build list could not be resolved.

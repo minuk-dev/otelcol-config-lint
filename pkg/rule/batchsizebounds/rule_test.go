@@ -9,6 +9,7 @@ import (
 	"github.com/minuk-dev/otelcol-config-lint/pkg/diag"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/batchsizebounds"
 	"github.com/minuk-dev/otelcol-config-lint/pkg/rule/ruletest"
+	"github.com/minuk-dev/otelcol-config-lint/pkg/schema"
 )
 
 // check runs the rule over src, which every test in this package starts from.
@@ -264,6 +265,63 @@ func TestBatchSizeBoundsDistinguishesNullFromMissing(t *testing.T) {
 			}
 
 			assert.Empty(t, found)
+		})
+	}
+}
+
+func TestNullBatchSizeUsesVersionedDefault(t *testing.T) {
+	t.Parallel()
+
+	for _, version := range []string{"v0.101.0", "v0.126.0", "v0.127.0", "v0.153.0", "", "latest"} {
+		for _, value := range []string{"null", "~", "", "0", "${env:BATCH_SIZE}"} {
+			t.Run(version+"/"+value, func(t *testing.T) {
+				t.Parallel()
+
+				sch := ruletest.Schema()
+				sch.CollectorVersion = version
+				found, err := ruletest.RunWith(batchsizebounds.New(), batcher("batch/traces",
+					"    send_batch_size: "+value+"\n    send_batch_max_size: 512"), ruletest.Options{Schema: sch})
+				require.NoError(t, err)
+
+				if (version == "v0.101.0" || version == "v0.126.0") && value != "0" && value != "${env:BATCH_SIZE}" {
+					require.Len(t, found, 1)
+					assert.Contains(t, found[0].Message, "below the default send_batch_size of 8192")
+					assert.Equal(t, "processors.batch/traces.send_batch_max_size", found[0].Path)
+				} else {
+					assert.Empty(t, found)
+				}
+			})
+		}
+	}
+}
+
+func TestNullBatchSizeUsesDecoderProvenance(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, version string
+		decoder       *schema.Decoder
+		count         int
+	}{
+		{"custom suffix is unknown", "v0.127.0-custom", nil, 0},
+		{"development is unknown", "dev", nil, 0},
+		{"old decoder in new distribution", "v1.0.0",
+			&schema.Decoder{ConfmapVersion: "v1.32.0", Modified: false}, 1},
+		{"new decoder in old distribution", "v0.101.0",
+			&schema.Decoder{ConfmapVersion: "v1.33.0", Modified: false}, 0},
+		{"local replacement is unknown", "v0.101.0",
+			&schema.Decoder{ConfmapVersion: "v0.101.0", Modified: true}, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sch := ruletest.Schema()
+			sch.CollectorVersion, sch.Distribution, sch.Decoder = tt.version, "custom", tt.decoder
+			found, err := ruletest.RunWith(batchsizebounds.New(),
+				batcher("batch", "    send_batch_size: null\n    send_batch_max_size: 512"),
+				ruletest.Options{Schema: sch})
+			require.NoError(t, err)
+			assert.Len(t, found, tt.count)
 		})
 	}
 }

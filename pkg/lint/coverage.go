@@ -66,6 +66,10 @@ func (l *Linter) coverage(ctx *rule.Context) *Coverage {
 		coverage.Skipped = append(coverage.Skipped, CoverageSkip{Path: "", Reason: "missing_schema", Block: ""})
 	}
 
+	if _, _, known := ctx.Schema.ScalarDecoding(); !known && ctx.SchemaReady() {
+		coverage.Skipped = append(coverage.Skipped, CoverageSkip{Path: "", Reason: "unknown_decoder", Block: ""})
+	}
+
 	coverage.runtimeValues(ctx.File.Root, "", 0)
 
 	if len(coverage.Skipped) > 0 {
@@ -118,7 +122,9 @@ func (c *Coverage) description() string {
 
 	parts := []string{}
 
-	for _, reason := range []string{"missing_schema", "open_schema", "runtime_value", "unresolved_structure"} {
+	for _, reason := range []string{
+		"missing_schema", "open_schema", "runtime_value", "unresolved_structure", "unknown_decoder",
+	} {
 		if counts[reason] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[reason], strings.ReplaceAll(reason, "_", " ")+"(s)"))
 		}
