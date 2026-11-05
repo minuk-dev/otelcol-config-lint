@@ -9,7 +9,10 @@ import (
 // headComments records source lines before normalization changes node positions.
 // Only parser-recognized head comments are considered; text in block or quoted
 // scalars is never a directive, even if a line starts with a hash.
-func headComments(root *yaml.Node, lines []string) map[int]string {
+func headComments(root *yaml.Node, source string) map[int]string {
+	// Match yaml.v3's line counting, including CRLF as a single break.
+	breaks := strings.NewReplacer("\r\n", "\n", "\r", "\n", "\u0085", "\n", "\u2028", "\n", "\u2029", "\n")
+	lines := strings.Split(breaks.Replace(source), "\n")
 	out := map[int]string{}
 
 	pending := []*yaml.Node{root}

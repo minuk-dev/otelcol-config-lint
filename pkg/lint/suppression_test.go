@@ -132,3 +132,29 @@ service:
 	require.Equal(t, lint.Valid, result.Status)
 	require.Empty(t, result.Diagnostics)
 }
+
+func TestInlineSuppressionLineBreaks(t *testing.T) {
+	t.Parallel()
+
+	const source = "# ordinary comment\n\n# otelcol-config-lint:disable-next-line unknown-top-level-key\n" +
+		"suppressed: true\nunsuppressed: true\n"
+
+	for _, tt := range []struct{ name, lineBreak string }{
+		{name: "LF", lineBreak: "\n"},
+		{name: "CRLF", lineBreak: "\r\n"},
+		{name: "CR", lineBreak: "\r"},
+		{name: "NEL", lineBreak: "\u0085"},
+		{name: "LS", lineBreak: "\u2028"},
+		{name: "PS", lineBreak: "\u2029"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			linter := lint.New(lint.Options{Rules: []rule.Rule{unknowntoplevelkey.New()}})
+			result := linter.Lint(t.Context(), "config.yaml", []byte(strings.ReplaceAll(source, "\n", tt.lineBreak)))
+			require.Len(t, result.Diagnostics, 1)
+			require.Equal(t, "unknown-top-level-key", result.Diagnostics[0].Rule)
+			require.Equal(t, 5, result.Diagnostics[0].Position.Line)
+		})
+	}
+}
