@@ -239,7 +239,7 @@ func Parse(path string, src []byte) (*File, error) {
 		return nil, err
 	}
 
-	f.HeadComments = headComments(root, strings.Split(string(src), "\n"))
+	f.HeadComments = headComments(&doc, string(src))
 
 	// Duplicates are collected from the document as written, before anything
 	// is merged into it: a key the config writes itself replaces one a merge
